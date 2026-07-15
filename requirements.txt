@@ -1,3 +1,6 @@
 flask
 openai
 gunicorn
+pytz
+duckduckgo-search
+Pillow
