@@ -1,21 +1,104 @@
-import streamlit as st
-from ai import ask
+from flask import Flask, request, jsonify
+from openai import OpenAI
+import os
 
-st.set_page_config(page_title="نبراس", page_icon="🤖")
-st.title("🤖 نبراس")
+app = Flask(__name__)
 
-if "messages" not in st.session_state:
-    st.session_state.messages=[]
+# ─── المفتاح من متغيرات البيئة ───
+API_KEY = os.environ.get("OPENAI_API_KEY")
+if not API_KEY:
+    raise Exception("❌ OPENAI_API_KEY غير موجود")
 
-for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+client = OpenAI(api_key=API_KEY)
 
-if prompt:=st.chat_input("اكتب رسالتك..."):
-    st.session_state.messages.append({"role":"user","content":prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    ans=ask(st.session_state.messages)
-    st.session_state.messages.append({"role":"assistant","content":ans})
-    with st.chat_message("assistant"):
-        st.markdown(ans)
+# ─── واجهة HTML (مضمنة بالكامل) ───
+HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>نبراس</title>
+    <style>
+        body {font-family:Arial; background:#fff; max-width:700px; margin:40px auto; padding:0 20px;}
+        .chat-box {border:1px solid #ddd; border-radius:12px; padding:16px; height:400px; overflow-y:auto; background:#f9f9f9;}
+        .msg {margin:8px 0; padding:10px 14px; border-radius:18px; max-width:80%;}
+        .user {background:#000; color:#fff; margin-left:auto; text-align:right;}
+        .bot {background:#eaeaea; margin-right:auto;}
+        .input-area {display:flex; gap:8px; margin-top:12px;}
+        .input-area input {flex:1; padding:12px; border-radius:30px; border:1px solid #ddd;}
+        .input-area button {padding:12px 24px; border-radius:30px; background:#000; color:#fff; border:none; cursor:pointer;}
+        .typing {color:#888; font-style:italic;}
+    </style>
+</head>
+<body>
+    <h1>💬 نبراس</h1>
+    <div class="chat-box" id="chatBox">
+        <div class="msg bot">مرحباً! أنا نبراس، كيف أساعدك؟</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="اكتب سؤالك...">
+        <button onclick="sendMessage()">إرسال</button>
+    </div>
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML += `<div class="msg user">${msg}</div>`;
+            input.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+            const typing = document.createElement('div');
+            typing.className = 'msg bot typing';
+            typing.textContent = 'نبراس يكتب...';
+            chatBox.appendChild(typing);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+                const data = await res.json();
+                typing.remove();
+                chatBox.innerHTML += `<div class="msg bot">${data.reply}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch(e) {
+                typing.remove();
+                chatBox.innerHTML += `<div class="msg bot">⚠️ خطأ في الاتصال</div>`;
+            }
+        }
+        document.getElementById('userInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
+"""
+
+@app.route("/")
+def index():
+    return HTML
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.json
+    user_msg = data.get("message", "").strip()
+    if not user_msg:
+        return jsonify({"reply": "الرجاء كتابة رسالة"})
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "أنت نبراس، مساعد ذكي مختصر. أجب بجمل قصيرة."},
+                {"role": "user", "content": user_msg}
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
+        return jsonify({"reply": response.choices[0].message.content})
+    except Exception as e:
+        return jsonify({"reply": f"⚠️ خطأ: {str(e)}"}), 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
