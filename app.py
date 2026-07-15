@@ -36,7 +36,6 @@ HTML_PAGE = """
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
 
-    /* زر محادثة جديدة */
     .new-chat {
         font-size: 32px;
         cursor: pointer;
@@ -48,7 +47,6 @@ HTML_PAGE = """
         transform: scale(1.15);
     }
 
-    /* القائمة ثلاث نقاط */
     .menu-btn {
         font-size: 28px;
         cursor: pointer;
@@ -72,6 +70,7 @@ HTML_PAGE = """
         width: 180px;
         box-shadow: 0 3px 12px rgba(0,0,0,0.15);
         overflow: hidden;
+        z-index: 20;
     }
 
     .menu-content a {
@@ -138,28 +137,30 @@ HTML_PAGE = """
         box-sizing: border-box;
     }
 
-    input {
+    textarea {
         flex: 1;
-        padding: 16px;
+        padding: 14px;
         border-radius: 14px;
         border: 1px solid #ccc;
-        font-size: 17px;
-        transition: 0.2s;
+        font-size: 16px;
+        resize: none;
+        min-height: 60px;
+        max-height: 120px;
     }
-    input:focus {
+    textarea:focus {
         border-color: #007bff;
         outline: none;
         box-shadow: 0 0 5px rgba(0,123,255,0.3);
     }
 
     button {
-        padding: 16px 24px;
+        padding: 14px 22px;
         border: none;
         background: #007bff;
         color: white;
         border-radius: 14px;
         cursor: pointer;
-        font-size: 17px;
+        font-size: 16px;
         transition: 0.2s;
     }
     button:hover {
@@ -179,7 +180,7 @@ HTML_PAGE = """
     }
 
     async function sendMsg() {
-        const text = document.getElementById("input").value;
+        const text = document.getElementById("input").value.trim();
         if (!text) return;
 
         const chat = document.getElementById("chat");
@@ -216,7 +217,7 @@ HTML_PAGE = """
 <div class="chat-area" id="chat"></div>
 
 <div class="input-bar">
-    <input id="input" placeholder="اكتب رسالتك هنا...">
+    <textarea id="input" placeholder="اكتب رسالتك هنا..."></textarea>
     <button onclick="sendMsg()">إرسال</button>
 </div>
 
@@ -233,10 +234,11 @@ def ask_ai():
     data = request.json
     prompt = data["prompt"]
 
-    keywords = ["من برمجك", "مين برمجك", "من سواك", "مين سواك",
-                "من طورك", "مين طورك", "المبرمج", "من صممك",
-                "من صنعك", "مين صنعك", "من جهزك"]
-
+    keywords = [
+        "من برمجك", "مين برمجك", "من سواك", "مين سواك",
+        "من طورك", "مين طورك", "المبرمج", "من صممك",
+        "من صنعك", "مين صنعك", "من جهزك"
+    ]
     if any(k in prompt for k in keywords):
         return jsonify({
             "reply": "تم تطويري وبرمجتي من قبل أبو مشعل المطيري يعمل بالتأهيل الشامل قسم الاتصالات الإدارية."
