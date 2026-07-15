@@ -10,19 +10,16 @@ from PIL import Image
 
 app = Flask(__name__)
 
-# ─── المفتاح من متغيرات البيئة ───
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     raise Exception("❌ OPENAI_API_KEY غير موجود")
 
 client = OpenAI(api_key=API_KEY)
 
-# ─── التاريخ الصحيح (توقيت السعودية) ───
 def get_real_date():
     tz = pytz.timezone('Asia/Riyadh')
     return datetime.now(tz).strftime("%A، %d %B %Y")
 
-# ─── البحث في الويب ───
 def search_web(query):
     try:
         with DDGS() as ddgs:
@@ -35,10 +32,9 @@ def search_web(query):
             body = r.get("body", "")
             context += f"• {title}: {body[:150]}...\n"
         return context.strip()
-    except Exception as e:
+    except:
         return ""
 
-# ─── واجهة HTML ───
 HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -56,94 +52,118 @@ HTML = """
             flex-direction: column;
         }
 
-        /* ─── الشريط العلوي (☰ يمين | ➕ يسار) ─── */
+        /* ─── الشريط العلوي ─── */
         .top-bar {
             background: #ffffff;
-            padding: 12px 20px;
+            padding: 8px 16px;
             border-bottom: 1px solid #e5e5e5;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-shrink: 0;
+            min-height: 48px;
         }
         .top-bar .btn {
             background: transparent;
             border: none;
-            font-size: 24px;
+            font-size: 20px;
             cursor: pointer;
             color: #1a1a1a;
-            padding: 4px 8px;
-            border-radius: 8px;
+            padding: 4px 6px;
+            border-radius: 6px;
             transition: 0.2s;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .top-bar .btn:hover { background: #f0f0f0; }
-        .top-bar .title { font-weight: 600; font-size: 18px; }
+        .top-bar .title {
+            font-weight: 600;
+            font-size: 16px;
+            color: #1a1a1a;
+        }
 
         /* ─── منطقة المحادثة ─── */
         .chat-box {
             flex: 1;
             overflow-y: auto;
-            padding: 20px 24px;
+            padding: 16px 20px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
             background: #f7f7f8;
         }
 
         /* ─── فقاعات الرسائل ─── */
         .msg {
-            max-width: 75%;
-            padding: 10px 16px;
-            border-radius: 18px;
+            max-width: 80%;
+            padding: 8px 14px;
+            border-radius: 16px;
             font-size: 15px;
-            line-height: 1.6;
+            line-height: 1.5;
             word-wrap: break-word;
-            animation: fadeIn 0.3s ease;
+            animation: fadeIn 0.25s ease;
         }
         .msg.user {
             background: #1a1a1a;
-            color: #ffffff;
+            color: #fff;
             align-self: flex-end;
             border-bottom-right-radius: 4px;
         }
         .msg.bot {
-            background: #ffffff;
+            background: #fff;
             color: #1a1a1a;
             align-self: flex-start;
             border-bottom-left-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
-        .msg .time { font-size: 10px; color: #aaa; display: block; margin-top: 4px; }
+        .msg .time {
+            font-size: 9px;
+            color: #aaa;
+            display: block;
+            margin-top: 2px;
+        }
         .msg.user .time { color: #888; }
 
-        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
         /* ─── مؤشر الكتابة ─── */
         .typing {
             align-self: flex-start;
-            background: #ffffff;
-            padding: 12px 18px;
-            border-radius: 18px;
+            background: #fff;
+            padding: 10px 16px;
+            border-radius: 16px;
             border-bottom-left-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
             display: flex;
             gap: 4px;
         }
         .typing span {
-            width: 8px; height: 8px; background: #aaa; border-radius: 50%;
+            width: 7px;
+            height: 7px;
+            background: #aaa;
+            border-radius: 50%;
             animation: bounce 1.2s infinite;
         }
         .typing span:nth-child(2) { animation-delay: 0.2s; }
         .typing span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+        @keyframes bounce {
+            0%,60%,100% { transform: translateY(0); }
+            30% { transform: translateY(-5px); }
+        }
 
-        /* ─── مربع الكتابة (سهم يمين | صوت + صورة يسار) ─── */
+        /* ─── مربع الكتابة (أنيق وصغير) ─── */
         .input-area {
             background: #ffffff;
-            padding: 10px 16px 16px;
+            padding: 8px 12px 12px;
             border-top: 1px solid #e5e5e5;
             display: flex;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
             flex-shrink: 0;
         }
@@ -152,10 +172,11 @@ HTML = """
             display: flex;
             align-items: center;
             background: #f0f0f0;
-            border-radius: 30px;
-            padding: 2px 4px;
+            border-radius: 24px;
+            padding: 2px 6px;
             border: 1px solid transparent;
             transition: 0.2s;
+            gap: 2px;
         }
         .input-area .input-wrapper:focus-within {
             border-color: #1a1a1a;
@@ -164,20 +185,26 @@ HTML = """
         .input-area .input-wrapper input {
             flex: 1;
             border: none;
-            padding: 10px 12px;
-            font-size: 15px;
+            padding: 8px 10px;
+            font-size: 14px;
             background: transparent;
             outline: none;
+            min-width: 60px;
         }
         .input-area .input-wrapper .icon-btn {
             background: transparent;
             border: none;
-            font-size: 20px;
+            font-size: 18px;
             cursor: pointer;
-            padding: 4px 8px;
+            padding: 4px 6px;
             border-radius: 50%;
             color: #555;
             transition: 0.2s;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .input-area .input-wrapper .icon-btn:hover { background: #e0e0e0; }
         .input-area .send-btn {
@@ -185,9 +212,9 @@ HTML = """
             color: white;
             border: none;
             border-radius: 50%;
-            width: 44px;
-            height: 44px;
-            font-size: 18px;
+            width: 40px;
+            height: 40px;
+            font-size: 16px;
             cursor: pointer;
             transition: 0.2s;
             display: flex;
@@ -198,26 +225,26 @@ HTML = """
         .input-area .send-btn:hover { background: #333; transform: scale(1.02); }
         .input-area .send-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
 
-        /* ─── القائمة المنسدلة (☰) ─── */
+        /* ─── القائمة المنسدلة ─── */
         .dropdown {
             display: none;
             position: fixed;
-            top: 60px;
-            right: 20px;
+            top: 50px;
+            right: 12px;
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-            padding: 12px;
-            min-width: 160px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 8px;
+            min-width: 140px;
             z-index: 999;
             border: 1px solid #e5e5e5;
         }
         .dropdown.active { display: block; }
         .dropdown .item {
-            padding: 8px 12px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             transition: 0.2s;
             color: #1a1a1a;
         }
@@ -225,11 +252,10 @@ HTML = """
 
         /* ─── الصور في المحادثة ─── */
         .chat-image {
-            max-width: 200px;
-            border-radius: 12px;
-            margin-top: 6px;
+            max-width: 160px;
+            border-radius: 10px;
+            margin-top: 4px;
             border: 1px solid #e0e0e0;
-            display: block;
         }
     </style>
 </head>
@@ -267,7 +293,6 @@ HTML = """
     </div>
 
     <script>
-        // ─── عناصر DOM ───
         const chatBox = document.getElementById('chatBox');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -279,15 +304,11 @@ HTML = """
         const newChatBtn = document.getElementById('newChatBtn');
 
         let pendingImages = [];
-        let mediaRecorder = null;
-        let isRecording = false;
 
-        // ─── الوقت ───
         function getTime() {
             return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
         }
 
-        // ─── إضافة رسالة ───
         function appendMessage(role, text, images) {
             const div = document.createElement('div');
             div.className = `msg ${role}`;
@@ -302,7 +323,6 @@ HTML = """
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // ─── مؤشر الكتابة ───
         function showTyping() {
             const div = document.createElement('div');
             div.className = 'typing';
@@ -316,13 +336,11 @@ HTML = """
             if (el) el.remove();
         }
 
-        // ─── إرسال الرسالة ───
         async function sendMessage() {
             const text = userInput.value.trim();
             const images = pendingImages;
             if (!text && images.length === 0) return;
 
-            // عرض رسالة المستخدم
             appendMessage('user', text, images);
             userInput.value = '';
             pendingImages = [];
@@ -335,10 +353,7 @@ HTML = """
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: text,
-                        images: images
-                    })
+                    body: JSON.stringify({ message: text, images: images })
                 });
                 const data = await res.json();
                 hideTyping();
@@ -351,20 +366,16 @@ HTML = """
             userInput.focus();
         }
 
-        // ─── رفع الصور ───
         imageBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', function() {
             Array.from(this.files).forEach(file => {
                 const reader = new FileReader();
-                reader.onload = e => {
-                    pendingImages.push(e.target.result);
-                };
+                reader.onload = e => pendingImages.push(e.target.result);
                 reader.readAsDataURL(file);
             });
             this.value = '';
         });
 
-        // ─── تسجيل صوتي (Speech Recognition) ───
         micBtn.addEventListener('click', function() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 alert('المتصفح لا يدعم التسجيل الصوتي. استخدم Chrome.');
@@ -380,10 +391,9 @@ HTML = """
             recognition.onerror = () => alert('حدث خطأ في التسجيل');
             recognition.start();
             micBtn.style.color = 'red';
-            setTimeout(() => { micBtn.style.color = ''; }, 3000);
+            setTimeout(() => { micBtn.style.color = ''; }, 2000);
         });
 
-        // ─── أزرار الشريط العلوي ───
         menuBtn.addEventListener('click', () => dropdown.classList.toggle('active'));
         document.addEventListener('click', (e) => {
             if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.remove('active');
@@ -394,15 +404,11 @@ HTML = """
             appendMessage('bot', 'مرحباً! أنا نبراس X، كيف أساعدك؟');
         });
 
-        // ─── أحداث الإدخال ───
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
         userInput.focus();
-
-        // ─── إظهار التاريخ في القائمة تلقائياً ───
-        console.log('نبراس X جاهز');
     </script>
 </body>
 </html>
@@ -418,21 +424,14 @@ def chat():
     user_msg = data.get("message", "").strip()
     images = data.get("images", [])
 
-    # ─── إذا كان سؤالاً عن المبرمج ───
     if user_msg and ("من برمجك" in user_msg or "من طورك" in user_msg or "من صنعك" in user_msg):
         return jsonify({
             "reply": "برمجني وطورني ابو مشعل المطيري يعمل بالتاهيل الشامل قسم الاتصالات الاداريه 🤖🔥"
         })
 
-    # ─── البحث في الويب (إن وجد سؤال) ───
-    search_context = ""
-    if user_msg:
-        search_context = search_web(user_msg)
-
-    # ─── التاريخ ───
+    search_context = search_web(user_msg) if user_msg else ""
     current_date = get_real_date()
 
-    # ─── بناء التعليمات ───
     system_prompt = f"""أنت نبراس X، مساعد ذكي ومحدث.
 التاريخ اليوم: {current_date}.
 { '📌 معلومات محدثة من البحث:\n' + search_context if search_context else '' }
@@ -440,21 +439,14 @@ def chat():
 إذا سألك المستخدم عن المبرمج، أخبره أن المبرمج هو ابو مشعل المطيري.
 """
 
-    # ─── إذا كانت هناك صور ───
     if images:
         try:
             content = [{"type": "text", "text": user_msg or "صف هذه الصورة"}]
             for img in images[:3]:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": img}
-                })
+                content.append({"type": "image_url", "image_url": {"url": img}})
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": content}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": content}],
                 max_tokens=200,
                 temperature=0.3
             )
@@ -462,14 +454,10 @@ def chat():
         except Exception as e:
             return jsonify({"reply": f"⚠️ خطأ في تحليل الصورة: {str(e)}"}), 500
 
-    # ─── محادثة نصية عادية ───
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_msg or "مرحباً"}
-            ],
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg or "مرحباً"}],
             max_tokens=200,
             temperature=0.3
         )
