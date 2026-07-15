@@ -6,10 +6,6 @@ app = Flask(__name__)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ============================
-# واجهة HTML كاملة داخل متغير
-# ============================
-
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -19,164 +15,130 @@ HTML_PAGE = """
 
 <style>
     body {
-        background: #ffffff;
         margin: 0;
-        font-family: 'Tahoma', sans-serif;
+        font-family: Tahoma, sans-serif;
+        background: #ffffff;
         display: flex;
         flex-direction: column;
         height: 100vh;
     }
 
-    /* الشريط العلوي */
     .top-bar {
-        width: 100%;
-        height: 65px;
-        background: #ffffff;
-        border-bottom: 1px solid #e6e6e6;
+        height: 55px;
+        background: #fafafa;
+        border-bottom: 1px solid #e0e0e0;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 25px;
-        position: fixed;
-        top: 0;
-        z-index: 10;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        padding: 0 20px;
+        flex-shrink: 0;
     }
 
-    /* زر محادثة جديدة */
     .new-chat {
-        font-size: 32px;
+        font-size: 26px;
         cursor: pointer;
         color: #007bff;
         font-weight: bold;
-        transition: 0.2s;
     }
 
-    .new-chat:hover {
-        color: #005fcc;
-        transform: scale(1.15);
-    }
-
-    /* القائمة المنسدلة */
     .menu {
         position: relative;
     }
 
     .menu-btn {
-        background: #f2f2f2;
-        padding: 10px 15px;
-        border-radius: 10px;
+        background: #eee;
+        padding: 8px 12px;
+        border-radius: 8px;
         cursor: pointer;
-        font-size: 15px;
-        color: #333;
-        transition: 0.2s;
-    }
-
-    .menu-btn:hover {
-        background: #e6e6e6;
+        font-size: 14px;
     }
 
     .menu-content {
         display: none;
         position: absolute;
         right: 0;
-        top: 55px;
+        top: 40px;
         background: #fff;
         border: 1px solid #ddd;
-        border-radius: 10px;
-        width: 180px;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.15);
-        overflow: hidden;
+        border-radius: 8px;
+        width: 160px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
 
     .menu-content a {
         display: block;
-        padding: 12px;
+        padding: 10px;
         text-decoration: none;
         color: #333;
         border-bottom: 1px solid #eee;
-        font-size: 14px;
-        transition: 0.2s;
+        font-size: 13px;
     }
 
     .menu-content a:hover {
         background: #f5f5f5;
     }
 
-    /* صندوق المحادثة */
-    .chat-box {
-        width: 100%;
-        max-width: 900px;
-        margin: 110px auto 20px auto;
-        padding: 20px;
-        overflow-y: auto;
+    .chat-area {
         flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        max-width: 900px;
+        margin: 0 auto;
+        box-sizing: border-box;
     }
 
     .msg {
         background: #f7f7f7;
-        padding: 16px;
-        border-radius: 12px;
-        margin-bottom: 14px;
-        font-size: 17px;
-        line-height: 1.7;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        animation: fadeIn 0.3s ease;
+        padding: 12px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        font-size: 15px;
+        line-height: 1.6;
     }
 
     .msg.user {
         background: #e8f0ff;
-        border-right: 5px solid #4a8cff;
+        border-right: 4px solid #4a8cff;
     }
 
     .msg.bot {
         background: #f2f2f2;
-        border-right: 5px solid #999;
+        border-right: 4px solid #999;
     }
 
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* الإدخال */
-    .input-area {
-        width: 100%;
-        max-width: 900px;
-        margin: 0 auto 25px auto;
+    .input-bar {
+        flex-shrink: 0;
+        border-top: 1px solid #e0e0e0;
+        padding: 10px 20px;
+        background: #fafafa;
         display: flex;
-        gap: 12px;
+        gap: 10px;
+        max-width: 900px;
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     input {
         flex: 1;
-        padding: 16px;
-        border-radius: 12px;
+        padding: 12px;
+        border-radius: 10px;
         border: 1px solid #ccc;
-        font-size: 17px;
-        transition: 0.2s;
-    }
-
-    input:focus {
-        border-color: #007bff;
-        outline: none;
-        box-shadow: 0 0 5px rgba(0,123,255,0.3);
+        font-size: 15px;
     }
 
     button {
-        padding: 16px 24px;
+        padding: 12px 18px;
         border: none;
         background: #007bff;
         color: white;
-        border-radius: 12px;
+        border-radius: 10px;
         cursor: pointer;
-        font-size: 17px;
-        transition: 0.2s;
+        font-size: 15px;
     }
 
     button:hover {
         background: #005fcc;
-        transform: scale(1.05);
     }
 </style>
 
@@ -206,9 +168,9 @@ HTML_PAGE = """
         const data = await res.json();
         chat.innerHTML += `<div class="msg bot">🤖 ${data.reply}</div>`;
         document.getElementById("input").value = "";
+        chat.scrollTop = chat.scrollHeight;
     }
 </script>
-
 </head>
 
 <body>
@@ -226,9 +188,9 @@ HTML_PAGE = """
     </div>
 </div>
 
-<div class="chat-box" id="chat"></div>
+<div class="chat-area" id="chat"></div>
 
-<div class="input-area">
+<div class="input-bar">
     <input id="input" placeholder="اكتب رسالتك هنا...">
     <button onclick="sendMsg()">إرسال</button>
 </div>
@@ -237,17 +199,9 @@ HTML_PAGE = """
 </html>
 """
 
-# ============================
-# صفحة الواجهة
-# ============================
-
 @app.get("/")
 def home():
     return HTML_PAGE
-
-# ============================
-# API الردود + بحث ويب
-# ============================
 
 @app.post("/ask")
 def ask_ai():
@@ -264,19 +218,18 @@ def ask_ai():
             "reply": "تم تطويري وبرمجتي من قبل أبو مشعل المطيري يعمل بالتأهيل الشامل قسم الاتصالات الإدارية."
         })
 
-    response = client.responses.create(
+    # لو تبي بحث ويب فعلي لازم يكون حسابك مفعّل له،
+    # هنا نخليها رد عادي من الموديل:
+    response = client.chat.completions.create(
         model="gpt-4o-mini",
-        input=prompt,
-        web_search={"enable": True}
+        messages=[
+            {"role": "system", "content": "أنت مساعد ذكي اسمه نبراس."},
+            {"role": "user", "content": prompt}
+        ]
     )
 
-    reply = response.output_text
-
+    reply = response.choices[0].message.content
     return jsonify({"reply": reply})
-
-# ============================
-# تشغيل السيرفر
-# ============================
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
