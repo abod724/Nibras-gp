@@ -38,13 +38,16 @@ HTML = """
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#f5f5fa;font-family:sans-serif}
 .app{height:100vh;max-width:750px;margin:0 auto;background:white;display:flex;flex-direction:column;box-shadow:0 0 30px rgba(0,0,0,0.04)}
-.header{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #eaeef3;background:white}
+/* ── شريط علوي (☰ في اليسار) ── */
+.header{height:52px;display:flex;align-items:center;padding:0 18px;border-bottom:1px solid #eaeef3;background:white}
 .header .icon-btn{background:none;border:none;font-size:26px;color:#005c99;cursor:pointer;padding:6px 12px;border-radius:50%;transition:0.15s}
 .header .icon-btn:hover{background:#e9f0fc}
-.dropdown{display:none;position:absolute;top:56px;right:20px;background:white;border-radius:14px;box-shadow:0 8px 30px rgba(0,60,130,0.1);padding:6px 0;width:200px;border:1px solid #e6edf5;z-index:99}
+/* ── القائمة المنسدلة (تظهر تحت زر ☰) ── */
+.dropdown{display:none;position:absolute;top:56px;left:20px;background:white;border-radius:14px;box-shadow:0 8px 30px rgba(0,60,130,0.1);padding:6px 0;width:200px;border:1px solid #e6edf5;z-index:99}
 .dropdown.active{display:block}
 .dropdown .item{padding:12px 22px;font-size:15px;display:flex;align-items:center;gap:12px;cursor:pointer;color:#1a2a3a;transition:0.15s;border-radius:6px;margin:2px 6px}
 .dropdown .item:hover{background:#f0f6ff;color:#005c99}
+/* ── منطقة الشات ── */
 .chat-box{flex:1;overflow-y:auto;padding:18px 16px;background:#f5f5fa;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:78%;padding:10px 16px;border-radius:18px;font-size:15px;line-height:1.6;word-wrap:break-word;animation:fadeIn 0.25s}
 .msg.user{background:#005c99;color:white;align-self:flex-end;border-bottom-right-radius:6px}
@@ -57,6 +60,7 @@ html,body{height:100%;overflow:hidden;background:#f5f5fa;font-family:sans-serif}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+/* ── شريط الإدخال ── */
 .input-bar{background:white;padding:8px 14px 14px;border-top:1px solid #e0e8f0;display:flex;gap:8px;align-items:center}
 .input-bar .wrap{flex:1;display:flex;align-items:center;background:#f3f5fa;border-radius:26px;padding:2px 10px;border:1px solid transparent;transition:0.2s}
 .input-bar .wrap:focus-within{border-color:#005c99;background:white}
@@ -73,8 +77,8 @@ html,body{height:100%;overflow:hidden;background:#f5f5fa;font-family:sans-serif}
 </head>
 <body>
 <div class="app">
+    <!-- ── شريط علوي مع ☰ يسار ── -->
     <div class="header">
-        <div></div>
         <button class="icon-btn" id="menuBtn" title="القائمة"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 ' + new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
@@ -83,9 +87,13 @@ html,body{height:100%;overflow:hidden;background:#f5f5fa;font-family:sans-serif}
             <div class="item" onclick="alert('💬 مطور: أبو مشعل المطيري\\nنبراس GT v2.2')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
         </div>
     </div>
+
+    <!-- ── منطقة المحادثة ── -->
     <div class="chat-box" id="chatBox">
         <div class="msg bot">مرحباً! أنا نبراس GT، كيف أساعدك؟ <span class="time">الآن</span></div>
     </div>
+
+    <!-- ── شريط الإدخال ── -->
     <div class="input-bar">
         <div class="wrap">
             <button class="icon-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
@@ -106,7 +114,6 @@ const imageBtn = document.getElementById('imageBtn');
 const fileInput = document.getElementById('fileInput');
 const menuBtn = document.getElementById('menuBtn');
 const dropdown = document.getElementById('dropdownMenu');
-const newChatBtn = document.getElementById('newChatBtn') || null;
 
 let pendingImages = [];
 
@@ -216,13 +223,6 @@ micBtn.onclick = function(){
 menuBtn.onclick = (e)=>{ e.stopPropagation(); dropdown.classList.toggle('active'); };
 document.addEventListener('click', (e)=>{ if(!dropdown.contains(e.target) && e.target!==menuBtn) dropdown.classList.remove('active'); });
 
-if (newChatBtn) {
-    newChatBtn.onclick = ()=>{
-        chatBox.innerHTML = '';
-        appendBotMessage('مرحباً! أنا نبراس GT، كيف أساعدك؟');
-    };
-}
-
 sendBtn.onclick = sendMessage;
 userInput.onkeydown = e => { if(e.key==='Enter') sendMessage(); };
 userInput.focus();
@@ -242,7 +242,7 @@ def index():
 def chat():
     data = request.json
     user_msg = (data.get("message") or '').strip()
-    images = data.get("images", [])  # ✅ هذا هو السطر المصحح (تم إغلاق التنصيص)
+    images = data.get("images", [])
 
     if user_msg and any(k in user_msg for k in ['برمج', 'مطور', 'سواك', 'المبرمج']):
         return jsonify({
