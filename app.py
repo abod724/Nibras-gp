@@ -5,13 +5,11 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# قراءة مفاتيح من صندوق الأسرار
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BING_KEY = os.getenv("BING_KEY")
-
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def search_web(query: str) -> str:
+def search_web(query):
     if not query or not BING_KEY:
         return ""
     try:
@@ -21,19 +19,10 @@ def search_web(query: str) -> str:
         items = r.get("webPages", {}).get("value", [])
         context = ""
         for item in items[:3]:
-            name = item.get("name", "")
-            snippet = item.get("snippet", "")
-            context += f"- {name}: {snippet}\n"
+            context += f"- {item.get('name')}: {item.get('snippet')}\n"
         return context.strip()
-    except Exception:
+    except:
         return ""
-
-def get_real_date() -> str:
-    try:
-        r = requests.get("https://worldtimeapi.org/api/timezone/Asia/Riyadh").json()
-        return r.get("datetime", "").split("T")[0]
-    except Exception:
-        return "غير متوفر"
 
 HTML = """
 <!DOCTYPE html>
@@ -44,8 +33,8 @@ HTML = """
 <title>نبراس GT</title>
 
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
 body {
+    margin:0;
     background:#f7f7f8;
     font-family:'Segoe UI', Tahoma;
     overflow:hidden;
@@ -57,7 +46,6 @@ body {
     background:white;
     display:flex;
     flex-direction:column;
-    box-shadow:0 0 30px rgba(0,0,0,0.05);
 }
 
 /* الهيدر */
@@ -69,7 +57,7 @@ body {
     justify-content:space-between;
     padding:0 16px;
 }
-.header .btn {
+.btn {
     width:36px;
     height:36px;
     border:none;
@@ -80,10 +68,9 @@ body {
     align-items:center;
     justify-content:center;
 }
-.header .btn:hover { background:#f0f0f0; }
-.header .title { font-size:16px; font-weight:600; }
+.btn:hover { background:#f0f0f0; }
 
-/* القائمة المنسدلة */
+/* المنسدلة */
 .dropdown {
     display:none;
     position:absolute;
@@ -109,7 +96,7 @@ body {
 .chat-box {
     flex:1;
     overflow-y:auto;
-    padding:16px 20px;
+    padding:16px;
     display:flex;
     flex-direction:column;
     gap:6px;
@@ -119,19 +106,16 @@ body {
     padding:10px 14px;
     border-radius:16px;
     font-size:15px;
-    line-height:1.5;
 }
 .msg.user {
     background:#1a1a1a;
     color:white;
     align-self:flex-end;
-    border-bottom-right-radius:4px;
 }
 .msg.bot {
     background:white;
     color:#1a1a1a;
     align-self:flex-start;
-    border-bottom-left-radius:4px;
     box-shadow:0 1px 4px rgba(0,0,0,0.05);
 }
 .time {
@@ -141,7 +125,7 @@ body {
     display:block;
 }
 
-/* شريط الإدخال */
+/* مربع الكتابة */
 .input-bar {
     padding:10px;
     border-top:1px solid #e5e5e5;
@@ -150,24 +134,16 @@ body {
 }
 .wrapper {
     flex:1;
-    background:#f0f0f0;
-    border-radius:24px;
-    padding:4px 6px;
     display:flex;
     align-items:center;
-    gap:6px;
-}
-.wrapper input {
-    flex:1;
-    border:none;
-    background:transparent;
-    padding:8px;
-    font-size:14px;
-    outline:none;
+    background:#f0f0f0;
+    border-radius:24px;
+    padding:6px 10px;
+    gap:10px;
 }
 .icon-btn {
-    width:28px;
-    height:28px;
+    width:36px;
+    height:36px;
     border:none;
     background:transparent;
     cursor:pointer;
@@ -187,7 +163,6 @@ body {
     color:white;
     cursor:pointer;
 }
-.send-btn:hover { background:#333; }
 </style>
 </head>
 
@@ -196,7 +171,6 @@ body {
 
     <div class='header'>
         <button class='btn' id='newChatBtn'>+</button>
-        <span class='title'>نبراس GT</span>
         <button class='btn' id='menuBtn'>≡</button>
     </div>
 
@@ -204,8 +178,6 @@ body {
         <div class='item' onclick="setMode('new')">محادثة جديدة</div>
         <div class='item' onclick="setMode('web')">البحث بالويب</div>
         <div class='item' onclick="setMode('openai')">البحث عبر OpenAI</div>
-        <div class='item' onclick="toggleDark()">الوضع الليلي</div>
-        <div class='item' onclick="alert('نبراس GT — تصميم أبو مشعل')">حول</div>
     </div>
 
     <div class='chat-box' id='chatBox'>
@@ -214,11 +186,21 @@ body {
 
     <div class='input-bar'>
         <div class='wrapper'>
-            <button class='icon-btn' id='micBtn'>🎙️</button>
-            <button class='icon-btn' id='imageBtn'>📸</button>
-            <input type='text' id='userInput' placeholder='اكتب سؤالك...'>
-            <input type='file' id='fileInput' accept='image/*' multiple style='display:none'>
+            <button class='icon-btn' id='micBtn'>
+                <svg width='26' height='26' viewBox='0 0 24 24'>
+                    <path d='M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-5 8a1 1 0 0 1-1-1v-2h2v2a1 1 0 0 1-1 1z'/>
+                </svg>
+            </button>
+
+            <button class='icon-btn' id='imageBtn'>
+                <svg width='26' height='26' viewBox='0 0 24 24'>
+                    <path d='M4 7h2l1-2h10l1 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-10h-2l-1-2H9l-1 2H6v2h12V8z'/>
+                </svg>
+            </button>
+
+            <input type='text' id='userInput' placeholder='اسأل Nibras GT ...'>
         </div>
+
         <button class='send-btn' id='sendBtn'>➤</button>
     </div>
 
@@ -229,17 +211,12 @@ let searchMode = "web";
 
 function setMode(mode) {
     searchMode = mode;
+    dropdown.classList.remove("active");
 
     if (mode === "new") {
         chatBox.innerHTML = "";
         appendMessage('bot', 'مرحباً! أنا نبراس GT، كيف أساعدك؟');
     }
-
-    dropdown.classList.remove("active");
-}
-
-function toggleDark() {
-    document.body.classList.toggle("dark");
 }
 
 const chatBox = document.getElementById('chatBox');
@@ -294,15 +271,14 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    user_msg = data.get("message", "").strip()
+    user_msg = data.get("message", "")
     mode = data.get("mode", "web")
 
     search_context = search_web(user_msg) if mode == "web" else ""
-    current_date = get_real_date()
 
     system_prompt = f"""
 أنت نبراس GT.
-التاريخ: {current_date}
+نتائج البحث:
 {search_context}
 """
 
