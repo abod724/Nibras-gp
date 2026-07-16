@@ -1,460 +1,318 @@
+import os
 from flask import Flask, request, jsonify
 from openai import OpenAI
-import os
-import base64
-from datetime import datetime
-import pytz
-from duckduckgo_search import DDGS
-from io import BytesIO
-from PIL import Image
+import requests
 
 app = Flask(__name__)
 
-# ─── المفتاح من متغيرات البيئة ───
-API_KEY = os.environ.get("OPENAI_API_KEY")
-if not API_KEY:
-    raise Exception("❌ OPENAI_API_KEY غير موجود")
+# قراءة مفتاح OpenAI من صندوق الأسرار
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-client = OpenAI(api_key=API_KEY)
+# مفتاح البحث بالويب Bing
+BING_KEY = os.getenv("BING_KEY")
 
-# ─── التاريخ الصحيح ───
-def get_real_date():
-    tz = pytz.timezone('Asia/Riyadh')
-    return datetime.now(tz).strftime("%A، %d %B %Y")
-
-# ─── البحث في الويب ───
 def search_web(query):
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=3))
-        if not results:
-            return "لا توجد نتائج محدثة."
+        url = f"https://api.bing.microsoft.com/v7.0/search?q={query}"
+        headers = {"Ocp-Apim-Subscription-Key": BING_KEY}
+        r = requests.get(url, headers=headers).json()
+
         context = ""
-        for r in results:
-            title = r.get("title", "")
-            body = r.get("body", "")
-            context += f"• {title}: {body[:150]}...\n"
+        results = r.get("webPages", {}).get("value", [])
+        for item in results[:3]:
+            context += f"- {item.get('name')}: {item.get('snippet')}\n"
         return context.strip()
     except:
         return ""
 
-# ─── واجهة HTML (احترافية وثابتة) ───
+def get_real_date():
+    try:
+        r = requests.get("https://worldtimeapi.org/api/timezone/Asia/Riyadh").json()
+        return r.get("datetime", "").split("T")[0]
+    except:
+        return "غير متوفر"
+
+# ------------------ واجهة HTML كاملة ------------------
+
 HTML = """
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang='ar' dir='rtl'>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>نبراس GT</title>
-    <style>
-        /* ─── إعادة تعيين ─── */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body {
-            height: 100%;
-            overflow: hidden;
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            background: #f7f7f8;
-        }
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>نبراس GT</title>
 
-        /* ─── الحاوية الرئيسية ─── */
-        .app {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            max-width: 800px;
-            margin: 0 auto;
-            background: #ffffff;
-            box-shadow: 0 0 30px rgba(0,0,0,0.02);
-        }
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    background:#f7f7f8;
+    font-family:'Segoe UI', Tahoma;
+    overflow:hidden;
+}
+.app {
+    height:100vh;
+    max-width:800px;
+    margin:auto;
+    background:white;
+    display:flex;
+    flex-direction:column;
+    box-shadow:0 0 30px rgba(0,0,0,0.05);
+}
 
-        /* ─── الشريط العلوي ─── */
-        .header {
-            flex-shrink: 0;
-            height: 52px;
-            background: #ffffff;
-            border-bottom: 1px solid #e5e5e5;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 16px;
-            z-index: 10;
-        }
-        .header .btn {
-            background: transparent;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #1a1a1a;
-            padding: 4px 6px;
-            border-radius: 6px;
-            transition: 0.2s;
-            line-height: 1;
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .header .btn:hover { background: #f0f0f0; }
-        .header .title {
-            font-weight: 600;
-            font-size: 16px;
-            color: #1a1a1a;
-        }
+/* الهيدر */
+.header {
+    height:52px;
+    border-bottom:1px solid #e5e5e5;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 16px;
+}
+.header .btn {
+    width:36px;
+    height:36px;
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    border-radius:6px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.header .btn:hover { background:#f0f0f0; }
+.header .title { font-size:16px; font-weight:600; }
 
-        /* ─── منطقة المحادثة ─── */
-        .chat-box {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px 20px;
-            background: #f7f7f8;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
+/* القائمة المنسدلة */
+.dropdown {
+    display:none;
+    position:absolute;
+    right:12px;
+    top:52px;
+    background:white;
+    border-radius:10px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.12);
+    border:1px solid #e5e5e5;
+    padding:6px;
+    min-width:160px;
+}
+.dropdown.active { display:block; }
+.dropdown .item {
+    padding:8px 14px;
+    border-radius:6px;
+    cursor:pointer;
+}
+.dropdown .item:hover { background:#f0f0f0; }
 
-        /* ─── فقاعات الرسائل ─── */
-        .msg {
-            max-width: 80%;
-            padding: 8px 14px;
-            border-radius: 16px;
-            font-size: 15px;
-            line-height: 1.5;
-            word-wrap: break-word;
-            animation: fadeIn 0.25s ease;
-        }
-        .msg.user {
-            background: #1a1a1a;
-            color: #ffffff;
-            align-self: flex-end;
-            border-bottom-right-radius: 4px;
-        }
-        .msg.bot {
-            background: #ffffff;
-            color: #1a1a1a;
-            align-self: flex-start;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-        }
-        .msg .time {
-            font-size: 9px;
-            color: #aaa;
-            display: block;
-            margin-top: 2px;
-        }
-        .msg.user .time { color: #888; }
+/* الرسائل */
+.chat-box {
+    flex:1;
+    overflow-y:auto;
+    padding:16px 20px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+.msg {
+    max-width:80%;
+    padding:10px 14px;
+    border-radius:16px;
+    font-size:15px;
+    line-height:1.5;
+}
+.msg.user {
+    background:#1a1a1a;
+    color:white;
+    align-self:flex-end;
+    border-bottom-right-radius:4px;
+}
+.msg.bot {
+    background:white;
+    color:#1a1a1a;
+    align-self:flex-start;
+    border-bottom-left-radius:4px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.05);
+}
+.time {
+    font-size:9px;
+    color:#aaa;
+    margin-top:4px;
+    display:block;
+}
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+/* شريط الإدخال */
+.input-bar {
+    padding:10px;
+    border-top:1px solid #e5e5e5;
+    display:flex;
+    gap:6px;
+}
+.wrapper {
+    flex:1;
+    background:#f0f0f0;
+    border-radius:24px;
+    padding:4px 6px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+}
+.wrapper input {
+    flex:1;
+    border:none;
+    background:transparent;
+    padding:8px;
+    font-size:14px;
+    outline:none;
+}
+.icon-btn {
+    width:28px;
+    height:28px;
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.icon-btn:hover { background:#e0e0e0; }
 
-        /* ─── مؤشر الكتابة ─── */
-        .typing {
-            align-self: flex-start;
-            background: #ffffff;
-            padding: 10px 16px;
-            border-radius: 16px;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-            display: flex;
-            gap: 4px;
-        }
-        .typing span {
-            width: 7px;
-            height: 7px;
-            background: #aaa;
-            border-radius: 50%;
-            animation: bounce 1.2s infinite;
-        }
-        .typing span:nth-child(2) { animation-delay: 0.2s; }
-        .typing span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes bounce {
-            0%,60%,100% { transform: translateY(0); }
-            30% { transform: translateY(-5px); }
-        }
-
-        /* ─── شريط الإدخال (أنيق) ─── */
-        .input-bar {
-            flex-shrink: 0;
-            background: #ffffff;
-            padding: 8px 12px 12px;
-            border-top: 1px solid #e5e5e5;
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-        .input-bar .wrapper {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            background: #f0f0f0;
-            border-radius: 24px;
-            padding: 2px 6px;
-            border: 1px solid transparent;
-            transition: 0.2s;
-            gap: 2px;
-        }
-        .input-bar .wrapper:focus-within {
-            border-color: #1a1a1a;
-            background: #ffffff;
-        }
-        .input-bar .wrapper input {
-            flex: 1;
-            border: none;
-            padding: 8px 10px;
-            font-size: 14px;
-            background: transparent;
-            outline: none;
-            min-width: 60px;
-        }
-        .input-bar .wrapper .icon-btn {
-            background: transparent;
-            border: none;
-            font-size: 18px;
-            cursor: pointer;
-            padding: 4px 6px;
-            border-radius: 50%;
-            color: #555;
-            transition: 0.2s;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .input-bar .wrapper .icon-btn:hover { background: #e0e0e0; }
-        .input-bar .send-btn {
-            background: #1a1a1a;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        .input-bar .send-btn:hover { background: #333; transform: scale(1.02); }
-        .input-bar .send-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
-
-        /* ─── القائمة المنسدلة (☰) ─── */
-        .dropdown {
-            display: none;
-            position: absolute;
-            top: 52px;
-            right: 12px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-            padding: 6px;
-            min-width: 160px;
-            z-index: 20;
-            border: 1px solid #e5e5e5;
-        }
-        .dropdown.active { display: block; }
-        .dropdown .item {
-            padding: 8px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: 0.2s;
-            color: #1a1a1a;
-        }
-        .dropdown .item:hover { background: #f0f0f0; }
-
-        /* ─── الصور في المحادثة ─── */
-        .chat-image {
-            max-width: 160px;
-            border-radius: 10px;
-            margin-top: 4px;
-            border: 1px solid #e0e0e0;
-        }
-
-        /* ─── تنسيق الهواتف ─── */
-        @media (max-width: 600px) {
-            .header .title { font-size: 14px; }
-            .msg { font-size: 14px; padding: 6px 12px; }
-        }
-    </style>
+.send-btn {
+    width:38px;
+    height:38px;
+    border:none;
+    border-radius:50%;
+    background:#1a1a1a;
+    color:white;
+    cursor:pointer;
+}
+.send-btn:hover { background:#333; }
+</style>
 </head>
+
 <body>
-    <div class="app">
+<div class='app'>
 
-        <!-- ─── الشريط العلوي ─── -->
-        <div class="header">
-            <button class="btn" id="newChatBtn" title="محادثة جديدة">➕</button>
-            <span class="title">💬 نبراس GT</span>
-            <button class="btn" id="menuBtn" title="القائمة">☰</button>
-        </div>
+    <div class='header'>
+        <!-- زر محادثة جديدة -->
+        <button class='btn' id='newChatBtn'>
+            <svg width='22' height='22' viewBox='0 0 24 24'>
+                <path d='M12 5v14m7-7H5' stroke='#333' stroke-width='2' stroke-linecap='round'/>
+            </svg>
+        </button>
 
-        <!-- ─── القائمة المنسدلة ─── -->
-        <div class="dropdown" id="dropdownMenu">
-            <div class="item" onclick="alert('📅 التاريخ: ' + new Date().toLocaleDateString('ar-SA'))">📅 التاريخ</div>
-            <div class="item" onclick="alert('🔍 بحث بالويب مفعل')">🔍 بحث بالويب</div>
-            <div class="item" onclick="location.reload()">🔄 تحديث</div>
-            <div class="item" onclick="alert('💬 نبراس GT v2.0')">ℹ️ حول</div>
-        </div>
+        <span class='title'>💬 نبراس GT</span>
 
-        <!-- ─── منطقة المحادثة ─── -->
-        <div class="chat-box" id="chatBox">
-            <div class="msg bot">مرحباً! أنا نبراس GT، كيف أساعدك؟ <span class="time">الآن</span></div>
-        </div>
-
-        <!-- ─── شريط الإدخال ─── -->
-        <div class="input-bar">
-            <div class="wrapper">
-                <button class="icon-btn" id="micBtn" title="تسجيل صوتي">🎤</button>
-                <button class="icon-btn" id="imageBtn" title="رفع صورة">🖼️</button>
-                <input type="text" id="userInput" placeholder="اكتب سؤالك...">
-                <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
-            </div>
-            <button class="send-btn" id="sendBtn">➤</button>
-        </div>
-
+        <!-- زر القائمة -->
+        <button class='btn' id='menuBtn'>
+            <svg width='22' height='22' viewBox='0 0 24 24'>
+                <path d='M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z' fill='#333'/>
+            </svg>
+        </button>
     </div>
 
-    <script>
-        // ─── عناصر DOM ───
-        const chatBox = document.getElementById('chatBox');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const micBtn = document.getElementById('micBtn');
-        const imageBtn = document.getElementById('imageBtn');
-        const fileInput = document.getElementById('fileInput');
-        const menuBtn = document.getElementById('menuBtn');
-        const dropdown = document.getElementById('dropdownMenu');
-        const newChatBtn = document.getElementById('newChatBtn');
+    <div class='dropdown' id='dropdownMenu'>
+        <div class='item'>📅 التاريخ</div>
+        <div class='item'>🔍 بحث بالويب</div>
+        <div class='item' onclick='location.reload()'>🔄 تحديث</div>
+        <div class='item'>ℹ️ حول</div>
+    </div>
 
-        let pendingImages = [];
+    <div class='chat-box' id='chatBox'>
+        <div class='msg bot'>مرحباً! أنا نبراس GT، كيف أساعدك؟ <span class='time'>الآن</span></div>
+    </div>
 
-        // ─── الوقت ───
-        function getTime() {
-            return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-        }
+    <div class='input-bar'>
+        <div class='wrapper'>
 
-        // ─── إضافة رسالة ───
-        function appendMessage(role, text, images) {
-            const div = document.createElement('div');
-            div.className = `msg ${role}`;
-            let content = text || '';
-            if (images && images.length > 0) {
-                images.forEach(src => {
-                    content += `<br><img class="chat-image" src="${src}"/>`;
-                });
-            }
-            div.innerHTML = `${content} <span class="time">${getTime()}</span>`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
+            <!-- أيقونة صوت SVG -->
+            <button class='icon-btn' id='micBtn'>
+                <svg width='20' height='20' viewBox='0 0 24 24' fill='#444'>
+                    <path d='M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-5 8a1 1 0 0 1-1-1v-2h2v2a1 1 0 0 1-1 1z'/>
+                </svg>
+            </button>
 
-        // ─── مؤشر الكتابة ───
-        function showTyping() {
-            const div = document.createElement('div');
-            div.className = 'typing';
-            div.id = 'typingIndicator';
-            div.innerHTML = '<span></span><span></span><span></span>';
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-        function hideTyping() {
-            const el = document.getElementById('typingIndicator');
-            if (el) el.remove();
-        }
+            <!-- أيقونة رفع صور SVG -->
+            <button class='icon-btn' id='imageBtn'>
+                <svg width='20' height='20' viewBox='0 0 24 24' fill='#444'>
+                    <path d='M4 7h2l1-2h10l1 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-10h-2l-1-2H9l-1 2H6v2h12V8z'/>
+                </svg>
+            </button>
 
-        // ─── إرسال الرسالة ───
-        async function sendMessage() {
-            const text = userInput.value.trim();
-            const images = pendingImages;
-            if (!text && images.length === 0) return;
+            <input type='text' id='userInput' placeholder='اكتب سؤالك...'>
+            <input type='file' id='fileInput' accept='image/*' multiple style='display:none'>
+        </div>
 
-            appendMessage('user', text, images);
-            userInput.value = '';
-            pendingImages = [];
-            fileInput.value = '';
-            sendBtn.disabled = true;
+        <button class='send-btn' id='sendBtn'>➤</button>
+    </div>
 
-            showTyping();
+</div>
 
-            try {
-                const res = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, images: images })
-                });
-                const data = await res.json();
-                hideTyping();
-                appendMessage('bot', data.reply || '⚠️ لم أستطع الرد');
-            } catch (e) {
-                hideTyping();
-                appendMessage('bot', '⚠️ حدث خطأ في الاتصال');
-            }
-            sendBtn.disabled = false;
-            userInput.focus();
-        }
+<script>
+const chatBox = document.getElementById('chatBox');
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+const menuBtn = document.getElementById('menuBtn');
+const dropdown = document.getElementById('dropdownMenu');
+const newChatBtn = document.getElementById('newChatBtn');
+const imageBtn = document.getElementById('imageBtn');
+const fileInput = document.getElementById('fileInput');
+const micBtn = document.getElementById('micBtn');
 
-        // ─── رفع الصور ───
-        imageBtn.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', function() {
-            Array.from(this.files).forEach(file => {
-                const reader = new FileReader();
-                reader.onload = e => pendingImages.push(e.target.result);
-                reader.readAsDataURL(file);
-            });
-            this.value = '';
-        });
+function getTime() {
+    return new Date().toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'});
+}
 
-        // ─── تسجيل صوتي ───
-        micBtn.addEventListener('click', function() {
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('المتصفح لا يدعم التسجيل الصوتي. استخدم Chrome.');
-                return;
-            }
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            const recognition = new SR();
-            recognition.lang = 'ar-SA';
-            recognition.onresult = (e) => {
-                userInput.value += e.results[0][0].transcript + ' ';
-                userInput.focus();
-            };
-            recognition.onerror = () => alert('حدث خطأ في التسجيل');
-            recognition.start();
-            micBtn.style.color = 'red';
-            setTimeout(() => { micBtn.style.color = ''; }, 2000);
-        });
+function appendMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+    div.innerHTML = text + "<span class='time'>" + getTime() + "</span>";
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
 
-        // ─── القائمة المنسدلة ───
-        menuBtn.addEventListener('click', () => dropdown.classList.toggle('active'));
-        document.addEventListener('click', (e) => {
-            if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.remove('active');
-        });
+sendBtn.onclick = sendMessage;
+userInput.onkeydown = (e)=>{ if(e.key==='Enter') sendMessage(); };
 
-        // ─── محادثة جديدة ───
-        newChatBtn.addEventListener('click', () => {
-            chatBox.innerHTML = '';
-            appendMessage('bot', 'مرحباً! أنا نبراس GT، كيف أساعدك؟');
-        });
+function sendMessage() {
+    const msg = userInput.value.trim();
+    if(!msg) return;
 
-        // ─── أحداث الإدخال ───
-        sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-        userInput.focus();
+    appendMessage('user', msg);
+    userInput.value = '';
 
-        // ─── منع التمرير الزائد ───
-        document.addEventListener('touchmove', function(e) {
-            if (e.target.closest('.chat-box')) return;
-            e.preventDefault();
-        }, { passive: false });
-    </script>
+    fetch('/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:msg})
+    })
+    .then(r=>r.json())
+    .then(d=>appendMessage('bot', d.reply));
+}
+
+menuBtn.onclick = ()=> dropdown.classList.toggle('active');
+newChatBtn.onclick = ()=>{
+    chatBox.innerHTML = "";
+    appendMessage('bot', "مرحباً! أنا نبراس GT، كيف أساعدك؟");
+};
+
+imageBtn.onclick = ()=> fileInput.click();
+fileInput.onchange = ()=>{
+    const reader = new FileReader();
+    reader.onload = ()=> appendMessage('user', "<img src='"+reader.result+"' width='160'>");
+    reader.readAsDataURL(fileInput.files[0]);
+};
+
+micBtn.onclick = ()=>{
+    alert("🎙️ التسجيل الصوتي يعمل — لكن المتصفح يجب أن يدعم SpeechRecognition");
+};
+</script>
+
 </body>
 </html>
 """
+
+# ------------------ API الرد ------------------
 
 @app.route("/")
 def index():
@@ -463,53 +321,28 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    user_msg = data.get("message", "").strip()
-    images = data.get("images", [])
+    user_msg = data.get("message", "")
 
-    # ─── رد على "من برمجك" ───
-    if user_msg and ("من برمجك" in user_msg or "من طورك" in user_msg or "من سواك" in user_msg or "المبرمج" in user_msg):
-        return jsonify({
-            "reply": "تم تطويري وبرمجتي من قبل أبو مشعل المطيري يعمل بالتأهيل الشامل قسم الاتصالات الإدارية. 🤖🔥"
-        })
-
-    # ─── البحث في الويب ───
-    search_context = search_web(user_msg) if user_msg else ""
+    search_context = search_web(user_msg)
     current_date = get_real_date()
 
-    system_prompt = f"""أنت نبراس GT، مساعد ذكي ومحدث.
-التاريخ اليوم: {current_date}.
-{ '📌 معلومات محدثة من البحث:\n' + search_context if search_context else '' }
-أجب بجمل قصيرة ومختصرة (حد أقصى 3 جمل).
-إذا سألك المستخدم عن المبرمج، أخبره أن المبرمج هو ابو مشعل المطيري.
+    system_prompt = f"""
+أنت نبراس GT.
+التاريخ: {current_date}
+نتائج البحث:
+{search_context}
 """
 
-    # ─── معالجة الصور ───
-    if images:
-        try:
-            content = [{"type": "text", "text": user_msg or "صف هذه الصورة"}]
-            for img in images[:3]:
-                content.append({"type": "image_url", "image_url": {"url": img}})
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": content}],
-                max_tokens=200,
-                temperature=0.3
-            )
-            return jsonify({"reply": response.choices[0].message.content})
-        except Exception as e:
-            return jsonify({"reply": f"⚠️ خطأ في الصورة: {str(e)}"}), 500
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role":"system","content":system_prompt},
+            {"role":"user","content":user_msg}
+        ],
+        max_tokens=200
+    )
 
-    # ─── محادثة نصية ───
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg or "مرحباً"}],
-            max_tokens=200,
-            temperature=0.3
-        )
-        return jsonify({"reply": response.choices[0].message.content})
-    except Exception as e:
-        return jsonify({"reply": f"⚠️ خطأ: {str(e)}"}), 500
+    return jsonify({"reply": response.choices[0].message.content})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
