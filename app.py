@@ -17,7 +17,7 @@ if not API_KEY:
 
 client = OpenAI(api_key=API_KEY)
 
-# ─── التاريخ الصحيح (توقيت السعودية) ───
+# ─── التاريخ الصحيح ───
 def get_real_date():
     tz = pytz.timezone('Asia/Riyadh')
     return datetime.now(tz).strftime("%A، %d %B %Y")
@@ -38,7 +38,7 @@ def search_web(query):
     except:
         return ""
 
-# ─── واجهة HTML احترافية ثابتة ───
+# ─── واجهة HTML (احترافية وثابتة) ───
 HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -47,7 +47,7 @@ HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>نبراس GT</title>
     <style>
-        /* ─── إعادة تعيين وتثبيت الصفحة ─── */
+        /* ─── إعادة تعيين ─── */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
             height: 100%;
@@ -56,7 +56,7 @@ HTML = """
             background: #f7f7f8;
         }
 
-        /* ─── الحاوية الرئيسية (ثابتة) ─── */
+        /* ─── الحاوية الرئيسية ─── */
         .app {
             display: flex;
             flex-direction: column;
@@ -64,13 +64,13 @@ HTML = """
             max-width: 800px;
             margin: 0 auto;
             background: #ffffff;
-            box-shadow: 0 0 30px rgba(0,0,0,0.03);
+            box-shadow: 0 0 30px rgba(0,0,0,0.02);
         }
 
-        /* ─── الشريط العلوي (ثابت) ─── */
+        /* ─── الشريط العلوي ─── */
         .header {
             flex-shrink: 0;
-            height: 56px;
+            height: 52px;
             background: #ffffff;
             border-bottom: 1px solid #e5e5e5;
             display: flex;
@@ -82,13 +82,18 @@ HTML = """
         .header .btn {
             background: transparent;
             border: none;
-            font-size: 22px;
+            font-size: 20px;
             cursor: pointer;
             color: #1a1a1a;
-            padding: 4px 8px;
-            border-radius: 8px;
+            padding: 4px 6px;
+            border-radius: 6px;
             transition: 0.2s;
             line-height: 1;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .header .btn:hover { background: #f0f0f0; }
         .header .title {
@@ -97,7 +102,7 @@ HTML = """
             color: #1a1a1a;
         }
 
-        /* ─── منطقة المحادثة (تملأ الباقي) ─── */
+        /* ─── منطقة المحادثة ─── */
         .chat-box {
             flex: 1;
             overflow-y: auto;
@@ -169,7 +174,7 @@ HTML = """
             30% { transform: translateY(-5px); }
         }
 
-        /* ─── شريط الإدخال (ثابت) ─── */
+        /* ─── شريط الإدخال (أنيق) ─── */
         .input-bar {
             flex-shrink: 0;
             background: #ffffff;
@@ -237,26 +242,26 @@ HTML = """
         .input-bar .send-btn:hover { background: #333; transform: scale(1.02); }
         .input-bar .send-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
 
-        /* ─── القائمة المنسدلة ─── */
+        /* ─── القائمة المنسدلة (☰) ─── */
         .dropdown {
             display: none;
             position: absolute;
-            top: 56px;
+            top: 52px;
             right: 12px;
             background: white;
             border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            padding: 8px;
-            min-width: 140px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+            padding: 6px;
+            min-width: 160px;
             z-index: 20;
             border: 1px solid #e5e5e5;
         }
         .dropdown.active { display: block; }
         .dropdown .item {
-            padding: 6px 12px;
+            padding: 8px 14px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 14px;
             transition: 0.2s;
             color: #1a1a1a;
         }
@@ -270,7 +275,7 @@ HTML = """
             border: 1px solid #e0e0e0;
         }
 
-        /* ─── تنسيق الهاتف ─── */
+        /* ─── تنسيق الهواتف ─── */
         @media (max-width: 600px) {
             .header .title { font-size: 14px; }
             .msg { font-size: 14px; padding: 6px 12px; }
@@ -292,6 +297,7 @@ HTML = """
             <div class="item" onclick="alert('📅 التاريخ: ' + new Date().toLocaleDateString('ar-SA'))">📅 التاريخ</div>
             <div class="item" onclick="alert('🔍 بحث بالويب مفعل')">🔍 بحث بالويب</div>
             <div class="item" onclick="location.reload()">🔄 تحديث</div>
+            <div class="item" onclick="alert('💬 نبراس GT v2.0')">ℹ️ حول</div>
         </div>
 
         <!-- ─── منطقة المحادثة ─── -->
