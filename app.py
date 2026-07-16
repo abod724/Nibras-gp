@@ -10,6 +10,7 @@ from PIL import Image
 
 app = Flask(__name__)
 
+# ─── المفتاح من متغيرات البيئة ───
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     raise Exception("❌ OPENAI_API_KEY غير موجود")
@@ -59,6 +60,7 @@ HTML = """
             background: #ffffff;
             box-shadow: 0 0 30px rgba(0,0,0,0.02);
         }
+        /* ─── الشريط العلوي ─── */
         .header {
             flex-shrink: 0;
             height: 52px;
@@ -87,11 +89,9 @@ HTML = """
             justify-content: center;
         }
         .header .btn:hover { background: #f0f0f0; }
-        .header .title {
-            font-weight: 600;
-            font-size: 16px;
-            color: #1a1a1a;
-        }
+        .header .title { font-weight: 600; font-size: 16px; color: #1a1a1a; }
+
+        /* ─── منطقة المحادثة ─── */
         .chat-box {
             flex: 1;
             overflow-y: auto;
@@ -123,12 +123,7 @@ HTML = """
             border-bottom-left-radius: 4px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
-        .msg .time {
-            font-size: 9px;
-            color: #aaa;
-            display: block;
-            margin-top: 2px;
-        }
+        .msg .time { font-size: 9px; color: #aaa; display: block; margin-top: 2px; }
         .msg.user .time { color: #888; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(6px); }
@@ -145,10 +140,7 @@ HTML = """
             gap: 4px;
         }
         .typing span {
-            width: 7px;
-            height: 7px;
-            background: #aaa;
-            border-radius: 50%;
+            width: 7px; height: 7px; background: #aaa; border-radius: 50%;
             animation: bounce 1.2s infinite;
         }
         .typing span:nth-child(2) { animation-delay: 0.2s; }
@@ -157,6 +149,8 @@ HTML = """
             0%,60%,100% { transform: translateY(0); }
             30% { transform: translateY(-5px); }
         }
+
+        /* ─── شريط الإدخال (مع أيقونات جميلة) ─── */
         .input-bar {
             flex-shrink: 0;
             background: #ffffff;
@@ -193,14 +187,14 @@ HTML = """
         .input-bar .wrapper .icon-btn {
             background: transparent;
             border: none;
-            font-size: 16px;
+            font-size: 18px;
             cursor: pointer;
             padding: 4px 4px;
             border-radius: 50%;
             color: #555;
             transition: 0.2s;
-            width: 28px;
-            height: 28px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -223,35 +217,43 @@ HTML = """
         }
         .input-bar .send-btn:hover { background: #333; transform: scale(1.02); }
         .input-bar .send-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+
+        /* ─── القائمة المنسدلة (جميلة وأنيقة) ─── */
         .dropdown {
             display: none;
             position: absolute;
             top: 52px;
             right: 12px;
             background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
             padding: 6px;
-            min-width: 160px;
+            min-width: 170px;
             z-index: 20;
             border: 1px solid #e5e5e5;
         }
         .dropdown.active { display: block; }
         .dropdown .item {
-            padding: 8px 14px;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
             transition: 0.2s;
             color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .dropdown .item:hover { background: #f0f0f0; }
+
+        /* ─── الصور في المحادثة ─── */
         .chat-image {
             max-width: 160px;
             border-radius: 10px;
             margin-top: 4px;
             border: 1px solid #e0e0e0;
         }
+
         @media (max-width: 600px) {
             .header .title { font-size: 14px; }
             .msg { font-size: 14px; padding: 6px 12px; }
@@ -260,30 +262,38 @@ HTML = """
 </head>
 <body>
     <div class="app">
+        <!-- ─── الشريط العلوي ─── -->
         <div class="header">
             <button class="btn" id="newChatBtn" title="محادثة جديدة">➕</button>
             <span class="title">💬 نبراس GT</span>
             <button class="btn" id="menuBtn" title="القائمة">☰</button>
         </div>
+
+        <!-- ─── القائمة المنسدلة ─── -->
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 التاريخ: ' + new Date().toLocaleDateString('ar-SA'))">📅 التاريخ</div>
             <div class="item" onclick="alert('🔍 بحث بالويب مفعل')">🔍 بحث بالويب</div>
             <div class="item" onclick="location.reload()">🔄 تحديث</div>
             <div class="item" onclick="alert('💬 نبراس GT v2.0 - تصميم أبو مشعل')">ℹ️ حول</div>
         </div>
+
+        <!-- ─── منطقة المحادثة ─── -->
         <div class="chat-box" id="chatBox">
             <div class="msg bot">مرحباً! أنا نبراس GT، كيف أساعدك؟ <span class="time">الآن</span></div>
         </div>
+
+        <!-- ─── شريط الإدخال مع أيقونات جميلة ─── -->
         <div class="input-bar">
             <div class="wrapper">
                 <button class="icon-btn" id="micBtn" title="تسجيل صوتي">🎤</button>
-                <button class="icon-btn" id="imageBtn" title="رفع صورة">🖼️</button>
+                <button class="icon-btn" id="imageBtn" title="رفع صورة">➕</button>
                 <input type="text" id="userInput" placeholder="اكتب سؤالك...">
                 <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
             </div>
             <button class="send-btn" id="sendBtn">➤</button>
         </div>
     </div>
+
     <script>
         const chatBox = document.getElementById('chatBox');
         const userInput = document.getElementById('userInput');
@@ -294,10 +304,13 @@ HTML = """
         const menuBtn = document.getElementById('menuBtn');
         const dropdown = document.getElementById('dropdownMenu');
         const newChatBtn = document.getElementById('newChatBtn');
+
         let pendingImages = [];
+
         function getTime() {
             return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
         }
+
         function appendMessage(role, text, images) {
             const div = document.createElement('div');
             div.className = `msg ${role}`;
@@ -311,6 +324,7 @@ HTML = """
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+
         function showTyping() {
             const div = document.createElement('div');
             div.className = 'typing';
@@ -323,16 +337,20 @@ HTML = """
             const el = document.getElementById('typingIndicator');
             if (el) el.remove();
         }
+
         async function sendMessage() {
             const text = userInput.value.trim();
             const images = pendingImages;
             if (!text && images.length === 0) return;
+
             appendMessage('user', text, images);
             userInput.value = '';
             pendingImages = [];
             fileInput.value = '';
             sendBtn.disabled = true;
+
             showTyping();
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -349,6 +367,8 @@ HTML = """
             sendBtn.disabled = false;
             userInput.focus();
         }
+
+        // ─── رفع الصور ───
         imageBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', function() {
             Array.from(this.files).forEach(file => {
@@ -358,6 +378,8 @@ HTML = """
             });
             this.value = '';
         });
+
+        // ─── تسجيل صوتي ───
         micBtn.addEventListener('click', function() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 alert('المتصفح لا يدعم التسجيل الصوتي. استخدم Chrome.');
@@ -375,19 +397,25 @@ HTML = """
             micBtn.style.color = 'red';
             setTimeout(() => { micBtn.style.color = ''; }, 2000);
         });
+
+        // ─── القائمة المنسدلة ───
         menuBtn.addEventListener('click', () => dropdown.classList.toggle('active'));
         document.addEventListener('click', (e) => {
             if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.remove('active');
         });
+
+        // ─── محادثة جديدة ───
         newChatBtn.addEventListener('click', () => {
             chatBox.innerHTML = '';
             appendMessage('bot', 'مرحباً! أنا نبراس GT، كيف أساعدك؟');
         });
+
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
         userInput.focus();
+
         document.addEventListener('touchmove', function(e) {
             if (e.target.closest('.chat-box')) return;
             e.preventDefault();
