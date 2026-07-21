@@ -86,7 +86,7 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
     border-top:1px solid #eee;
     display:flex;
     align-items:center;
-    gap:10px;
+    gap:12px;
     width:100%;
 }
 .input-wrap{
@@ -95,8 +95,9 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
     align-items:center;
     background:#f5f7fa;
     border-radius:25px;
-    padding:0 16px;
-    height:44px;
+    padding:0 12px;
+    height:48px; /* كبرنا المربع شوي */
+    gap:8px;
 }
 .act-btn{
     width:36px;
@@ -114,7 +115,7 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
 }
 .act-btn:hover{background:rgba(0,119,182,0.08);color:#0077b6}
 .input-wrap input{
-    width:100%;
+    flex:1;
     border:none;
     background:transparent;
     padding:0 8px;
@@ -151,14 +152,15 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
         <div class="msg bot">هلا وسهلا بك! أنا نبراس، وش أخبارك اليوم؟ 😊<span class="time">الآن</span></div>
     </div>
     <div class="input-bar">
-        <!-- الترتيب الصحيح: يمين لليسار -->
+        <!-- زر الإرسال براً يمين -->
         <button class="send-btn" id="send"><i class="fa-solid fa-paper-plane"></i></button>
+        <!-- المربع وداخله الأزرار والكتابة -->
         <div class="input-wrap">
+            <button class="act-btn" id="imgBtn"><i class="fa-regular fa-image"></i></button>
+            <button class="act-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
             <input type="text" id="txt" placeholder="اكتب ما تريد...">
+            <input type="file" id="fileInput" accept="image/*" multiple hidden>
         </div>
-        <button class="act-btn" id="imgBtn"><i class="fa-regular fa-image"></i></button>
-        <button class="act-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
-        <input type="file" id="fileInput" accept="image/*" multiple hidden>
     </div>
 </div>
 <script>
