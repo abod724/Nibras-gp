@@ -134,15 +134,15 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ دائرة زر الزائد 26×26، حدود 1.5px كما طلبت */
+/* ✅ دائرة زر الزائد 24×24 فقط، حدود 1.5px كما طلبت */
 .header .icon-btn.left{
-    width:26px;
-    height:26px;
+    width:24px;
+    height:24px;
     border-radius:50%;
     border:1.5px solid #111827;
     background:transparent;
     color:#111827;
-    font-size:13px;
+    font-size:12px;
     cursor:pointer;
     display:flex;
     align-items:center;
@@ -169,7 +169,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:8px;
 }
 .header .icon-btn.right:hover{background:#f3f4f6}
-/* ✅ القائمة كما هي تماماً */
 .dropdown{
     display:none;
     position:absolute;
