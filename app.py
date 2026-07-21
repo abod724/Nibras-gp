@@ -15,7 +15,6 @@ if not API_KEY:
 
 client = OpenAI(api_key=API_KEY)
 
-# ------------------ الدوال المساعدة ------------------
 def get_real_date():
     tz = pytz.timezone('Asia/Riyadh')
     return datetime.now(tz).strftime("%A، %d %B %Y")
@@ -52,7 +51,6 @@ def search_web(query):
         print(f"خطأ في البحث: {e}")
     return text, sources
 
-# ------------------ واجهة المستخدم كاملة ------------------
 HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -83,11 +81,11 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px);background:#0077b6}}
 .input-bar{padding:10px 12px;background:#fff;border-top:1px solid #eee;display:flex;gap:10px;align-items:center}
-.input-wrap{flex:1;display:flex;align-items:center;background:#f5f7fa;border-radius:25px;padding:0 10px;height:40px;gap:8px}
-.act-btn{width:32px;height:32px;border:none;background:transparent;color:#666;font-size:16px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.input-wrap{flex:1;display:flex;align-items:center;background:#f5f7fa;border-radius:25px;padding:0 12px;height:44px;margin:0 8px}
+.act-btn{width:36px;height:36px;border:none;background:transparent;color:#555;font-size:18px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .act-btn:hover{background:rgba(0,119,182,0.08);color:#0077b6}
-.input-wrap input{flex:1;border:none;background:transparent;padding:8px 0;outline:none;font-size:15px}
-.send-btn{width:34px;height:34px;border-radius:50%;border:none;background:linear-gradient(135deg,#0077b6,#005c99);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.input-wrap input{flex:1;border:none;background:transparent;padding:8px;outline:none;font-size:15px}
+.send-btn{width:38px;height:38px;border-radius:50%;border:none;background:linear-gradient(135deg,#0077b6,#005c99);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -105,13 +103,13 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
         <div class="msg bot">هلا وسهلا بك! أنا نبراس، وش أخبارك اليوم؟ 😊<span class="time">الآن</span></div>
     </div>
     <div class="input-bar">
+        <button class="send-btn" id="send"><i class="fa-solid fa-paper-plane"></i></button>
         <div class="input-wrap">
-            <button class="act-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
-            <button class="act-btn" id="imgBtn"><i class="fa-regular fa-image"></i></button>
             <input type="text" id="txt" placeholder="اكتب ما تريد...">
+            <button class="act-btn" id="imgBtn"><i class="fa-regular fa-image"></i></button>
+            <button class="act-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
             <input type="file" id="fileInput" accept="image/*" multiple hidden>
         </div>
-        <button class="send-btn" id="send"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
 </div>
 <script>
@@ -188,7 +186,6 @@ txt.onkeydown = e => {if(e.key === 'Enter') send.click()};
 </html>
 """
 
-# ------------------ مسارات الخادم ------------------
 @app.route("/")
 def index():
     session.clear()
@@ -199,14 +196,12 @@ def chat():
     data = request.json
     user_msg = (data.get("msg") or "").strip()
 
-    # ردود ثابتة مباشرة
-    if user_msg and any(w in user_msg for w in ["برمج", "مطور", "سواك", "المبرمج", "من صنعك", "من طورك"]):
+    if user_msg and any(w in user_msg for w in ["برمج", "مطور", "من صنعك", "من طورك"]):
         return Response("تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة، وأنا هنا لمساعدتك في كل ما تحتاج 😊", mimetype="text/plain")
     
     if user_msg and is_pure_date_question(user_msg):
         return Response(f"اليوم هو {get_real_date()}", mimetype="text/plain")
 
-    # جمع البيانات والبحث
     need_sources = user_asks_for_sources(user_msg)
     FORCE_SEARCH = MUST_SEARCH(user_msg)
     search_text, sources = search_web(user_msg) if (user_msg and FORCE_SEARCH) else ("", [])
@@ -219,23 +214,18 @@ def chat():
             out += f"{i}. {s['title']}\n{s['url']}\n\n"
         return Response(out.strip(), mimetype="text/plain")
 
-    # بناء طلب الذكاء الاصطناعي
     sys_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
-- تحدث دائماً بلهجة سعودية عامية واضحة وطبيعية جداً، كأنك تتكلم مع صديق.
+- تحدث بلهجة سعودية عامية واضحة وطبيعية جداً، كأنك تتكلم مع صديق.
 - اجعل إجاباتك مختصرة ومفيدة، واختم بسؤال لتستمر الحديث.
-- لا تذكر أبداً أنك ذكاء اصطناعي ولا تظهر روابط في الإجابة.
+- لا تذكر أنك ذكاء اصطناعي ولا تظهر روابط.
 - تاريخ اليوم: {get_real_date()}
-{('معلومات حديثة تم جلبها:\n'+search_text) if search_text else ''}
+{('معلومات حديثة:\n'+search_text) if search_text else ''}
 """
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": user_msg or "مرحباً"}
-            ],
-            max_tokens=900,
-            temperature=0.7
+            messages=[{"role":"system","content":sys_prompt},{"role":"user","content":user_msg or "مرحباً"}],
+            max_tokens=900, temperature=0.7
         )
         final_reply = response.choices[0].message.content.strip()
         if FORCE_SEARCH or sources:
