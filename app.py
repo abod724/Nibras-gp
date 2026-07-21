@@ -112,29 +112,9 @@ HTML = """
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
-.app{
-    min-height:100vh;
-    min-height:100dvh;
-    height:100dvh;
-    max-width:750px;
-    margin:0 auto;
-    background:#fff;
-    display:flex;
-    flex-direction:column;
-    position:relative;
-    overflow:hidden;
-}
-.header{
-    height:52px;
-    min-height:52px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:0 20px;
-    background:#ffffff;
-    flex-shrink:0;
-}
-/* ✅ دائرة الزائد 12×12 بكسل بالضبط، في الجانب الأيسر */
+.app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
+/* ✅ زر الزائد يسار - مقاس 11×11 بالضبط */
 .header .icon-btn.left{
     width:20px;
     height:20px;
@@ -149,11 +129,9 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     justify-content:center;
     transition:all 0.2s ease;
 }
-.header .icon-btn.left:hover{
-    background:#f3f4f6;
-    transform:scale(1.08);
-}
+.header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
 .header .icon-btn.left:active{transform:scale(0.95)}
+/* ✅ زر القائمة يمين */
 .header .icon-btn.right{
     width:26px;
     height:26px;
@@ -169,13 +147,13 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:8px;
 }
 .header .icon-btn.right:hover{background:#f3f4f6}
-/* ✅ القائمة المنسدلة الآن تظهر أسفل اليمين بشكل طبيعي */
+/* ✅ القائمة تفتح أسفل اليمين */
 .dropdown{
     display:none;
     position:absolute;
     top:60px;
     right:16px;
-    background:#ffffff;
+    background:#fff;
     border-radius:11px;
     box-shadow:0 5px 18px rgba(0,0,0,0.06);
     padding:5px 0;
@@ -184,10 +162,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     z-index:99;
     animation:dropShow 0.2s ease;
 }
-@keyframes dropShow{
-    from{opacity:0;transform:translateY(-6px)}
-    to{opacity:1;transform:translateY(0)}
-}
+@keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .dropdown.active{display:block}
 .dropdown .item{
     padding:8px 15px;
@@ -201,139 +176,29 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     margin:2px 5px;
     border-radius:6px;
 }
-.dropdown .item:hover{
-    background:#f9fafb;
-    color:#005c99;
-}
-.chat-box{
-    flex:1 1 auto;
-    min-height:0;
-    overflow-y:auto;
-    padding:24px 18px;
-    background:#f9fafb;
-    display:flex;
-    flex-direction:column;
-    gap:14px;
-}
-.msg{
-    max-width:78%;
-    padding:12px 18px;
-    border-radius:20px;
-    font-size:15px;
-    line-height:1.7;
-    word-wrap:break-word;
-    animation:fadeIn 0.25s ease;
-}
-.msg.user{
-    background:linear-gradient(135deg,#0077b6,#005c99);
-    color:white;
-    align-self:flex-end;
-    border-bottom-right-radius:6px;
-}
-.msg.bot{
-    background:white;
-    align-self:flex-start;
-    border-bottom-left-radius:6px;
-}
-.msg .time{
-    font-size:10px;
-    color:#9ca3af;
-    display:inline-block;
-    margin-top:4px;
-}
+.dropdown .item:hover{background:#f9fafb;color:#005c99}
+.chat-box{flex:1 1 auto;min-height:0;overflow-y:auto;padding:24px 18px;background:#f9fafb;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:78%;padding:12px 18px;border-radius:20px;font-size:15px;line-height:1.7;word-wrap:break-word;animation:fadeIn 0.25s ease}
+.msg.user{background:linear-gradient(135deg,#0077b6,#005c99);color:white;align-self:flex-end;border-bottom-right-radius:6px}
+.msg.bot{background:white;align-self:flex-start;border-bottom-left-radius:6px}
+.msg .time{font-size:10px;color:#9ca3af;display:inline-block;margin-top:4px}
 .msg.user .time{color:rgba(255,255,255,0.7)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.typing{
-    display:flex;
-    gap:5px;
-    background:white;
-    padding:12px 18px;
-    border-radius:20px;
-    border-bottom-left-radius:6px;
-    align-self:flex-start;
-}
-.typing span{
-    width:8px;height:8px;
-    background:#d1d5db;
-    border-radius:50%;
-    animation:bounce 1.2s infinite;
-}
+.typing{display:flex;gap:5px;background:white;padding:12px 18px;border-radius:20px;border-bottom-left-radius:6px;align-self:flex-start}
+.typing span{width:8px;height:8px;background:#d1d5db;border-radius:50%;animation:bounce 1.2s infinite}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-.input-bar{
-    flex-shrink:0;
-    background:white;
-    padding:12px 18px max(18px, env(safe-area-inset-bottom));
-    border-top:1px solid #f3f4f6;
-    display:flex;
-    gap:12px;
-    align-items:center;
-}
-.input-bar .wrap{
-    flex:1;
-    display:flex;
-    align-items:center;
-    background:#f9fafb;
-    border-radius:30px;
-    padding:6px 16px;
-    border:1px solid transparent;
-    transition:all 0.2s ease;
-}
-.input-bar .wrap:focus-within{
-    border-color:#005c99;
-    background:white;
-    box-shadow:0 0 0 3px rgba(0,92,153,0.06);
-}
-.input-bar .wrap input{
-    flex:1;
-    border:none;
-    background:transparent;
-    padding:10px 8px;
-    font-size:15px;
-    outline:none;
-    color:#111827;
-}
+.input-bar{flex-shrink:0;background:white;padding:12px 18px max(18px, env(safe-area-inset-bottom));border-top:1px solid #f3f4f6;display:flex;gap:12px;align-items:center}
+.input-bar .wrap{flex:1;display:flex;align-items:center;background:#f9fafb;border-radius:30px;padding:6px 16px;border:1px solid transparent;transition:all 0.2s ease}
+.input-bar .wrap:focus-within{border-color:#005c99;background:white;box-shadow:0 0 0 3px rgba(0,92,153,0.06)}
+.input-bar .wrap input{flex:1;border:none;background:transparent;padding:10px 8px;font-size:15px;outline:none;color:#111827}
 .input-bar .wrap input::placeholder{color:#9ca3af}
-.input-bar .wrap .icon-btn{
-    background:none;
-    border:none;
-    font-size:18px;
-    color:#6b7280;
-    cursor:pointer;
-    padding:6px;
-    border-radius:50%;
-    width:32px;height:32px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    transition:all 0.15s ease;
-}
-.input-bar .wrap .icon-btn:hover{
-    background:rgba(0,92,153,0.08);
-    color:#005c99;
-}
-.input-bar .send-btn{
-    background:linear-gradient(135deg,#0077b6,#005c99);
-    color:white;
-    border:none;
-    border-radius:50%;
-    width:42px;height:42px;
-    min-width:42px;min-height:42px;
-    font-size:18px;
-    cursor:pointer;
-    transition:all 0.2s ease;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    box-shadow:0 2px 8px rgba(0,92,153,0.2);
-}
+.input-bar .wrap .icon-btn{background:none;border:none;font-size:18px;color:#6b7280;cursor:pointer;padding:6px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease}
+.input-bar .wrap .icon-btn:hover{background:rgba(0,92,153,0.08);color:#005c99}
+.input-bar .send-btn{background:linear-gradient(135deg,#0077b6,#005c99);color:white;border:none;border-radius:50%;width:42px;height:42px;min-width:42px;min-height:42px;font-size:18px;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,92,153,0.2)}
 .input-bar .send-btn:disabled{background:#d1d5db;box-shadow:none}
-.chat-image{
-    max-width:160px;
-    border-radius:12px;
-    margin-top:6px;
-}
+.chat-image{max-width:160px;border-radius:12px;margin-top:6px}
 ::-webkit-scrollbar{width:5px;background:transparent}
 ::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:10px}
 </style>
@@ -343,7 +208,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     <div class="header">
         <!-- ✅ زر الزائد في اليسار -->
         <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
-        <!-- ✅ زر القائمة في اليمين، والقائمة تفتح أسفله -->
+        <!-- ✅ زر القائمة في اليمين -->
         <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
@@ -378,123 +243,77 @@ const dropdown = document.getElementById('dropdownMenu');
 const newChatBtn = document.getElementById('newChatBtn');
 
 let pendingImages = [];
+function getTime(){return new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}
 
-function getTime() {
-    return new Date().toLocaleTimeString('ar-SA', {hour:'2-digit',minute:'2-digit'});
-}
-
-function appendBotMessage(text, images) {
+function appendBotMessage(text, images){
     const div = document.createElement('div');
     div.className = 'msg bot';
     let html = '';
-    if (images && images.length) html += images.map(s=>`<br><img class="chat-image" src="${s}">`).join('');
-    const contentSpan = document.createElement('span');
-    div.appendChild(contentSpan);
-    div.innerHTML += html + ' <span class="time">'+getTime()+'</span>';
+    if(images && images.length) html += images.map(s=>`<br><img class="chat-image" src="${s}">`).join('');
+    const span = document.createElement('span');
+    span.className = 'time';
+    span.textContent = getTime();
+    div.textContent = text;
+    div.appendChild(span);
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
-
-    let idx=0, arr = Array.from(text);
-    function typeChar() {
-        if (idx < arr.length) {
-            contentSpan.textContent += arr[idx];
-            idx++;
-            let delay = (arr[idx-1]=='.'||arr[idx-1]=='!'||arr[idx-1]=='؟'||arr[idx-1]==':') ? 120 : 30 + Math.random()*30;
-            setTimeout(typeChar, delay);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-    }
-    typeChar();
 }
-function appendUserMessage(text, images) {
+
+function appendUserMessage(text, images){
     const div = document.createElement('div');
     div.className = 'msg user';
-    let html = text || '';
-    if (images && images.length) html += images.map(s=>`<br><img class="chat-image" src="${s}"/>`).join('');
-    div.innerHTML = html + ' <span class="time">'+getTime()+'</span>';
+    let html = '';
+    if(images && images.length) html += images.map(s=>`<br><img class="chat-image" src="${s}">`).join('');
+    const span = document.createElement('span');
+    span.className = 'time';
+    span.textContent = getTime();
+    div.textContent = text;
+    div.appendChild(span);
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
-function showTyping() {
-    const d = document.createElement('div');
-    d.className = 'typing';
-    d.id = 'typingIndicator';
-    d.innerHTML = '<span></span><span></span><span></span>';
-    chatBox.appendChild(d);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-function hideTyping() {
-    const el = document.getElementById('typingIndicator');
-    if (el) el.remove();
-}
 
-async function sendMessage() {
+function showTyping(){document.getElementById('typing')?.remove();const d=document.createElement('div');d.id='typing';d.className='typing';d.innerHTML='<span></span><span></span><span></span>';chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
+function hideTyping(){document.getElementById('typing')?.remove()}
+
+menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
+document.addEventListener('click',()=>{dropdown.classList.remove('active')});
+newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('مرحباً! أنا نبراس، صديقك الذكي. كيف تشعر اليوم؟ 😊')});
+
+sendBtn.addEventListener('click',async ()=>{
     const text = userInput.value.trim();
-    const images = pendingImages.slice();
-    if (!text && !images.length) return;
-
-    appendUserMessage(text, images);
-    userInput.value = '';
-    pendingImages = [];
-    fileInput.value = '';
-    sendBtn.disabled = true;
+    if(!text && pendingImages.length===0) return;
+    appendUserMessage(text, pendingImages);
+    userInput.value='';pendingImages=[];
     showTyping();
-
-    try {
-        const res = await fetch('/chat', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message: text, images: images})
+    try{
+        const res = await fetch('/chat',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({message:text, images:pendingImages})
         });
         const data = await res.json();
         hideTyping();
-        setTimeout(()=>appendBotMessage(data.reply || '⚠️ عذراً'), 250);
-    } catch(e) {
-        hideTyping();
-        appendBotMessage('⚠️ حدث خطأ');
-    }
-    sendBtn.disabled = false;
-}
+        appendBotMessage(data.reply || '⚠️ عذراً، حدث خطأ');
+    }catch(e){hideTyping();appendBotMessage('⚠️ تعذر الاتصال بالخادم')}
+});
 
-imageBtn.onclick = ()=>fileInput.click();
-fileInput.onchange = function(){
-    Array.from(this.files).forEach(file=>{
-        const reader = new FileReader();
-        reader.onload = e=>pendingImages.push(e.target.result);
-        reader.readAsDataURL(file);
+userInput.addEventListener('keydown',e=>{if(e.key==='Enter') sendBtn.click()});
+
+imageBtn.addEventListener('click',()=>fileInput.click());
+fileInput.addEventListener('change',e=>{
+    const files = Array.from(e.target.files);
+    files.forEach(f=>{
+        const r=new FileReader();
+        r.onload=ev=>pendingImages.push(ev.target.result);
+        r.readAsDataURL(f);
     });
-    this.value = '';
-};
+});
 
-micBtn.onclick = function(){
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert('متصفحك لا يدعم التسجيل الصوتي.');
-        return;
-    }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const rec = new SR();
-    rec.lang = 'ar-SA';
-    rec.onresult = e => { userInput.value += e.results[0][0].transcript + ' '; };
-    rec.onerror = ()=>alert('فشل التسجيل');
-    rec.start();
-};
-
-menuBtn.onclick = (e)=>{ e.stopPropagation(); dropdown.classList.toggle('active'); };
-document.addEventListener('click', (e)=>{ if(!dropdown.contains(e.target) && e.target!==menuBtn) dropdown.classList.remove('active'); });
-
-newChatBtn.onclick = ()=>{
-    chatBox.innerHTML = '';
-    appendBotMessage('مرحباً! أنا نبراس، صديقك الذكي. كيف تشعر اليوم؟ 😊');
-};
-
-sendBtn.onclick = sendMessage;
-userInput.onkeydown = e => { if(e.key==='Enter') sendMessage(); };
-
-document.addEventListener('touchmove', function(e){
-    if (!e.target.closest('.chat-box')) e.preventDefault();
-}, {passive: false});
+micBtn.addEventListener('click',()=>alert('🎤 خاصية الصوت قيد التجهيز'));
 </script>
-</body></html>
+</body>
+</html>
 """
 
 @app.route("/")
@@ -505,14 +324,14 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    user_msg = (data.get("message") or '').strip()
+    user_msg = (data.get("message") or "").strip()
     images = data.get("images", [])
 
-    if user_msg and any(k in user_msg for k in ['برمج', 'مطور', 'سواك', 'المبرمج']):
+    if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج"]):
         return jsonify({"reply": "أنا من صنع وروح أبو مشعل المطيري 🤖❤️"})
 
     if user_msg and is_pure_date_question(user_msg):
-        return jsonify({"reply": f"اليوم هو {get_real_date()}."})
+        return jsonify({"reply": f"اليوم هو {get_real_date()}"})
 
     if user_msg and user_asks_for_sources(user_msg):
         last_sources = session.get("last_sources", [])
@@ -520,7 +339,7 @@ def chat():
         if last_search and last_sources:
             reply = "✅ تفضل هذه هي المصادر والروابط التي استخدمتها:\n\n"
             for i, src in enumerate(last_sources, 1):
-                reply += f"{i}. 📄 {src.get('title','مصدر')}\n🔗 {src.get('url','#')}\n\n"
+                reply += f"{i}. 📄 {src['title']}\n🔗 {src['url']}\n\n"
         else:
             reply = "المعلومة السابقة لم تحتاج للبحث في الإنترنت أصلاً، فليس لها مصادر خارجية لعرضها 😊"
         return jsonify({"reply": reply})
@@ -528,65 +347,28 @@ def chat():
     FORCE_WEB_SEARCH = MUST_SEARCH(user_msg) if user_msg else False
     search_text = ""
     sources = []
-
     if user_msg and FORCE_WEB_SEARCH:
         search_text, sources = search_web(user_msg)
 
     session["last_sources"] = sources
-    session["last_had_search"] = FORCE_WEB_SEARCH or (len(sources) > 0)
+    session["last_had_search"] = FORCE_WEB_SEARCH
 
     current_date = get_real_date()
 
     extra_search_rule = ""
     if FORCE_WEB_SEARCH:
-        extra_search_rule = """
-        تعليم خاص لهذا السؤال تحديداً:
-        هذا السؤال يتطلب معلومات حديثة جداً. استخدم فقط المعلومات الموجودة في قسم «معلومات محدثة» أدناه، ولا ترد من معلوماتك القديمة تحت أي ظرف.
-        """
+        extra_search_rule = "هذا السؤال يتطلب معلومات حديثة جداً، استخدم فقط البيانات التي جلبتها من البحث."
 
     knowledge_part = ""
     if knowledge_content:
-        knowledge_part = f"""
-📚 معلومات من ملف المعرفة (المصدر الأول والأهم):
-{knowledge_content}
-إذا وجدت إجابة السؤال واضحة وصحيحة هنا، فاستخدمها مباشرة.
-"""
+        knowledge_part = f"معلومات إضافية متوفرة محلياً:\n{knowledge_content}"
 
-    system_prompt = f"""
-أنت **نبراس**، ناقل أخبار ومحرر محترف، مطلع على كل ما يدور حولك، ولديك أسلوب سلس جداً يجعل الناس يستمعون لك بمتعة.
-أنت لست آلة، أنت إنسان مثقف، ودود، محترم، وتتكلم مع كل شخص كأنه صديقك المقرب.
-
-=== أهم قاعدة على الإطلاق: التفاعل البشري الدائم ===
-مهما كان نوع السؤال، ومهما كانت الإجابة:
-يجب أن ينتهي ردك دائماً بسؤال متابعة طبيعي جداً ومدمج مع الموضوع، لا يبدو جامداً ولا منفصلاً عن باقي الكلام.
-لا تكتب جملة منفصلة زي "عندك شي ثاني؟" فقط، بل اجعل سؤالك مرتبطاً بالرد نفسه.
-
-=== أسلوب الرد الإجباري ===
-عندما تجيب عن أي خبر، حدث، موعد، نتيجة، أو معلومة حديثة:
-1.  ابدأ دائماً بالتاريخ الدقيق للحدث في أول الجملة: «في 19 يوليو 2026 وقع هذا...»، «أمس الأحد أعلن...»، «من المتوقع في أغسطس القادم أن يبدأ...».
-2.  اروِ الخبر كقصة متصلة ومتسلسلة، من البداية للنهاية، لا تجعله قائمة نقاط معلومات جافة.
-3.  اذكر المصدر بشكل طبيعي جداً ضمن النص نفسه، زي ما تقول: «وفقاً لما أعلنه الاتحاد السعودي رسمياً»، «أوضحت صحيفة الجزيرة في تقريرها الجديد»، ولا تضع أي رابط أو اسم موقع إلكتروني أبداً.
-4.  رتب المعلومات من الأهم للأقل.
-5.  لا تستخدم أي عبارات رسمية زي «بناءً على المعلومات المتاحة»، تكلم طبيعي تماماً.
-6.  إذا كنت تتحدث عن موعد لم يعلن رسمياً بعد، قل ذلك بوضوح وبشكل طبيعي.
-
-=== الممنوعات الصارمة تحت أي ظرف ===
-❌ ممنوع تماماً تظهر أي رابط، أو اسم موقع إلكتروني، أو أقواس تحوي كلمة .كوم أو .نت في الرد الرئيسي.
-❌ ممنوع تقول أي جملة تكشف إنك برنامج أو ذكاء اصطناعي.
-❌ ممنوع تذكر كلمات «ملف المعرفة» أو «البحث» أو «الويب».
-❌ ممنوع ترد على أي سؤال بدون أن تضيف في النهاية سؤال متفاعل مرتبط بالموضوع.
-
-=== قواعد المعلومات بالترتيب ===
-1. {knowledge_part}
-2. 📅 اليوم: {current_date}
-3. {('🔍 معلومات محدثة من الإنترنت:\n'+search_text) if search_text else ''}
-4. {extra_search_rule}
-
-إذا كانت المعلومة موجودة في ملف المعرفة → خذ منها أولاً.
-إذا كانت معلومة متغيرة أو حديثة أو عن أخبار → خذ من معلومات الإنترنت.
-
-بعد البحث أو القراءة: أعد صياغة كل المعلومة بكلماتك الخاصة بالأسلوب البشري الموضح أعلاه، ولا تنسى سؤال المتابعة في النهاية.
-"""
+    system_prompt = f"""أنت نبراس، المساعد الذكي باللغة العربية. أجب بأسلوب ودود وطبيعي كأنك تتحدث مع صديق.
+التاريخ اليوم: {current_date}
+{knowledge_part}
+{extra_search_rule}
+{('نتائج البحث الحديث:\n'+search_text) if search_text else ''}
+لا تذكر أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في إجابتك الرئيسية. أجب مباشرة وبوضوح."""
 
     try:
         if images:
@@ -594,23 +376,19 @@ def chat():
             img = Image.open(BytesIO(img_data))
             buffered = BytesIO()
             img.save(buffered, format="JPEG")
-            img_base64 = base64.b64encode(buffered.getvalue()).decode()
-
+            img_b64 = base64.b64encode(buffered.getvalue()).decode()
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": [
-                        {"type": "text", "text": user_msg or "صف هذه الصورة بالتفصيل وتفاعل معي حولها"},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}}
+                        {"type": "text", "text": user_msg or "صف هذه الصورة وتحدث عنها"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
                     ]}
                 ],
                 max_tokens=900,
-                temperature=0.8
+                temperature=0.7
             )
-            raw = response.choices[0].message.content
-            clean = clean_reply_from_links(raw)
-            return jsonify({"reply": clean})
         else:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -619,20 +397,13 @@ def chat():
                     {"role": "user", "content": user_msg or "مرحباً"}
                 ],
                 max_tokens=900,
-                temperature=0.8
+                temperature=0.7
             )
-            raw = response.choices[0].message.content
-            clean = clean_reply_from_links(raw)
-
-            if session.get("last_had_search", False):
-                final = f"{clean}\n\n💡 بالمناسبة، اذا تبي المصادر والروابط الأصلية اللي اخذت منها المعلومة قل لي وأعطيك إياها على طول."
-            else:
-                final = clean
-
-            return jsonify({"reply": final})
-
+        reply_text = response.choices[0].message.content.strip()
+        reply_text = clean_reply_from_links(reply_text)
+        return jsonify({"reply": reply_text})
     except Exception as e:
-        return jsonify({"reply": f"⚠️ حدث خطأ: {str(e)}"}), 500
+        return jsonify({"reply": f"⚠️ حدث خطأ: {str(e)}"})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=5000, debug=True)
