@@ -134,10 +134,10 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ دائرة زر الزائد 24×24 فقط، حدود 1.5px كما طلبت */
+/* ✅ دائرة 20×20 بالضبط .. علامة الزائد 12px ثابتة */
 .header .icon-btn.left{
-    width:24px;
-    height:24px;
+    width:20px;
+    height:20px;
     border-radius:50%;
     border:1.5px solid #111827;
     background:transparent;
