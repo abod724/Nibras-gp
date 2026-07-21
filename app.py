@@ -134,7 +134,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ زر الزائد أصغر 28×28 */
+/* ✅ زر الزائد: 28×28، حدود 1.5px كما طلبت */
 .header .icon-btn.left{
     width:28px;
     height:28px;
@@ -154,7 +154,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     transform:scale(1.08);
 }
 .header .icon-btn.left:active{transform:scale(0.95)}
-/* ✅ زر القائمة بنفس الحجم */
 .header .icon-btn.right{
     width:28px;
     height:28px;
@@ -170,17 +169,17 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:8px;
 }
 .header .icon-btn.right:hover{background:#f3f4f6}
-/* ✅ القائمة أصغر من السابق ونظيفة تماماً */
+/* ✅ القائمة أصغر ومتناغمة تماماً مع الزر */
 .dropdown{
     display:none;
     position:absolute;
     top:62px;
     left:16px;
     background:#ffffff;
-    border-radius:12px;
-    box-shadow:0 5px 20px rgba(0,0,0,0.06);
+    border-radius:11px;
+    box-shadow:0 5px 18px rgba(0,0,0,0.06);
     padding:5px 0;
-    width:170px;
+    width:160px;
     border:none;
     z-index:99;
     animation:dropShow 0.2s ease;
@@ -191,11 +190,11 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 }
 .dropdown.active{display:block}
 .dropdown .item{
-    padding:9px 16px;
-    font-size:12.5px;
+    padding:8px 15px;
+    font-size:12px;
     display:flex;
     align-items:center;
-    gap:9px;
+    gap:8px;
     cursor:pointer;
     color:#1f2937;
     transition:all 0.15s ease;
