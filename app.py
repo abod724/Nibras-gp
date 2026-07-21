@@ -125,24 +125,24 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     overflow:hidden;
 }
 .header{
-    height:60px;
-    min-height:60px;
+    height:56px;
+    min-height:56px;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:0 24px;
+    padding:0 22px;
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ زر الزائد بالحجم الجديد 32×32 */
+/* ✅ زر الزائد أصغر 30×30 */
 .header .icon-btn.left{
-    width:32px;
-    height:32px;
+    width:30px;
+    height:30px;
     border-radius:50%;
     border:1.5px solid #111827;
     background:transparent;
     color:#111827;
-    font-size:16px;
+    font-size:15px;
     cursor:pointer;
     display:flex;
     align-items:center;
@@ -154,14 +154,14 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     transform:scale(1.08);
 }
 .header .icon-btn.left:active{transform:scale(0.95)}
-/* ✅ زر القائمة بنفس الحجم المتناسق */
+/* ✅ زر القائمة بنفس الحجم */
 .header .icon-btn.right{
-    width:32px;
-    height:32px;
+    width:30px;
+    height:30px;
     border:none;
     background:transparent;
     color:#111827;
-    font-size:20px;
+    font-size:19px;
     cursor:pointer;
     display:flex;
     align-items:center;
@@ -170,17 +170,17 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:8px;
 }
 .header .icon-btn.right:hover{background:#f3f4f6}
-/* ✅ القائمة بدون إطار ظاهر، وحجمها أصغر ونظيفة */
+/* ✅ القائمة أصغر ونظيفة بدون إطار */
 .dropdown{
     display:none;
     position:absolute;
-    top:68px;
-    left:20px;
+    top:64px;
+    left:18px;
     background:#ffffff;
-    border-radius:16px;
-    box-shadow:0 8px 30px rgba(0,0,0,0.08);
-    padding:8px 0;
-    width:200px;
+    border-radius:14px;
+    box-shadow:0 6px 24px rgba(0,0,0,0.07);
+    padding:6px 0;
+    width:185px;
     border:none;
     z-index:99;
     animation:dropShow 0.2s ease;
@@ -191,16 +191,16 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 }
 .dropdown.active{display:block}
 .dropdown .item{
-    padding:12px 22px;
-    font-size:14px;
+    padding:10px 18px;
+    font-size:13px;
     display:flex;
     align-items:center;
-    gap:12px;
+    gap:10px;
     cursor:pointer;
     color:#1f2937;
     transition:all 0.15s ease;
-    margin:2px 8px;
-    border-radius:8px;
+    margin:2px 6px;
+    border-radius:7px;
 }
 .dropdown .item:hover{
     background:#f9fafb;
