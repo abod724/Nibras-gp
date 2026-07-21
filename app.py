@@ -259,7 +259,6 @@ async function sendMessage() {
         appendBotMessage('⚠️ حدث خطأ');
     }
     sendBtn.disabled = false;
-    userInput.focus();
 }
 
 imageBtn.onclick = ()=>fileInput.click();
@@ -414,8 +413,8 @@ def chat():
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}}
                     ]}
                 ],
-                max_tokens=400,
-                temperature=0.7
+                max_tokens=900,
+                temperature=0.8
             )
             raw = response.choices[0].message.content
             clean = clean_reply_from_links(raw)
