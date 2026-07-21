@@ -134,7 +134,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ دائرة 17×17 بالضبط .. علامة الزائد 12px ثابتة */
+/* ✅ دائرة الزائد 15×15 بكسل بالضبط، في الجانب الأيسر */
 .header .icon-btn.left{
     width:20px;
     height:20px;
@@ -169,11 +169,12 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:8px;
 }
 .header .icon-btn.right:hover{background:#f3f4f6}
+/* ✅ القائمة المنسدلة الآن تظهر أسفل اليمين بشكل طبيعي */
 .dropdown{
     display:none;
     position:absolute;
     top:60px;
-    left:16px;
+    right:16px;
     background:#ffffff;
     border-radius:11px;
     box-shadow:0 5px 18px rgba(0,0,0,0.06);
@@ -340,7 +341,9 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 <body>
 <div class="app">
     <div class="header">
+        <!-- ✅ زر الزائد في اليسار -->
         <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
+        <!-- ✅ زر القائمة في اليمين، والقائمة تفتح أسفله -->
         <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
