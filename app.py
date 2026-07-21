@@ -115,21 +115,17 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 .app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
 
-/* ✅ زر الزائد في اليسار - مقاس 20×20 بالضبط */
-.header .icon-btn.left{
-    width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease
-}
-.header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
-.header .icon-btn.left:active{transform:scale(0.95)}
+/* ✅ زر القائمة يسار */
+.header .icon-btn.left{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
+.header .icon-btn.left:hover{background:#f3f4f6}
 
-/* ✅ زر القائمة في اليمين */
-.header .icon-btn.right{
-    width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px
-}
-.header .icon-btn.right:hover{background:#f3f4f6}
+/* ✅ زر الزائد يمين - مقاس 20×20 بالضبط */
+.header .icon-btn.right{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
+.header .icon-btn.right:hover{background:#f3f4f6;transform:scale(1.08)}
+.header .icon-btn.right:active{transform:scale(0.95)}
 
-/* ✅ القائمة تفتح أسفل اليمين */
-.dropdown{display:none;position:absolute;top:60px;right:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
+/* ✅ القائمة تفتح أسفل اليسار */
+.dropdown{display:none;position:absolute;top:60px;left:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
 @keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .dropdown.active{display:block}
 .dropdown .item{padding:8px 15px;font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#1f2937;transition:all 0.15s ease;margin:2px 5px;border-radius:6px}
@@ -164,10 +160,8 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 <body>
 <div class="app">
     <div class="header">
-        <!-- ✅ زر الزائد (+) في اليسار -->
-        <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
-        <!-- ✅ زر القائمة في اليمين -->
-        <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
+        <button class="icon-btn left" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
+        <button class="icon-btn right" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
             <div class="item" onclick="alert('🔍 البحث بالويب مفعل')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
@@ -291,15 +285,25 @@ def chat():
         if images:
             img = Image.open(BytesIO(base64.b64decode(images[0].split(',')[1])))
             buf = BytesIO();img.save(buf,'JPEG');b64=base64.b64encode(buf.getvalue()).decode()
-            res = client.chat.completions.create("gpt-4o-mini", [
-                {"role":"system","content":system_prompt},
-                {"role":"user","content":[{"type":"text","text":user_msg or "صف الصورة"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
-            ], max_tokens=900, temperature=0.7)
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role":"system","content":system_prompt},
+                    {"role":"user","content":[{"type":"text","text":user_msg or "صف الصورة"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
+                ],
+                max_tokens=900,
+                temperature=0.7
+            )
         else:
-            res = client.chat.completions.create("gpt-4o-mini", [
-                {"role":"system","content":system_prompt},
-                {"role":"user","content":user_msg or "مرحباً"}
-            ], max_tokens=900, temperature=0.7)
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role":"system","content":system_prompt},
+                    {"role":"user","content":user_msg or "مرحباً"}
+                ],
+                max_tokens=900,
+                temperature=0.7
+            )
         reply = clean_reply_from_links(res.choices[0].message.content.strip())
         if session.get("last_had_search"):
             reply += "\n\n💡 إذا أردت المصادر قل لي وأعطيك إياها."
