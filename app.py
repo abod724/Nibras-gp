@@ -134,7 +134,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ دائرة 20×20 بالضبط .. علامة الزائد 12px ثابتة */
+/* ✅ دائرة 17×17 بالضبط .. علامة الزائد 12px ثابتة */
 .header .icon-btn.left{
     width:20px;
     height:20px;
