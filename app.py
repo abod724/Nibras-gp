@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, Response
 from openai import OpenAI
 import os
 import re
+import time
 from datetime import datetime
 import pytz
 from duckduckgo_search import DDGS
@@ -114,23 +115,16 @@ HTML = """
 html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
 .app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
-
-/* زر الزائد يسار - مقاس دقيق 20×20 */
 .header .icon-btn.left{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
 .header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
 .header .icon-btn.left:active{transform:scale(0.95)}
-
-/* زر القائمة يمين */
 .header .icon-btn.right{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
 .header .icon-btn.right:hover{background:#f3f4f6}
-
-/* القائمة تفتح أسفل اليمين */
 .dropdown{display:none;position:absolute;top:60px;right:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
 @keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .dropdown.active{display:block}
 .dropdown .item{padding:8px 15px;font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#1f2937;transition:all 0.15s ease;margin:2px 5px;border-radius:6px}
 .dropdown .item:hover{background:#f9fafb;color:#005c99}
-
 .chat-box{flex:1 1 auto;min-height:0;overflow-y:auto;padding:24px 18px;background:#f9fafb;display:flex;flex-direction:column;gap:14px}
 .msg{max-width:78%;padding:12px 18px;border-radius:20px;font-size:15px;line-height:1.7;word-wrap:break-word;animation:fadeIn 0.25s ease}
 .msg.user{background:linear-gradient(135deg,#0077b6,#005c99);color:white;align-self:flex-end;border-bottom-right-radius:6px}
@@ -138,18 +132,12 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 .msg .time{font-size:10px;color:#9ca3af;display:inline-block;margin-top:4px}
 .msg.user .time{color:rgba(255,255,255,0.7)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-
-/* ✅ مؤشر الكتابة المتقطعة - مؤكد ومعدل ليعمل تماماً */
 .typing{display:flex;gap:6px;background:white;padding:14px 18px;border-radius:20px;border-bottom-left-radius:6px;align-self:flex-start;align-items:center}
 .typing span{width:9px;height:9px;background-color:#94a3b8;border-radius:50%;animation:typingBounce 1.4s infinite ease-in-out}
 .typing span:nth-child(1){animation-delay:0s}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
-@keyframes typingBounce{
-    0%, 80%, 100% { transform: translateY(0); }
-    40% { transform: translateY(-7px); background-color:#0077b6; }
-}
-
+@keyframes typingBounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px);background-color:#0077b6}}
 .input-bar{flex-shrink:0;background:white;padding:12px 18px max(18px, env(safe-area-inset-bottom));border-top:1px solid #f3f4f6;display:flex;gap:12px;align-items:center}
 .input-bar .wrap{flex:1;display:flex;align-items:center;background:#f9fafb;border-radius:30px;padding:6px 16px;border:1px solid transparent;transition:all 0.2s ease}
 .input-bar .wrap:focus-within{border-color:#005c99;background:white;box-shadow:0 0 0 3px rgba(0,92,153,0.06)}
@@ -202,13 +190,19 @@ const dropdown = document.getElementById('dropdownMenu');
 const newChatBtn = document.getElementById('newChatBtn');
 
 let pendingImages = [];
+let currentBotMsg = null;
 function getTime(){return new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}
 
-function appendBotMessage(text, images){
+function startBotMessage(){
     const div = document.createElement('div');
     div.className = 'msg bot';
-    div.innerHTML = text + (images&&images.length?images.map(s=>`<br><img class="chat-image" src="${s}">`).join(''):'') + ` <span class="time">${getTime()}</span>`;
+    div.innerHTML = `<span class="time">${getTime()}</span>`;
     chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return div;
+}
+function appendChunk(msgElm, text){
+    msgElm.insertBefore(document.createTextNode(text), msgElm.querySelector('.time'));
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 function appendUserMessage(text, images){
@@ -218,24 +212,12 @@ function appendUserMessage(text, images){
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
-
-/* ✅ دالة مؤشر الكتابة المتقطعة - مؤكدة وتعمل بسلاسة */
-function showTyping(){
-    const d=document.createElement('div');
-    d.className='typing';
-    d.id='typing';
-    d.innerHTML='<span></span><span></span><span></span>';
-    chatBox.appendChild(d);
-    chatBox.scrollTop=chatBox.scrollHeight;
-}
-function hideTyping(){
-    const el = document.getElementById('typing');
-    if(el) el.remove();
-}
+function showTyping(){const d=document.createElement('div');d.className='typing';d.id='typing';d.innerHTML='<span></span><span></span><span></span>';chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
+function hideTyping(){document.getElementById('typing')?.remove()}
 
 menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
 document.addEventListener('click',()=>{dropdown.classList.remove('active')});
-newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('هلا وسهلا! أنا نبراس، وش أخبارك اليوم؟ 😊')});
+newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendUserMessage('هلا وسهلا! أنا نبراس، وش أخبارك اليوم؟ 😊',[])});
 
 sendBtn.addEventListener('click',async ()=>{
     const text = userInput.value.trim();
@@ -243,16 +225,24 @@ sendBtn.addEventListener('click',async ()=>{
     appendUserMessage(text, pendingImages);
     userInput.value='';pendingImages=[];
     showTyping();
+    currentBotMsg = null;
     try{
         const res = await fetch('/chat',{
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({message:text, images:pendingImages})
+            body:JSON.stringify({message:text})
         });
-        const data = await res.json();
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
         hideTyping();
-        appendBotMessage(data.reply || '⚠️ عذراً، حدث خطأ');
-    }catch(e){hideTyping();appendBotMessage('⚠️ تعذر الاتصال بالخادم')}
+        currentBotMsg = startBotMessage();
+        while(true){
+            const {done,value} = await reader.read();
+            if(done) break;
+            const chunk = decoder.decode(value);
+            appendChunk(currentBotMsg, chunk);
+        }
+    }catch(e){hideTyping();appendUserMessage('⚠️ تعذر الاتصال بالخادم',[])}
 });
 userInput.addEventListener('keydown',e=>{if(e.key==='Enter') sendBtn.click()});
 imageBtn.addEventListener('click',()=>fileInput.click());
@@ -276,21 +266,20 @@ def index():
 def chat():
     data = request.json
     user_msg = (data.get("message") or "").strip()
-    images = data.get("images", [])
 
-    # الرد المعدل حسب طلبك
+    # ردود ثابتة مباشرة
     if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج", "من صنعك", "من طورك"]):
-        return jsonify({"reply": "تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة، وأنا هنا لمساعدتك في كل ما تحتاج 😊"})
+        return Response("تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة، وأنا هنا لمساعدتك في كل ما تحتاج 😊", mimetype="text/plain")
 
     if user_msg and is_pure_date_question(user_msg):
-        return jsonify({"reply": f"اليوم هو {get_real_date()}"})
+        return Response(f"اليوم هو {get_real_date()}", mimetype="text/plain")
 
     if user_msg and user_asks_for_sources(user_msg):
         last_sources = session.get("last_sources", [])
         last_search = session.get("last_had_search", False)
         reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else "المعلومة دي ما احتجت بحث من النت، معلوماتي عنها جاهزة 😊"
         for i,s in enumerate(last_sources,1): reply += f"{i}. {s['title']}\n{s['url']}\n\n"
-        return jsonify({"reply": reply.strip()})
+        return Response(reply.strip(), mimetype="text/plain")
 
     FORCE_WEB_SEARCH = MUST_SEARCH(user_msg) if user_msg else False
     search_text, sources = search_web(user_msg) if (user_msg and FORCE_WEB_SEARCH) else ("", [])
@@ -298,44 +287,40 @@ def chat():
     session["last_had_search"] = FORCE_WEB_SEARCH or bool(sources)
 
     system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
-🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء واضحة**، طبيعية جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
+🔹 تحدث دائماً بـ لهجة سعودية عامية بيضاء واضحة، طبيعية جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
 🔹 اجعل حديثك متفاعل، واختم إجابتك دائماً بسؤال أو خيار لكي تكمل الحديث معه.
-🔹 إذا كان السؤال يحتاج معلومات حديثة، أخبار، أسعار، مواعيد، نتائج، أو أي شيء يتغير بسرعة: استخدم نتائج البحث التي جلبتها لك.
-🔹 وإذا كان السؤال معلومات عامة أو حديث عادي: لا تبحث وتكلم من معلوماتك مع الحفاظ على نفس اللهجة والتفاعل.
-🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في الإجابة الرئيسية.
+🔹 إذا كان السؤال يحتاج معلومات حديثة، أخبار، أسعار، مواعيد، نتائج، أو أي شيء يتغير بسرعة: استخدم نتائج البحث.
+🔹 وإذا كان معلومات عامة أو حديث عادي: لا تبحث وتكلم من معلوماتك.
+🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط في الإجابة.
 🔹 تاريخ اليوم: {get_real_date()}
-{('🔹 معلومات حديثة جلبتها لك:\n'+search_text) if search_text else ''}
+{('معلومات حديثة:\n'+search_text) if search_text else ''}
 """
 
-    try:
-        if images:
-            img = Image.open(BytesIO(base64.b64decode(images[0].split(',')[1])))
-            buf = BytesIO();img.save(buf,'JPEG');b64=base64.b64encode(buf.getvalue()).decode()
-            res = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role":"system","content":system_prompt},
-                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي وقول وش فيها"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
-                ],
-                max_tokens=900,
-                temperature=0.8
-            )
-        else:
-            res = client.chat.completions.create(
+    def generate():
+        try:
+            stream = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role":"system","content":system_prompt},
                     {"role":"user","content":user_msg or "هلا نبراس"}
                 ],
                 max_tokens=900,
-                temperature=0.8
+                temperature=0.8,
+                stream=True
             )
-        reply = clean_reply_from_links(res.choices[0].message.content.strip())
-        if session.get("last_had_search"):
-            reply += "\n💡 لو تريد المصادر قل لي وأجيبك بها."
-        return jsonify({"reply": reply})
-    except Exception as e:
-        return jsonify({"reply": f"⚠️ عذراً صار خطأ: {str(e)}"})
+            full_reply = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    txt = chunk.choices[0].delta.content
+                    full_reply += txt
+                    yield txt
+                    time.sleep(0.04) # سرعة الكتابة طبيعية ومريحة
+            if session.get("last_had_search"):
+                yield "\n💡 لو تريد المصادر قل لي وأجيبك بها."
+        except Exception as e:
+            yield f"\n⚠️ عذراً صار خطأ: {str(e)}"
+
+    return Response(generate(), mimetype="text/plain")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
