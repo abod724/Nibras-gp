@@ -111,100 +111,111 @@ HTML = """
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
+html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
 .app{
     min-height:100vh;
     min-height:100dvh;
     height:100dvh;
     max-width:750px;
     margin:0 auto;
-    background:white;
+    background:#fff;
     display:flex;
     flex-direction:column;
-    box-shadow:0 0 40px rgba(0,92,153,0.06);
     position:relative;
     overflow:hidden;
 }
+/* ✅ شريط الرأس بالتصميم الاحترافي المطلوب */
 .header{
-    height:56px;
-    min-height:56px;
+    height:60px;
+    min-height:60px;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:0 20px;
-    border-bottom:1px solid #f0f4f8;
-    background:white;
+    padding:0 24px;
+    background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ زر القائمة دائري بالكامل بنفس الشكل المطلوب */
-.header .icon-btn{
-    background:transparent;
-    border:none;
-    font-size:20px;
-    color:#334155;
-    cursor:pointer;
-    width:40px;
-    height:40px;
+/* ✅ زر الإضافة دائري بنفس الشكل بالضبط */
+.header .icon-btn.left{
+    width:36px;
+    height:36px;
     border-radius:50%;
-    transition:all 0.2s ease;
+    border:1.5px solid #111827;
+    background:transparent;
+    color:#111827;
+    font-size:18px;
+    cursor:pointer;
     display:flex;
     align-items:center;
     justify-content:center;
-    border:1px solid transparent;
+    transition:all 0.2s ease;
 }
-.header .icon-btn:hover{
+.header .icon-btn.left:hover{
     background:#f3f4f6;
-    transform:scale(1.05);
+    transform:scale(1.08);
 }
-.header .icon-btn:active{transform:scale(0.96)}
-/* ✅ القائمة المنسدلة بحجم مناسب واحترافي */
+.header .icon-btn.left:active{transform:scale(0.95)}
+/* ✅ زر القائمة بنفس الخطوط النظيفة */
+.header .icon-btn.right{
+    width:36px;
+    height:36px;
+    border:none;
+    background:transparent;
+    color:#111827;
+    font-size:22px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:all 0.2s ease;
+    border-radius:8px;
+}
+.header .icon-btn.right:hover{background:#f3f4f6}
+/* ✅ القائمة المنسدلة أنيقة ومتوازنة */
 .dropdown{
     display:none;
     position:absolute;
-    top:64px;
-    left:16px;
-    background:white;
-    border-radius:16px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.08);
-    padding:8px 0;
-    width:210px;
+    top:68px;
+    left:20px;
+    background:#ffffff;
+    border-radius:18px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.12);
+    padding:10px 0;
+    width:220px;
     border:1px solid #e5e7eb;
     z-index:99;
-    transform-origin:top left;
-    animation:dropdownFade 0.2s ease;
+    animation:dropShow 0.2s ease;
 }
-@keyframes dropdownFade{
-    from{opacity:0;transform:translateY(-8px) scale(0.97)}
-    to{opacity:1;transform:translateY(0) scale(1)}
+@keyframes dropShow{
+    from{opacity:0;transform:translateY(-6px)}
+    to{opacity:1;transform:translateY(0)}
 }
 .dropdown.active{display:block}
 .dropdown .item{
-    padding:13px 22px;
+    padding:14px 24px;
     font-size:15px;
     display:flex;
     align-items:center;
-    gap:12px;
+    gap:14px;
     cursor:pointer;
-    color:#374151;
+    color:#1f2937;
     transition:all 0.15s ease;
-    border-radius:8px;
-    margin:2px 8px;
-    font-weight:500;
+    margin:2px 10px;
+    border-radius:10px;
 }
 .dropdown .item:hover{
-    background:#f8fafc;
+    background:#f9fafb;
     color:#005c99;
-    padding-right:26px;
 }
 .chat-box{
     flex:1 1 auto;
     min-height:0;
     overflow-y:auto;
-    padding:20px 16px;
-    background:#f8f9fc;
+    padding:24px 18px;
+    background:#f9fafb;
     display:flex;
     flex-direction:column;
-    gap:12px;
+    gap:14px;
 }
 .msg{
     max-width:78%;
@@ -214,7 +225,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     line-height:1.7;
     word-wrap:break-word;
     animation:fadeIn 0.25s ease;
-    box-shadow:0 1px 3px rgba(0,0,0,0.04);
 }
 .msg.user{
     background:linear-gradient(135deg,#0077b6,#005c99);
@@ -226,15 +236,15 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     background:white;
     align-self:flex-start;
     border-bottom-left-radius:6px;
-    border:1px solid #f0f4f8;
+    border:1px solid #e5e7eb;
 }
 .msg .time{
     font-size:10px;
-    color:#94a3b8;
+    color:#9ca3af;
     display:inline-block;
     margin-top:4px;
 }
-.msg.user .time{color:rgba(255,255,255,0.75)}
+.msg.user .time{color:rgba(255,255,255,0.7)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .typing{
     display:flex;
@@ -244,11 +254,11 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     border-radius:20px;
     border-bottom-left-radius:6px;
     align-self:flex-start;
-    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+    border:1px solid #e5e7eb;
 }
 .typing span{
     width:8px;height:8px;
-    background:#cbd5e1;
+    background:#d1d5db;
     border-radius:50%;
     animation:bounce 1.2s infinite;
 }
@@ -258,26 +268,26 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
 .input-bar{
     flex-shrink:0;
     background:white;
-    padding:10px 16px max(16px, env(safe-area-inset-bottom));
-    border-top:1px solid #f0f4f8;
+    padding:12px 18px max(18px, env(safe-area-inset-bottom));
+    border-top:1px solid #f3f4f6;
     display:flex;
-    gap:10px;
+    gap:12px;
     align-items:center;
 }
 .input-bar .wrap{
     flex:1;
     display:flex;
     align-items:center;
-    background:#f8f9fc;
+    background:#f9fafb;
     border-radius:30px;
-    padding:4px 14px;
+    padding:6px 16px;
     border:1px solid transparent;
     transition:all 0.2s ease;
 }
 .input-bar .wrap:focus-within{
     border-color:#005c99;
     background:white;
-    box-shadow:0 0 0 3px rgba(0,92,153,0.08);
+    box-shadow:0 0 0 3px rgba(0,92,153,0.06);
 }
 .input-bar .wrap input{
     flex:1;
@@ -286,18 +296,18 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     padding:10px 8px;
     font-size:15px;
     outline:none;
-    color:#1e293b;
+    color:#111827;
 }
-.input-bar .wrap input::placeholder{color:#94a3b8}
+.input-bar .wrap input::placeholder{color:#9ca3af}
 .input-bar .wrap .icon-btn{
     background:none;
     border:none;
-    font-size:19px;
-    color:#64748b;
+    font-size:18px;
+    color:#6b7280;
     cursor:pointer;
     padding:6px;
     border-radius:50%;
-    width:34px;height:34px;
+    width:32px;height:32px;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -320,36 +330,26 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     display:flex;
     align-items:center;
     justify-content:center;
-    flex-shrink:0;
-    box-shadow:0 2px 8px rgba(0,92,153,0.25);
+    box-shadow:0 2px 8px rgba(0,92,153,0.2);
 }
-.input-bar .send-btn:disabled{
-    background:#cbd5e1;
-    box-shadow:none;
-    transform:none;
-}
+.input-bar .send-btn:disabled{background:#d1d5db;box-shadow:none}
 .chat-image{
     max-width:160px;
     border-radius:12px;
     margin-top:6px;
-    border:1px solid #e2e8f0;
+    border:1px solid #e5e7eb;
 }
-::-webkit-scrollbar{width:6px;background:transparent}
-::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:12px}
-::-webkit-scrollbar-thumb:hover{background:#cbd5e1}
-@media(max-width:600px){
-    .msg{font-size:14px}
-    .header .icon-btn{font-size:19px}
-    .dropdown .item{font-size:14px;padding:12px 20px}
-}
+::-webkit-scrollbar{width:5px;background:transparent}
+::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:10px}
 </style>
 </head>
 <body>
 <div class="app">
     <div class="header">
-        <button class="icon-btn" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
-        <!-- ✅ زر القائمة الدائري بالشكل المطلوب -->
-        <button class="icon-btn" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
+        <!-- ✅ زر الإضافة الدائري بالشكل بالضبط -->
+        <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
+        <!-- ✅ زر القائمة بالخطوط النظيفة -->
+        <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
             <div class="item" onclick="alert('🔍 البحث بالويب مفعل')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
@@ -482,8 +482,6 @@ micBtn.onclick = function(){
     rec.onresult = e => { userInput.value += e.results[0][0].transcript + ' '; };
     rec.onerror = ()=>alert('فشل التسجيل');
     rec.start();
-    micBtn.style.color = '#005c99';
-    setTimeout(()=>micBtn.style.color='', 2000);
 };
 
 menuBtn.onclick = (e)=>{ e.stopPropagation(); dropdown.classList.toggle('active'); };
