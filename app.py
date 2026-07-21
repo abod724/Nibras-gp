@@ -106,68 +106,272 @@ HTML = """
 <head>
 <meta charset="UTF-8">
 <title>نبراس GT</title>
-<!-- ✅ الإصلاح رقم 1: عدلنا الـ viewport يدعم الشاشات الحديثة -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-/* ✅ الإصلاح رقم 2: غيرنا الطريقة القديمة اللي تقطع المحتوى */
-html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f5f5fa;font-family:sans-serif;overscroll-behavior:none}
-/* ✅ الإصلاح رقم 3: استخدمنا dvh بدل vh — هذا هو الحل السحري للموبايل */
+html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
 .app{
-    min-height:100vh; /* احتياط للمتصفحات القديمة جداً */
-    min-height:100dvh; /* الحل الحقيقي: يأخذ الارتفاع الفعلي بدون شريط المتصفح */
+    min-height:100vh;
+    min-height:100dvh;
     height:100dvh;
     max-width:750px;
     margin:0 auto;
     background:white;
     display:flex;
     flex-direction:column;
-    box-shadow:0 0 30px rgba(0,0,0,0.04);
+    box-shadow:0 0 40px rgba(0,92,153,0.06);
     position:relative;
     overflow:hidden;
 }
-.header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #eaeef3;background:white;flex-shrink:0}
-.header .icon-btn{background:none;border:none;font-size:24px;color:#005c99;cursor:pointer;padding:6px 10px;border-radius:50%;transition:0.15s}
-.header .icon-btn:hover{background:#e9f0fc}
-.dropdown{display:none;position:absolute;top:56px;left:20px;background:white;border-radius:14px;box-shadow:0 8px 30px rgba(0,60,130,0.1);padding:6px 0;width:200px;border:1px solid #e6edf5;z-index:99}
+/* ✅ تحسين شكل الرأس والأزرار العلوية */
+.header{
+    height:58px;
+    min-height:58px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 20px;
+    border-bottom:1px solid #f0f4f8;
+    background:white;
+    flex-shrink:0;
+    position:relative;
+}
+.header .icon-btn{
+    background:transparent;
+    border:none;
+    font-size:22px;
+    color:#005c99;
+    cursor:pointer;
+    padding:8px 12px;
+    border-radius:12px;
+    transition:all 0.2s ease;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.header .icon-btn:hover{
+    background:rgba(0,92,153,0.08);
+    transform:scale(1.05);
+}
+.header .icon-btn:active{transform:scale(0.97)}
+/* ✅ تحسين شكل القائمة المنسدلة */
+.dropdown{
+    display:none;
+    position:absolute;
+    top:66px;
+    left:16px;
+    background:white;
+    border-radius:16px;
+    box-shadow:0 10px 35px rgba(0,92,153,0.12);
+    padding:8px 0;
+    width:220px;
+    border:1px solid #e8edf5;
+    z-index:99;
+    transform-origin:top left;
+    animation:dropdownFade 0.2s ease;
+}
+@keyframes dropdownFade{
+    from{opacity:0;transform:translateY(-8px) scale(0.96)}
+    to{opacity:1;transform:translateY(0) scale(1)}
+}
 .dropdown.active{display:block}
-.dropdown .item{padding:12px 22px;font-size:15px;display:flex;align-items:center;gap:12px;cursor:pointer;color:#1a2a3a;transition:0.15s;border-radius:6px;margin:2px 6px}
-.dropdown .item:hover{background:#f0f6ff;color:#005c99}
-/* ✅ الإصلاح رقم 4: تأكدنا أن صندوق الدردشة يأخذ المساحة المتبقية فقط ولا يطول */
-.chat-box{flex:1 1 auto;min-height:0;overflow-y:auto;padding:18px 16px;background:#f5f5fa;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:78%;padding:10px 16px;border-radius:18px;font-size:15px;line-height:1.6;word-wrap:break-word;animation:fadeIn 0.25s}
-.msg.user{background:#005c99;color:white;align-self:flex-end;border-bottom-right-radius:6px}
-.msg.bot{background:white;align-self:flex-start;border-bottom-left-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
-.msg .time{font-size:10px;color:#999;display:inline-block;margin-top:3px}
-.msg.user .time{color:#b0d4ee}
+.dropdown .item{
+    padding:14px 24px;
+    font-size:15px;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    cursor:pointer;
+    color:#2d3748;
+    transition:all 0.15s ease;
+    border-radius:8px;
+    margin:2px 8px;
+    font-weight:500;
+}
+.dropdown .item:hover{
+    background:rgba(0,92,153,0.06);
+    color:#005c99;
+    padding-right:28px;
+}
+/* ✅ باقي العناصر كما هي مع تحسينات بسيطة */
+.chat-box{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    padding:20px 16px;
+    background:#f8f9fc;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+.msg{
+    max-width:78%;
+    padding:12px 18px;
+    border-radius:20px;
+    font-size:15px;
+    line-height:1.7;
+    word-wrap:break-word;
+    animation:fadeIn 0.25s ease;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+}
+.msg.user{
+    background:linear-gradient(135deg,#0077b6,#005c99);
+    color:white;
+    align-self:flex-end;
+    border-bottom-right-radius:6px;
+}
+.msg.bot{
+    background:white;
+    align-self:flex-start;
+    border-bottom-left-radius:6px;
+    border:1px solid #f0f4f8;
+}
+.msg .time{
+    font-size:10px;
+    color:#94a3b8;
+    display:inline-block;
+    margin-top:4px;
+}
+.msg.user .time{color:rgba(255,255,255,0.75)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.typing{display:flex;gap:4px;background:white;padding:10px 16px;border-radius:16px;border-bottom-left-radius:6px;align-self:flex-start}
-.typing span{width:8px;height:8px;background:#b0b8c8;border-radius:50%;animation:bounce 1.2s infinite}
+.typing{
+    display:flex;
+    gap:5px;
+    background:white;
+    padding:12px 18px;
+    border-radius:20px;
+    border-bottom-left-radius:6px;
+    align-self:flex-start;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+}
+.typing span{
+    width:8px;height:8px;
+    background:#cbd5e1;
+    border-radius:50%;
+    animation:bounce 1.2s infinite;
+}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-/* ✅ الإصلاح رقم 5: منعنا مربع الكتابة من الانكماش أو الاختفاء تحت أي ظرف */
-.input-bar{flex-shrink:0;background:white;padding:8px 14px max(14px, env(safe-area-inset-bottom));border-top:1px solid #e0e8f0;display:flex;gap:8px;align-items:center}
-.input-bar .wrap{flex:1;display:flex;align-items:center;background:#f3f5fa;border-radius:26px;padding:2px 10px;border:1px solid transparent;transition:0.2s}
-.input-bar .wrap:focus-within{border-color:#005c99;background:white}
-.input-bar .wrap input{flex:1;border:none;background:transparent;padding:10px 6px;font-size:15px;outline:none}
-.input-bar .wrap .icon-btn{background:none;border:none;font-size:18px;color:#5a6a7a;cursor:pointer;padding:4px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:0.15s}
-.input-bar .wrap .icon-btn:hover{background:#e5edf5;color:#005c99}
-.input-bar .send-btn{background:#005c99;color:white;border:none;border-radius:50%;width:40px;height:40px;min-width:40px;min-height:40px;font-size:17px;cursor:pointer;transition:0.15s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.input-bar .send-btn:disabled{background:#b0b8c8}
-.chat-image{max-width:160px;border-radius:10px;margin-top:6px;border:1px solid #e0e0ec}
-::-webkit-scrollbar{width:5px;background:#f0f0f5}
-::-webkit-scrollbar-thumb{background:#d0d8e0;border-radius:12px}
-@media(max-width:600px){.msg{font-size:14px}.header .icon-btn{font-size:22px}}
+/* ✅ تحسين شكل شريط الإدخال وزر الإضافة والإرسال */
+.input-bar{
+    flex-shrink:0;
+    background:white;
+    padding:10px 16px max(16px, env(safe-area-inset-bottom));
+    border-top:1px solid #f0f4f8;
+    display:flex;
+    gap:10px;
+    align-items:center;
+}
+.input-bar .wrap{
+    flex:1;
+    display:flex;
+    align-items:center;
+    background:#f8f9fc;
+    border-radius:30px;
+    padding:4px 14px;
+    border:1px solid transparent;
+    transition:all 0.2s ease;
+}
+.input-bar .wrap:focus-within{
+    border-color:#005c99;
+    background:white;
+    box-shadow:0 0 0 3px rgba(0,92,153,0.08);
+}
+.input-bar .wrap input{
+    flex:1;
+    border:none;
+    background:transparent;
+    padding:10px 8px;
+    font-size:15px;
+    outline:none;
+    color:#1e293b;
+}
+.input-bar .wrap input::placeholder{color:#94a3b8}
+.input-bar .wrap .icon-btn{
+    background:none;
+    border:none;
+    font-size:19px;
+    color:#64748b;
+    cursor:pointer;
+    padding:6px;
+    border-radius:50%;
+    width:34px;height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:all 0.15s ease;
+}
+.input-bar .wrap .icon-btn:hover{
+    background:rgba(0,92,153,0.08);
+    color:#005c99;
+}
+/* ✅ زر الإضافة الجديد جنب مربع الكتابة */
+.new-chat-btn{
+    background:linear-gradient(135deg,#0077b6,#005c99);
+    color:white;
+    border:none;
+    border-radius:50%;
+    width:42px;height:42px;
+    font-size:18px;
+    cursor:pointer;
+    transition:all 0.2s ease;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    box-shadow:0 2px 8px rgba(0,92,153,0.25);
+}
+.new-chat-btn:hover{
+    transform:scale(1.08);
+    box-shadow:0 4px 12px rgba(0,92,153,0.3);
+}
+.new-chat-btn:active{transform:scale(0.95)}
+.input-bar .send-btn{
+    background:linear-gradient(135deg,#0077b6,#005c99);
+    color:white;
+    border:none;
+    border-radius:50%;
+    width:42px;height:42px;
+    min-width:42px;min-height:42px;
+    font-size:18px;
+    cursor:pointer;
+    transition:all 0.2s ease;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    box-shadow:0 2px 8px rgba(0,92,153,0.25);
+}
+.input-bar .send-btn:disabled{
+    background:#cbd5e1;
+    box-shadow:none;
+    transform:none;
+}
+.chat-image{
+    max-width:160px;
+    border-radius:12px;
+    margin-top:6px;
+    border:1px solid #e2e8f0;
+}
+::-webkit-scrollbar{width:6px;background:transparent}
+::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:12px}
+::-webkit-scrollbar-thumb:hover{background:#cbd5e1}
+@media(max-width:600px){
+    .msg{font-size:14px}
+    .header .icon-btn{font-size:20px}
+    .dropdown .item{font-size:14px;padding:12px 20px}
+}
 </style>
 </head>
 <body>
 <div class="app">
     <div class="header">
+        <!-- ✅ ابقينا زر القائمة فقط في الأعلى بشكل أجمل -->
+        <div></div>
         <button class="icon-btn" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
-        <button class="icon-btn" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
             <div class="item" onclick="alert('🔍 البحث بالويب مفعل')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
@@ -179,6 +383,8 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f5f5fa;font-
         <div class="msg bot">مرحباً! أنا نبراس، صديقك الذكي. كيف تشعر اليوم؟ 😊<span class="time">الآن</span></div>
     </div>
     <div class="input-bar">
+        <!-- ✅ زر المحادثة الجديدة الجديد هنا بشكل احترافي -->
+        <button class="new-chat-btn" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
         <div class="wrap">
             <button class="icon-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
             <button class="icon-btn" id="imageBtn"><i class="fa-regular fa-image"></i></button>
@@ -426,7 +632,7 @@ def chat():
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": [
-                        {"type": "text", "text": user_msg or "صف هذه الصورة بالتفصيل و互动 معي حولها"},
+                        {"type": "text", "text": user_msg or "صف هذه الصورة بالتفصيل وتفاعل معي حولها"},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}}
                     ]}
                 ],
