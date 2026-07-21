@@ -166,7 +166,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
             <div class="item" onclick="alert('🔍 البحث بالويب مفعل عند الحاجة')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
             <div class="item" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> تحديث</div>
-            <div class="item" onclick="alert('💬 مطور: أبو مشعل المطيري')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
+            <div class="item" onclick="alert('💬 تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
         </div>
     </div>
     <div class="chat-box" id="chatBox">
@@ -259,8 +259,9 @@ def chat():
     user_msg = (data.get("message") or "").strip()
     images = data.get("images", [])
 
-    if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج"]):
-        return jsonify({"reply": "أنا من صنع وروح أبو مشعل المطيري 🤖❤️"})
+    # ✅ تم تعديل الرد حسب طلبك
+    if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج", "من صنعك", "من طورك"]):
+        return jsonify({"reply": "تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة، وأنا هنا لمساعدتك في كل ما تحتاج 😊"})
 
     if user_msg and is_pure_date_question(user_msg):
         return jsonify({"reply": f"اليوم هو {get_real_date()}"})
