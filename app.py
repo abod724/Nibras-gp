@@ -80,12 +80,62 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px);background:#0077b6}}
-.input-bar{padding:10px 12px;background:#fff;border-top:1px solid #eee;display:flex;gap:10px;align-items:center}
-.input-wrap{flex:1;display:flex;align-items:center;background:#f5f7fa;border-radius:25px;padding:0 12px;height:44px;margin:0 8px}
-.act-btn{width:36px;height:36px;border:none;background:transparent;color:#555;font-size:18px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.input-bar{
+    padding:10px 16px;
+    background:#fff;
+    border-top:1px solid #eee;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    width:100%;
+}
+.input-wrap{
+    flex:1;
+    display:flex;
+    align-items:center;
+    background:#f5f7fa;
+    border-radius:25px;
+    padding:0 16px;
+    height:44px;
+    margin:0;
+}
+.act-btn{
+    width:36px;
+    height:36px;
+    border:none;
+    background:transparent;
+    color:#555;
+    font-size:18px;
+    cursor:pointer;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
 .act-btn:hover{background:rgba(0,119,182,0.08);color:#0077b6}
-.input-wrap input{flex:1;border:none;background:transparent;padding:8px;outline:none;font-size:15px}
-.send-btn{width:38px;height:38px;border-radius:50%;border:none;background:linear-gradient(135deg,#0077b6,#005c99);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.input-wrap input{
+    flex:1;
+    border:none;
+    background:transparent;
+    padding:8px 0;
+    outline:none;
+    font-size:15px;
+    margin:0 8px;
+}
+.send-btn{
+    width:38px;
+    height:38px;
+    border-radius:50%;
+    border:none;
+    background:linear-gradient(135deg,#0077b6,#005c99);
+    color:#fff;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
 </style>
 </head>
 <body>
@@ -103,13 +153,16 @@ body{background:#fff;font-family:'Segoe UI',sans-serif}
         <div class="msg bot">هلا وسهلا بك! أنا نبراس، وش أخبارك اليوم؟ 😊<span class="time">الآن</span></div>
     </div>
     <div class="input-bar">
+        <!-- زر الإرسال في اليمين -->
         <button class="send-btn" id="send"><i class="fa-solid fa-paper-plane"></i></button>
+        <!-- مربع الكتابة في الوسط ومتوسط تماماً -->
         <div class="input-wrap">
             <input type="text" id="txt" placeholder="اكتب ما تريد...">
-            <button class="act-btn" id="imgBtn"><i class="fa-regular fa-image"></i></button>
-            <button class="act-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
-            <input type="file" id="fileInput" accept="image/*" multiple hidden>
         </div>
+        <!-- زر الصور والصوت في اليسار -->
+        <button class="act-btn" id="imgBtn"><i class="fa-regular fa-image"></i></button>
+        <button class="act-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden>
     </div>
 </div>
 <script>
