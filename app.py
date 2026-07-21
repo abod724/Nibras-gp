@@ -274,17 +274,19 @@ def chat():
     if user_msg and is_pure_date_question(user_msg):
         return Response(f"اليوم هو {get_real_date()}", mimetype="text/plain")
 
-    if user_msg and user_asks_for_sources(user_msg):
-        last_sources = session.get("last_sources", [])
-        last_search = session.get("last_had_search", False)
-        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else "المعلومة دي ما احتجت بحث من النت، معلوماتي عنها جاهزة 😊"
-        for i,s in enumerate(last_sources,1): reply += f"{i}. {s['title']}\n{s['url']}\n\n"
-        return Response(reply.strip(), mimetype="text/plain")
-
+    # جمع كل البيانات قبل تشغيل البث
+    need_sources = bool(user_msg and user_asks_for_sources(user_msg))
+    last_sources = session.get("last_sources", [])
+    last_search = session.get("last_had_search", False)
     FORCE_WEB_SEARCH = MUST_SEARCH(user_msg) if user_msg else False
     search_text, sources = search_web(user_msg) if (user_msg and FORCE_WEB_SEARCH) else ("", [])
     session["last_sources"] = sources
     session["last_had_search"] = FORCE_WEB_SEARCH or bool(sources)
+
+    if need_sources:
+        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else "المعلومة دي ما احتجت بحث من النت، معلوماتي عنها جاهزة 😊"
+        for i,s in enumerate(last_sources,1): reply += f"{i}. {s['title']}\n{s['url']}\n\n"
+        return Response(reply.strip(), mimetype="text/plain")
 
     system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
 🔹 تحدث دائماً بـ لهجة سعودية عامية بيضاء واضحة، طبيعية جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
@@ -308,14 +310,11 @@ def chat():
                 temperature=0.8,
                 stream=True
             )
-            full_reply = ""
             for chunk in stream:
                 if chunk.choices[0].delta.content:
-                    txt = chunk.choices[0].delta.content
-                    full_reply += txt
-                    yield txt
-                    time.sleep(0.04) # سرعة الكتابة طبيعية ومريحة
-            if session.get("last_had_search"):
+                    yield chunk.choices[0].delta.content
+                    time.sleep(0.04)
+            if FORCE_WEB_SEARCH or bool(sources):
                 yield "\n💡 لو تريد المصادر قل لي وأجيبك بها."
         except Exception as e:
             yield f"\n⚠️ عذراً صار خطأ: {str(e)}"
