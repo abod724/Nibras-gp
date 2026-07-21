@@ -279,7 +279,7 @@ micBtn.onclick = function(){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
     rec.lang = 'ar-SA';
-    rec.onresult = e => { userInput.value += e.results[0][0].transcript + ' '; userInput.focus(); };
+    rec.onresult = e => { userInput.value += e.results[0][0].transcript + ' '; };
     rec.onerror = ()=>alert('فشل التسجيل');
     rec.start();
     micBtn.style.color = '#005c99';
@@ -296,7 +296,6 @@ newChatBtn.onclick = ()=>{
 
 sendBtn.onclick = sendMessage;
 userInput.onkeydown = e => { if(e.key==='Enter') sendMessage(); };
-userInput.focus();
 
 document.addEventListener('touchmove', function(e){
     if (!e.target.closest('.chat-box')) e.preventDefault();
