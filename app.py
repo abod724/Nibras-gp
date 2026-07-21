@@ -125,27 +125,26 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     position:relative;
     overflow:hidden;
 }
-/* ✅ تحسين شكل الرأس والأزرار العلوية */
+/* ✅ شكل الرأس والأزرار بحجم أصغر وأنيق */
 .header{
-    height:58px;
-    min-height:58px;
+    height:54px;
+    min-height:54px;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:0 20px;
+    padding:0 18px;
     border-bottom:1px solid #f0f4f8;
     background:white;
     flex-shrink:0;
-    position:relative;
 }
 .header .icon-btn{
     background:transparent;
     border:none;
-    font-size:22px;
+    font-size:20px;
     color:#005c99;
     cursor:pointer;
-    padding:8px 12px;
-    border-radius:12px;
+    padding:6px 10px;
+    border-radius:10px;
     transition:all 0.2s ease;
     display:flex;
     align-items:center;
@@ -156,46 +155,46 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     transform:scale(1.05);
 }
 .header .icon-btn:active{transform:scale(0.97)}
-/* ✅ تحسين شكل القائمة المنسدلة */
+/* ✅ القائمة المنسدلة بشكل احترافي وأصغر حجماً */
 .dropdown{
     display:none;
     position:absolute;
-    top:66px;
-    left:16px;
+    top:62px;
+    left:14px;
     background:white;
-    border-radius:16px;
-    box-shadow:0 10px 35px rgba(0,92,153,0.12);
-    padding:8px 0;
-    width:220px;
+    border-radius:14px;
+    box-shadow:0 8px 28px rgba(0,92,153,0.10);
+    padding:6px 0;
+    width:200px;
     border:1px solid #e8edf5;
     z-index:99;
     transform-origin:top left;
     animation:dropdownFade 0.2s ease;
 }
 @keyframes dropdownFade{
-    from{opacity:0;transform:translateY(-8px) scale(0.96)}
+    from{opacity:0;transform:translateY(-6px) scale(0.97)}
     to{opacity:1;transform:translateY(0) scale(1)}
 }
 .dropdown.active{display:block}
 .dropdown .item{
-    padding:14px 24px;
-    font-size:15px;
+    padding:12px 20px;
+    font-size:14px;
     display:flex;
     align-items:center;
-    gap:14px;
+    gap:12px;
     cursor:pointer;
     color:#2d3748;
     transition:all 0.15s ease;
-    border-radius:8px;
-    margin:2px 8px;
+    border-radius:6px;
+    margin:2px 6px;
     font-weight:500;
 }
 .dropdown .item:hover{
     background:rgba(0,92,153,0.06);
     color:#005c99;
-    padding-right:28px;
+    padding-right:24px;
 }
-/* ✅ باقي العناصر كما هي مع تحسينات بسيطة */
+/* ✅ باقي العناصر كما هي بتحسينات أناقة فقط */
 .chat-box{
     flex:1 1 auto;
     min-height:0;
@@ -255,7 +254,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-/* ✅ تحسين شكل شريط الإدخال وزر الإضافة والإرسال */
 .input-bar{
     flex-shrink:0;
     background:white;
@@ -308,27 +306,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     background:rgba(0,92,153,0.08);
     color:#005c99;
 }
-/* ✅ زر الإضافة الجديد جنب مربع الكتابة */
-.new-chat-btn{
-    background:linear-gradient(135deg,#0077b6,#005c99);
-    color:white;
-    border:none;
-    border-radius:50%;
-    width:42px;height:42px;
-    font-size:18px;
-    cursor:pointer;
-    transition:all 0.2s ease;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-shrink:0;
-    box-shadow:0 2px 8px rgba(0,92,153,0.25);
-}
-.new-chat-btn:hover{
-    transform:scale(1.08);
-    box-shadow:0 4px 12px rgba(0,92,153,0.3);
-}
-.new-chat-btn:active{transform:scale(0.95)}
 .input-bar .send-btn{
     background:linear-gradient(135deg,#0077b6,#005c99);
     color:white;
@@ -361,16 +338,16 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
 ::-webkit-scrollbar-thumb:hover{background:#cbd5e1}
 @media(max-width:600px){
     .msg{font-size:14px}
-    .header .icon-btn{font-size:20px}
-    .dropdown .item{font-size:14px;padding:12px 20px}
+    .header .icon-btn{font-size:19px}
+    .dropdown .item{font-size:13px;padding:10px 18px}
 }
 </style>
 </head>
 <body>
 <div class="app">
     <div class="header">
-        <!-- ✅ ابقينا زر القائمة فقط في الأعلى بشكل أجمل -->
-        <div></div>
+        <!-- ✅ زر الزائد رجع مكانه فوق بحجم أصغر وأنيق -->
+        <button class="icon-btn" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
         <button class="icon-btn" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
@@ -383,8 +360,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
         <div class="msg bot">مرحباً! أنا نبراس، صديقك الذكي. كيف تشعر اليوم؟ 😊<span class="time">الآن</span></div>
     </div>
     <div class="input-bar">
-        <!-- ✅ زر المحادثة الجديدة الجديد هنا بشكل احترافي -->
-        <button class="new-chat-btn" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
         <div class="wrap">
             <button class="icon-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
             <button class="icon-btn" id="imageBtn"><i class="fa-regular fa-image"></i></button>
