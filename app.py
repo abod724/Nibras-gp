@@ -115,17 +115,17 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 .app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
 
-/* ✅ زر القائمة يسار */
-.header .icon-btn.left{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
-.header .icon-btn.left:hover{background:#f3f4f6}
+/* زر الزائد يسار - مقاس دقيق 20×20 */
+.header .icon-btn.left{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
+.header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
+.header .icon-btn.left:active{transform:scale(0.95)}
 
-/* ✅ زر الزائد يمين - مقاس 20×20 بالضبط */
-.header .icon-btn.right{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
-.header .icon-btn.right:hover{background:#f3f4f6;transform:scale(1.08)}
-.header .icon-btn.right:active{transform:scale(0.95)}
+/* زر القائمة يمين */
+.header .icon-btn.right{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
+.header .icon-btn.right:hover{background:#f3f4f6}
 
-/* ✅ القائمة تفتح أسفل اليسار */
-.dropdown{display:none;position:absolute;top:60px;left:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
+/* القائمة تفتح أسفل اليمين */
+.dropdown{display:none;position:absolute;top:60px;right:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
 @keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .dropdown.active{display:block}
 .dropdown .item{padding:8px 15px;font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#1f2937;transition:all 0.15s ease;margin:2px 5px;border-radius:6px}
@@ -160,17 +160,17 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 <body>
 <div class="app">
     <div class="header">
-        <button class="icon-btn left" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
-        <button class="icon-btn right" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
+        <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
+        <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
-            <div class="item" onclick="alert('🔍 البحث بالويب مفعل')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
+            <div class="item" onclick="alert('🔍 البحث بالويب مفعل عند الحاجة')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
             <div class="item" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> تحديث</div>
             <div class="item" onclick="alert('💬 مطور: أبو مشعل المطيري')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
         </div>
     </div>
     <div class="chat-box" id="chatBox">
-        <div class="msg bot">مرحباً! أنا نبراس، صديقك الذكي. كيف تشعر اليوم؟ 😊<span class="time">الآن</span></div>
+        <div class="msg bot">هلا وسهلا بك! أنا نبراس، جاهز لأجيبك بكل راحة. وش عندك اليوم؟ 😊<span class="time">الآن</span></div>
     </div>
     <div class="input-bar">
         <div class="wrap">
@@ -216,7 +216,7 @@ function hideTyping(){document.getElementById('typing')?.remove()}
 
 menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
 document.addEventListener('click',()=>{dropdown.classList.remove('active')});
-newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('مرحباً! أنا نبراس، صديقك الذكي. كيف تشعر اليوم؟ 😊')});
+newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('هلا وسهلا! أنا نبراس، وش أخبارك اليوم؟ 😊')});
 
 sendBtn.addEventListener('click',async ()=>{
     const text = userInput.value.trim();
@@ -268,7 +268,7 @@ def chat():
     if user_msg and user_asks_for_sources(user_msg):
         last_sources = session.get("last_sources", [])
         last_search = session.get("last_had_search", False)
-        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else "المعلومة لم تحتاج للبحث 😊"
+        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else "المعلومة دي ما احتجت بحث من النت، معلوماتي عنها جاهزة 😊"
         for i,s in enumerate(last_sources,1): reply += f"{i}. {s['title']}\n{s['url']}\n\n"
         return jsonify({"reply": reply.strip()})
 
@@ -277,9 +277,15 @@ def chat():
     session["last_sources"] = sources
     session["last_had_search"] = FORCE_WEB_SEARCH or bool(sources)
 
-    system_prompt = f"""أنت نبراس، أجب بأسلوب عربي ودود وطبيعي. اليوم {get_real_date()}.
-{('معلومات محدثة:\n'+search_text) if search_text else ''}
-لا تذكر أنك ذكاء اصطناعي ولا تضع روابط في الرد الرئيسي. أجب مباشرة وفي النهاية اسأل سؤال مرتبط بالموضوع."""
+    system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
+🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء واضحة**، طبيعية جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
+🔹 اجعل حديثك متفاعل، واختم إجابتك دائماً بسؤال أو خيار لكي تكمل الحديث معه.
+🔹 إذا كان السؤال يحتاج معلومات حديثة، أخبار، أسعار، مواعيد، نتائج، أو أي شيء يتغير بسرعة: استخدم نتائج البحث التي جلبتها لك.
+🔹 وإذا كان السؤال معلومات عامة أو حديث عادي: لا تبحث وتكلم من معلوماتك مع الحفاظ على نفس اللهجة والتفاعل.
+🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في الإجابة الرئيسية.
+🔹 تاريخ اليوم: {get_real_date()}
+{('🔹 معلومات حديثة جلبتها لك:\n'+search_text) if search_text else ''}
+"""
 
     try:
         if images:
@@ -289,27 +295,27 @@ def chat():
                 model="gpt-4o-mini",
                 messages=[
                     {"role":"system","content":system_prompt},
-                    {"role":"user","content":[{"type":"text","text":user_msg or "صف الصورة"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
+                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي وقول وش فيها"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
                 ],
                 max_tokens=900,
-                temperature=0.7
+                temperature=0.8
             )
         else:
             res = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role":"system","content":system_prompt},
-                    {"role":"user","content":user_msg or "مرحباً"}
+                    {"role":"user","content":user_msg or "هلا نبراس"}
                 ],
                 max_tokens=900,
-                temperature=0.7
+                temperature=0.8
             )
         reply = clean_reply_from_links(res.choices[0].message.content.strip())
         if session.get("last_had_search"):
-            reply += "\n\n💡 إذا أردت المصادر قل لي وأعطيك إياها."
+            reply += "\n💡 لو تريد المصادر قل لي وأجيبك بها."
         return jsonify({"reply": reply})
     except Exception as e:
-        return jsonify({"reply": f"⚠️ خطأ: {str(e)}"})
+        return jsonify({"reply": f"⚠️ عذراً صار خطأ: {str(e)}"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
