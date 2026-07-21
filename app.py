@@ -106,20 +106,37 @@ HTML = """
 <head>
 <meta charset="UTF-8">
 <title>نبراس GT</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- ✅ الإصلاح رقم 1: عدلنا الـ viewport يدعم الشاشات الحديثة -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#f5f5fa;font-family:sans-serif}
-.app{height:100vh;max-width:750px;margin:0 auto;background:white;display:flex;flex-direction:column;box-shadow:0 0 30px rgba(0,0,0,0.04)}
-.header{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #eaeef3;background:white}
+/* ✅ الإصلاح رقم 2: غيرنا الطريقة القديمة اللي تقطع المحتوى */
+html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f5f5fa;font-family:sans-serif;overscroll-behavior:none}
+/* ✅ الإصلاح رقم 3: استخدمنا dvh بدل vh — هذا هو الحل السحري للموبايل */
+.app{
+    min-height:100vh; /* احتياط للمتصفحات القديمة جداً */
+    min-height:100dvh; /* الحل الحقيقي: يأخذ الارتفاع الفعلي بدون شريط المتصفح */
+    height:100dvh;
+    max-width:750px;
+    margin:0 auto;
+    background:white;
+    display:flex;
+    flex-direction:column;
+    box-shadow:0 0 30px rgba(0,0,0,0.04);
+    position:relative;
+    overflow:hidden;
+}
+.header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #eaeef3;background:white;flex-shrink:0}
 .header .icon-btn{background:none;border:none;font-size:24px;color:#005c99;cursor:pointer;padding:6px 10px;border-radius:50%;transition:0.15s}
 .header .icon-btn:hover{background:#e9f0fc}
 .dropdown{display:none;position:absolute;top:56px;left:20px;background:white;border-radius:14px;box-shadow:0 8px 30px rgba(0,60,130,0.1);padding:6px 0;width:200px;border:1px solid #e6edf5;z-index:99}
 .dropdown.active{display:block}
 .dropdown .item{padding:12px 22px;font-size:15px;display:flex;align-items:center;gap:12px;cursor:pointer;color:#1a2a3a;transition:0.15s;border-radius:6px;margin:2px 6px}
 .dropdown .item:hover{background:#f0f6ff;color:#005c99}
-.chat-box{flex:1;overflow-y:auto;padding:18px 16px;background:#f5f5fa;display:flex;flex-direction:column;gap:10px}
+/* ✅ الإصلاح رقم 4: تأكدنا أن صندوق الدردشة يأخذ المساحة المتبقية فقط ولا يطول */
+.chat-box{flex:1 1 auto;min-height:0;overflow-y:auto;padding:18px 16px;background:#f5f5fa;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:78%;padding:10px 16px;border-radius:18px;font-size:15px;line-height:1.6;word-wrap:break-word;animation:fadeIn 0.25s}
 .msg.user{background:#005c99;color:white;align-self:flex-end;border-bottom-right-radius:6px}
 .msg.bot{background:white;align-self:flex-start;border-bottom-left-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
@@ -131,13 +148,14 @@ html,body{height:100%;overflow:hidden;background:#f5f5fa;font-family:sans-serif}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-.input-bar{background:white;padding:8px 14px 14px;border-top:1px solid #e0e8f0;display:flex;gap:8px;align-items:center}
+/* ✅ الإصلاح رقم 5: منعنا مربع الكتابة من الانكماش أو الاختفاء تحت أي ظرف */
+.input-bar{flex-shrink:0;background:white;padding:8px 14px max(14px, env(safe-area-inset-bottom));border-top:1px solid #e0e8f0;display:flex;gap:8px;align-items:center}
 .input-bar .wrap{flex:1;display:flex;align-items:center;background:#f3f5fa;border-radius:26px;padding:2px 10px;border:1px solid transparent;transition:0.2s}
 .input-bar .wrap:focus-within{border-color:#005c99;background:white}
 .input-bar .wrap input{flex:1;border:none;background:transparent;padding:10px 6px;font-size:15px;outline:none}
 .input-bar .wrap .icon-btn{background:none;border:none;font-size:18px;color:#5a6a7a;cursor:pointer;padding:4px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:0.15s}
 .input-bar .wrap .icon-btn:hover{background:#e5edf5;color:#005c99}
-.input-bar .send-btn{background:#005c99;color:white;border:none;border-radius:50%;width:40px;height:40px;font-size:17px;cursor:pointer;transition:0.15s;display:flex;align-items:center;justify-content:center}
+.input-bar .send-btn{background:#005c99;color:white;border:none;border-radius:50%;width:40px;height:40px;min-width:40px;min-height:40px;font-size:17px;cursor:pointer;transition:0.15s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .input-bar .send-btn:disabled{background:#b0b8c8}
 .chat-image{max-width:160px;border-radius:10px;margin-top:6px;border:1px solid #e0e0ec}
 ::-webkit-scrollbar{width:5px;background:#f0f0f5}
