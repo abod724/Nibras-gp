@@ -124,7 +124,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     position:relative;
     overflow:hidden;
 }
-/* ✅ شريط الرأس بالتصميم الاحترافي المطلوب */
 .header{
     height:60px;
     min-height:60px;
@@ -135,15 +134,15 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:#ffffff;
     flex-shrink:0;
 }
-/* ✅ زر الإضافة دائري بنفس الشكل بالضبط */
+/* ✅ زر الزائد بالحجم الجديد 32×32 */
 .header .icon-btn.left{
-    width:36px;
-    height:36px;
+    width:32px;
+    height:32px;
     border-radius:50%;
     border:1.5px solid #111827;
     background:transparent;
     color:#111827;
-    font-size:18px;
+    font-size:16px;
     cursor:pointer;
     display:flex;
     align-items:center;
@@ -155,14 +154,14 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     transform:scale(1.08);
 }
 .header .icon-btn.left:active{transform:scale(0.95)}
-/* ✅ زر القائمة بنفس الخطوط النظيفة */
+/* ✅ زر القائمة بنفس الحجم المتناسق */
 .header .icon-btn.right{
-    width:36px;
-    height:36px;
+    width:32px;
+    height:32px;
     border:none;
     background:transparent;
     color:#111827;
-    font-size:22px;
+    font-size:20px;
     cursor:pointer;
     display:flex;
     align-items:center;
@@ -171,18 +170,18 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:8px;
 }
 .header .icon-btn.right:hover{background:#f3f4f6}
-/* ✅ القائمة المنسدلة أنيقة ومتوازنة */
+/* ✅ القائمة بدون إطار ظاهر، وحجمها أصغر ونظيفة */
 .dropdown{
     display:none;
     position:absolute;
     top:68px;
     left:20px;
     background:#ffffff;
-    border-radius:18px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.12);
-    padding:10px 0;
-    width:220px;
-    border:1px solid #e5e7eb;
+    border-radius:16px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.08);
+    padding:8px 0;
+    width:200px;
+    border:none;
     z-index:99;
     animation:dropShow 0.2s ease;
 }
@@ -192,16 +191,16 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 }
 .dropdown.active{display:block}
 .dropdown .item{
-    padding:14px 24px;
-    font-size:15px;
+    padding:12px 22px;
+    font-size:14px;
     display:flex;
     align-items:center;
-    gap:14px;
+    gap:12px;
     cursor:pointer;
     color:#1f2937;
     transition:all 0.15s ease;
-    margin:2px 10px;
-    border-radius:10px;
+    margin:2px 8px;
+    border-radius:8px;
 }
 .dropdown .item:hover{
     background:#f9fafb;
@@ -236,7 +235,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     background:white;
     align-self:flex-start;
     border-bottom-left-radius:6px;
-    border:1px solid #e5e7eb;
 }
 .msg .time{
     font-size:10px;
@@ -254,7 +252,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     border-radius:20px;
     border-bottom-left-radius:6px;
     align-self:flex-start;
-    border:1px solid #e5e7eb;
 }
 .typing span{
     width:8px;height:8px;
@@ -337,7 +334,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
     max-width:160px;
     border-radius:12px;
     margin-top:6px;
-    border:1px solid #e5e7eb;
 }
 ::-webkit-scrollbar{width:5px;background:transparent}
 ::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:10px}
@@ -346,9 +342,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 <body>
 <div class="app">
     <div class="header">
-        <!-- ✅ زر الإضافة الدائري بالشكل بالضبط -->
         <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
-        <!-- ✅ زر القائمة بالخطوط النظيفة -->
         <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
