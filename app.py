@@ -125,76 +125,77 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
     position:relative;
     overflow:hidden;
 }
-/* ✅ شكل الرأس والأزرار بحجم أصغر وأنيق */
 .header{
-    height:54px;
-    min-height:54px;
+    height:56px;
+    min-height:56px;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:0 18px;
+    padding:0 20px;
     border-bottom:1px solid #f0f4f8;
     background:white;
     flex-shrink:0;
 }
+/* ✅ زر القائمة دائري بالكامل بنفس الشكل المطلوب */
 .header .icon-btn{
     background:transparent;
     border:none;
     font-size:20px;
-    color:#005c99;
+    color:#334155;
     cursor:pointer;
-    padding:6px 10px;
-    border-radius:10px;
+    width:40px;
+    height:40px;
+    border-radius:50%;
     transition:all 0.2s ease;
     display:flex;
     align-items:center;
     justify-content:center;
+    border:1px solid transparent;
 }
 .header .icon-btn:hover{
-    background:rgba(0,92,153,0.08);
+    background:#f3f4f6;
     transform:scale(1.05);
 }
-.header .icon-btn:active{transform:scale(0.97)}
-/* ✅ القائمة المنسدلة بشكل احترافي وأصغر حجماً */
+.header .icon-btn:active{transform:scale(0.96)}
+/* ✅ القائمة المنسدلة بحجم مناسب واحترافي */
 .dropdown{
     display:none;
     position:absolute;
-    top:62px;
-    left:14px;
+    top:64px;
+    left:16px;
     background:white;
-    border-radius:14px;
-    box-shadow:0 8px 28px rgba(0,92,153,0.10);
-    padding:6px 0;
-    width:200px;
-    border:1px solid #e8edf5;
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.08);
+    padding:8px 0;
+    width:210px;
+    border:1px solid #e5e7eb;
     z-index:99;
     transform-origin:top left;
     animation:dropdownFade 0.2s ease;
 }
 @keyframes dropdownFade{
-    from{opacity:0;transform:translateY(-6px) scale(0.97)}
+    from{opacity:0;transform:translateY(-8px) scale(0.97)}
     to{opacity:1;transform:translateY(0) scale(1)}
 }
 .dropdown.active{display:block}
 .dropdown .item{
-    padding:12px 20px;
-    font-size:14px;
+    padding:13px 22px;
+    font-size:15px;
     display:flex;
     align-items:center;
     gap:12px;
     cursor:pointer;
-    color:#2d3748;
+    color:#374151;
     transition:all 0.15s ease;
-    border-radius:6px;
-    margin:2px 6px;
+    border-radius:8px;
+    margin:2px 8px;
     font-weight:500;
 }
 .dropdown .item:hover{
-    background:rgba(0,92,153,0.06);
+    background:#f8fafc;
     color:#005c99;
-    padding-right:24px;
+    padding-right:26px;
 }
-/* ✅ باقي العناصر كما هي بتحسينات أناقة فقط */
 .chat-box{
     flex:1 1 auto;
     min-height:0;
@@ -339,15 +340,15 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f8f9fc;font-
 @media(max-width:600px){
     .msg{font-size:14px}
     .header .icon-btn{font-size:19px}
-    .dropdown .item{font-size:13px;padding:10px 18px}
+    .dropdown .item{font-size:14px;padding:12px 20px}
 }
 </style>
 </head>
 <body>
 <div class="app">
     <div class="header">
-        <!-- ✅ زر الزائد رجع مكانه فوق بحجم أصغر وأنيق -->
         <button class="icon-btn" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
+        <!-- ✅ زر القائمة الدائري بالشكل المطلوب -->
         <button class="icon-btn" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
