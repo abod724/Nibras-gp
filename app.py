@@ -138,11 +138,18 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 .msg .time{font-size:10px;color:#9ca3af;display:inline-block;margin-top:4px}
 .msg.user .time{color:rgba(255,255,255,0.7)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.typing{display:flex;gap:5px;background:white;padding:12px 18px;border-radius:20px;border-bottom-left-radius:6px;align-self:flex-start}
-.typing span{width:8px;height:8px;background:#d1d5db;border-radius:50%;animation:bounce 1.2s infinite}
+
+/* ✅ مؤشر الكتابة المتقطعة - مؤكد ومعدل ليعمل تماماً */
+.typing{display:flex;gap:6px;background:white;padding:14px 18px;border-radius:20px;border-bottom-left-radius:6px;align-self:flex-start;align-items:center}
+.typing span{width:9px;height:9px;background-color:#94a3b8;border-radius:50%;animation:typingBounce 1.4s infinite ease-in-out}
+.typing span:nth-child(1){animation-delay:0s}
 .typing span:nth-child(2){animation-delay:0.2s}
 .typing span:nth-child(3){animation-delay:0.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+@keyframes typingBounce{
+    0%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-7px); background-color:#0077b6; }
+}
+
 .input-bar{flex-shrink:0;background:white;padding:12px 18px max(18px, env(safe-area-inset-bottom));border-top:1px solid #f3f4f6;display:flex;gap:12px;align-items:center}
 .input-bar .wrap{flex:1;display:flex;align-items:center;background:#f9fafb;border-radius:30px;padding:6px 16px;border:1px solid transparent;transition:all 0.2s ease}
 .input-bar .wrap:focus-within{border-color:#005c99;background:white;box-shadow:0 0 0 3px rgba(0,92,153,0.06)}
@@ -166,7 +173,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
             <div class="item" onclick="alert('🔍 البحث بالويب مفعل عند الحاجة')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
             <div class="item" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> تحديث</div>
-            <div class="item" onclick="alert('💬 تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
+            <div class="item" onclick="alert('💬 تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة، وأنا هنا لمساعدتك')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
         </div>
     </div>
     <div class="chat-box" id="chatBox">
@@ -211,8 +218,20 @@ function appendUserMessage(text, images){
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
-function showTyping(){const d=document.createElement('div');d.className='typing';d.id='typing';d.innerHTML='<span></span><span></span><span></span>';chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
-function hideTyping(){document.getElementById('typing')?.remove()}
+
+/* ✅ دالة مؤشر الكتابة المتقطعة - مؤكدة وتعمل بسلاسة */
+function showTyping(){
+    const d=document.createElement('div');
+    d.className='typing';
+    d.id='typing';
+    d.innerHTML='<span></span><span></span><span></span>';
+    chatBox.appendChild(d);
+    chatBox.scrollTop=chatBox.scrollHeight;
+}
+function hideTyping(){
+    const el = document.getElementById('typing');
+    if(el) el.remove();
+}
 
 menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
 document.addEventListener('click',()=>{dropdown.classList.remove('active')});
@@ -259,7 +278,7 @@ def chat():
     user_msg = (data.get("message") or "").strip()
     images = data.get("images", [])
 
-    # ✅ تم تعديل الرد حسب طلبك
+    # الرد المعدل حسب طلبك
     if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج", "من صنعك", "من طورك"]):
         return jsonify({"reply": "تم تطويري وبرمجتي على يد مطورين ومبرمجين بالتقنية الحديثة، وأنا هنا لمساعدتك في كل ما تحتاج 😊"})
 
