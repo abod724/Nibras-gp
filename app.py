@@ -86,13 +86,25 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
         body {
             font-family: 'Segoe UI', Tahoma, sans-serif;
             background: #f7f7f8;
-            height: 100vh;
             display: flex;
             flex-direction: column;
         }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-height: 100vh;
+            overflow: hidden;
+        }
+
         .header {
             background: #ffffff;
             padding: 12px 24px;
@@ -102,6 +114,7 @@ HTML_TEMPLATE = """
             align-items: center;
             flex-shrink: 0;
         }
+
         .header .brand {
             display: flex;
             align-items: center;
@@ -129,6 +142,7 @@ HTML_TEMPLATE = """
         .header .actions button:hover {
             background: #f0f0f0;
         }
+
         .chat-box {
             flex: 1;
             overflow-y: auto;
@@ -137,7 +151,9 @@ HTML_TEMPLATE = """
             flex-direction: column;
             gap: 10px;
             background: #f7f7f8;
+            min-height: 0;
         }
+
         .msg {
             max-width: 75%;
             padding: 10px 16px;
@@ -167,10 +183,12 @@ HTML_TEMPLATE = """
             margin-top: 4px;
         }
         .msg.user .time { color: #aaa; }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
         .typing {
             align-self: flex-start;
             background: #ffffff;
@@ -194,6 +212,7 @@ HTML_TEMPLATE = """
             0%, 60%, 100% { transform: translateY(0); }
             30% { transform: translateY(-6px); }
         }
+
         .input-bar {
             background: #ffffff;
             padding: 12px 20px 20px;
@@ -202,7 +221,11 @@ HTML_TEMPLATE = """
             gap: 10px;
             align-items: center;
             flex-shrink: 0;
+            position: sticky;
+            bottom: 0;
+            z-index: 10;
         }
+
         .input-bar .wrap {
             flex: 1;
             display: flex;
@@ -229,6 +252,7 @@ HTML_TEMPLATE = """
         .input-bar .wrap input::placeholder {
             color: #999;
         }
+
         .input-bar .send-btn {
             background: #1a1a1a;
             color: white;
@@ -251,6 +275,7 @@ HTML_TEMPLATE = """
             background: #333;
             transform: scale(1.02);
         }
+
         @media (max-width: 600px) {
             .msg { font-size: 14px; max-width: 85%; }
             .input-bar { padding: 10px 12px 16px; }
@@ -258,33 +283,40 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="brand">
-            <i class="fa-regular fa-comment-dots"></i>
-            <h1>نبراس</h1>
+    <div class="app-container">
+        <div class="header">
+            <div class="brand">
+                <i class="fa-regular fa-comment-dots"></i>
+                <h1>نبراس</h1>
+            </div>
+            <div class="actions">
+                <button id="newChatBtn" title="محادثة جديدة"><i class="fa-regular fa-plus"></i></button>
+            </div>
         </div>
-        <div class="actions">
-            <button id="newChatBtn" title="محادثة جديدة"><i class="fa-regular fa-plus"></i></button>
+
+        <div class="chat-box" id="chatBox">
+            <div class="msg bot">مرحباً! أنا نبراس، كيف أساعدك؟ <span class="time">الآن</span></div>
+        </div>
+
+        <div class="input-bar">
+            <div class="wrap">
+                <input type="text" id="userInput" placeholder="اكتب سؤالك...">
+            </div>
+            <button class="send-btn" id="sendBtn"><i class="fa-regular fa-paper-plane"></i></button>
         </div>
     </div>
-    <div class="chat-box" id="chatBox">
-        <div class="msg bot">مرحباً! أنا نبراس، كيف أساعدك؟ <span class="time">الآن</span></div>
-    </div>
-    <div class="input-bar">
-        <div class="wrap">
-            <input type="text" id="userInput" placeholder="اكتب سؤالك...">
-        </div>
-        <button class="send-btn" id="sendBtn"><i class="fa-regular fa-paper-plane"></i></button>
-    </div>
+
     <script>
         const chatBox = document.getElementById('chatBox');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
         const newChatBtn = document.getElementById('newChatBtn');
         let sessionId = 'user_' + Date.now();
+
         function getTime() {
             return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
         }
+
         function appendMessage(role, text) {
             const div = document.createElement('div');
             div.className = `msg ${role}`;
@@ -292,6 +324,7 @@ HTML_TEMPLATE = """
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+
         function showTyping() {
             const div = document.createElement('div');
             div.className = 'typing';
@@ -300,17 +333,21 @@ HTML_TEMPLATE = """
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+
         function hideTyping() {
             const el = document.getElementById('typingIndicator');
             if (el) el.remove();
         }
+
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
+
             appendMessage('user', text);
             userInput.value = '';
             sendBtn.disabled = true;
             showTyping();
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -327,15 +364,18 @@ HTML_TEMPLATE = """
             sendBtn.disabled = false;
             userInput.focus();
         }
+
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
+
         newChatBtn.addEventListener('click', () => {
             chatBox.innerHTML = '';
             sessionId = 'user_' + Date.now();
             appendMessage('bot', 'مرحباً! أنا نبراس، كيف أساعدك؟');
         });
+
         userInput.focus();
     </script>
 </body>
