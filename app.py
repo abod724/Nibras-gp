@@ -18,6 +18,7 @@ if not API_KEY:
 
 client = OpenAI(api_key=API_KEY)
 
+# ========== قراءة ملف المعرفة تلقائياً ==========
 KNOWLEDGE_FILE = "knowledge.md"
 knowledge_content = ""
 if os.path.exists(KNOWLEDGE_FILE):
@@ -69,11 +70,14 @@ def user_asks_for_sources(prompt):
 def MUST_SEARCH(prompt):
     p = prompt.strip().lower()
     force_patterns = [
-        r"خبر|أخبار|حدث|وش صار|ايش صار|مستجدات|اخر الاخبار",
-        r"اليوم|هذا الأسبوع|هذا الشهر|الآن|حاليا|آخر|أحدث|جديد|مؤخرا",
+        r"خبر|أخبار|حدث|وش صار|ايش صار|مستجدات|اخر الاخبار|اللي صار|حاصل",
+        r"اليوم|هذا الأسبوع|هذا الشهر|الآن|حاليا|آخر|أحدث|جديد|مؤخرا|اللحظة",
         r"202[4-9]|203",
-        r"مباراة|نتيجة|دوري|كأس|المنتخب|فاز|خسر|ترتيب|سعر|طقس|حرارة|مطر",
-        r"موعد|نتيجة اختبار|قرار جديد|قانون جديد",
+        r"مباراة|نتيجة|دوري|كأس|المنتخب|فاز|خسر|ترتيب|جدول|بطولة",
+        r"سعر|كم يساوي|سوق|ذهب|نفط|عملة|ارتفاع|انخفاض|أسعار",
+        r"طقس|حرارة|مطر|رياح|حالة الجو|غبار",
+        r"موعد|متى|وقت|تاريخ قادم|حدث جديد",
+        r"ابحث|شوف لي|قل لي وش صار|وش الجديد|أريد أعرف|معلومات عن",
     ]
     for pat in force_patterns:
         if re.search(pat, p):
@@ -84,8 +88,7 @@ def search_web(query):
     sources = []
     text = ""
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=3))
+        results = DDGS().text(query, max_results=3)
         if not results:
             return "", []
         sources = [{"title": r.get('title',''), "url": r.get('href',''), "body": r.get('body','')} for r in results]
@@ -169,6 +172,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
         <button class="send-btn" id="sendBtn"><i class="fa-regular fa-paper-plane"></i></button>
     </div>
 </div>
+
 <script>
 const chatBox = document.getElementById('chatBox');
 const userInput = document.getElementById('userInput');
@@ -179,14 +183,54 @@ const fileInput = document.getElementById('fileInput');
 const menuBtn = document.getElementById('menuBtn');
 const dropdown = document.getElementById('dropdownMenu');
 const newChatBtn = document.getElementById('newChatBtn');
+
 let pendingImages = [];
 function getTime(){return new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}
+
+// ========== نظام الصوت الكامل: استماع + رد بصوت ==========
+const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+recognition.lang = 'ar-SA';
+recognition.continuous = false;
+recognition.interimResults = false;
+
+function نبراس_يتكلم(النص) {
+    window.speechSynthesis.cancel();
+    const صوت = new SpeechSynthesisUtterance(النص);
+    صوت.lang = 'ar-SA';
+    صوت.rate = 1.05;
+    صوت.pitch = 1.0;
+    const الاصوات = window.speechSynthesis.getVoices();
+    const صوت_عربي = الاصوات.find(v => v.lang.startsWith('ar')) || الاصوات[0];
+    if(صوت_عربي) صوت.voice = صوت_عربي;
+    window.speechSynthesis.speak(صوت);
+}
+window.speechSynthesis.onvoiceschanged = () => {};
+
+micBtn.addEventListener('click', () => {
+    window.speechSynthesis.cancel();
+    recognition.start();
+    micBtn.style.color = '#0077b6';
+});
+recognition.onresult = (event) => {
+    const نص = event.results[0][0].transcript;
+    userInput.value = نص;
+    micBtn.style.color = '#6b7280';
+    sendBtn.click();
+};
+recognition.onend = () => micBtn.style.color = '#6b7280';
+recognition.onerror = () => {
+    micBtn.style.color = '#6b7280';
+    alert('تأكد من السماح للميكروفون');
+};
+
 function appendBotMessage(text, images){
     const div = document.createElement('div');
     div.className = 'msg bot';
     div.innerHTML = text + (images&&images.length?images.map(s=>`<br><img class="chat-image" src="${s}">`).join(''):'') + ` <span class="time">${getTime()}</span>`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
+    // ينطق الرد تلقائياً
+    نبراس_يتكلم(text);
 }
 function appendUserMessage(text, images){
     const div = document.createElement('div');
@@ -197,9 +241,11 @@ function appendUserMessage(text, images){
 }
 function showTyping(){const d=document.createElement('div');d.className='typing';d.id='typing';d.innerHTML='<span></span><span></span><span></span>';chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
 function hideTyping(){document.getElementById('typing')?.remove()}
+
 menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
 document.addEventListener('click',()=>{dropdown.classList.remove('active')});
 newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('هلا وسهلا! أنا نبراس، وش أخبارك اليوم؟ 😊')});
+
 sendBtn.addEventListener('click',async ()=>{
     const text = userInput.value.trim();
     if(!text && !pendingImages.length) return;
@@ -224,7 +270,6 @@ fileInput.addEventListener('change',e=>{
         const r=new FileReader();r.onload=ev=>pendingImages.push(ev.target.result);r.readAsDataURL(f);
     });
 });
-micBtn.addEventListener('click',()=>alert('🎤 خاصية الصوت قيد التجهيز'));
 </script>
 </body>
 </html>
@@ -262,10 +307,12 @@ def chat():
     # ========== نظام التعليمات الجديد بالكامل ==========
     system_prompt = f"""أنت نبراس، صديقك ومساعدك المصمم خصيصاً لك.
 🔹 تحدث دائماً بلهجة سعودية عامية بيضاء وواضحة، كلام طبيعي جداً كأنك تتكلم مع أخ أو صديق مقرب، لا لغة رسمية ولا كلام معقد.
+🔹 استخدم المعلومات الموجودة في ملف المعرفة أول شيء وأولوية، واجعلها أساس إجاباتك إذا كانت مرتبطة بالسؤال.
 🔹 افهم سياق الحديث بنفسك تماماً: إذا كان السؤال عن أخبار حديثة، نتائج، أسعار، طقس، مواعيد، أو أي شيء يتغير بسرعة – استخدم معلومات البحث المتاحة لك تلقائياً ولا تسألني. وإلا تكلم من عندك بطبيعتك.
 🔹 لا تذكر أبداً أنك تبحث ولا تظهر روابط في ردك، إلا لو سألتني عنها بنفسي.
 🔹 اجعل حديثك ودياً ومتفاعلاً: اختم كل رد بسؤال أو خيار لكي نكمل الحديث سوياً.
 🔹 تاريخ اليوم: {get_real_date()}
+{('🔹 معلومات خاصة من ملف المعرفة:\n'+knowledge_content) if knowledge_content else ''}
 {('🔹 معلومات حديثة:\n'+search_text) if search_text else ''}
 """
 
@@ -277,7 +324,7 @@ def chat():
                 model="gpt-4o-mini",
                 messages=[
                     {"role":"system","content":system_prompt},
-                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
+                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي وقول وش فيها"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
                 ],
                 max_tokens=900,
                 temperature=0.8
