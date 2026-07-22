@@ -48,142 +48,144 @@ def get_date():
 # ─── ذاكرة المحادثة ───
 chat_sessions = {}
 
-# ─── الواجهة الجديدة المحدثة ───
+# ─── الواجهة البيضاء الجديدة بالمقاسات المضبوطة ───
 HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>نبراس</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
         body {
-            background: #050816;
-            color: #ffffff;
+            background-color: #f8f9fa;
+            color: #212529;
             display: flex;
             flex-direction: column;
             height: 100vh;
         }
 
-        .container {
-            padding: 16px;
-            flex: 1;
+        .header {
+            background: #ffffff;
+            padding: 12px 16px;
             display: flex;
-            flex-direction: column;
-            gap: 16px;
-            overflow-y: auto;
-        }
-
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e9ecef;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
-
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0d6efd;
+        }
         .new-chat-btn {
-            background: #0d6efd;
-            color: #fff;
+            background: #e7f1ff;
+            color: #0d6efd;
             border: none;
-            padding: 8px 16px;
-            border-radius: 999px;
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 13px;
             cursor: pointer;
             transition: 0.2s;
         }
-        .new-chat-btn:hover { background: #0b5ed7; }
+        .new-chat-btn:hover { background: #0d6efd; color: white; }
 
-        .chat-box {
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 10px;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            margin-bottom: 8px;
         }
 
         .msg {
-            padding: 12px 16px;
+            padding: 10px 14px;
             border-radius: 16px;
-            max-width: 82%;
+            max-width: 80%;
             font-size: 14px;
-            line-height: 1.7;
+            line-height: 1.6;
             word-wrap: break-word;
         }
         .msg.user {
             background: #0d6efd;
-            color: #fff;
+            color: white;
             align-self: flex-end;
             border-bottom-right-radius: 4px;
         }
         .msg.bot {
-            background: #111827;
-            color: #e5e7eb;
+            background: #ffffff;
+            color: #212529;
             align-self: flex-start;
             border-bottom-left-radius: 4px;
-            border: 1px solid #1f2937;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
-        .msg .time {
+        .time {
             font-size: 10px;
-            color: #9ca3af;
-            display: block;
             margin-top: 4px;
+            display: block;
+            opacity: 0.6;
         }
 
         .typing {
             align-self: flex-start;
-            background: #111827;
-            padding: 12px 16px;
+            background: white;
+            padding: 10px 14px;
             border-radius: 16px;
             border-bottom-left-radius: 4px;
+            border: 1px solid #e9ecef;
             display: flex;
-            gap: 5px;
-            border: 1px solid #1f2937;
+            gap: 4px;
         }
         .typing span {
-            width: 8px; height: 8px;
-            background: #9ca3af;
+            width: 7px; height: 7px;
+            background: #adb5bd;
             border-radius: 50%;
-            animation: pulse 1.2s infinite;
+            animation: bounce 1.2s infinite;
         }
         .typing span:nth-child(2) { animation-delay: 0.2s; }
         .typing span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes pulse {
-            0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
-            30% { transform: translateY(-5px); opacity: 1; }
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
         }
 
-        .input-bar {
-            padding: 12px 16px;
-            border-top: 1px solid #1f2937;
-            background: #050816;
+        .input-area {
+            background: white;
+            padding: 10px 12px 14px;
+            border-top: 1px solid #e9ecef;
         }
-
-        .input-wrapper {
+        .input-wrap {
             display: flex;
             align-items: center;
-            gap: 10px;
-            background: #111827;
-            border-radius: 999px;
-            padding: 10px 16px;
-            border: 1px solid #1f2937;
+            gap: 8px;
+            background: #f8f9fa;
+            border-radius: 24px;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
         }
-
-        .input-wrapper input {
+        .input-wrap input {
             flex: 1;
+            border: none;
             background: transparent;
-            border: none;
-            outline: none;
-            color: #fff;
+            padding: 6px;
             font-size: 14px;
+            outline: none;
+            color: #212529;
         }
-        .input-wrapper input::placeholder { color: #6b7280; }
+        .input-wrap input::placeholder { color: #adb5bd; }
 
-        .send-btn {
-            background: #0d6efd;
-            border: none;
+        .icon-btn {
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
-            width: 34px;
-            height: 34px;
-            color: #fff;
+            border: none;
+            background: transparent;
+            color: #6c757d;
             font-size: 15px;
             cursor: pointer;
             display: flex;
@@ -191,31 +193,49 @@ HTML = """
             justify-content: center;
             transition: 0.2s;
         }
+        .icon-btn:hover { background: #e9ecef; color: #0d6efd; }
+
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: #0d6efd;
+            color: white;
+            font-size: 15px;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .send-btn:hover { transform: scale(1.05); }
-        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .send-btn:disabled { background: #adb5bd; cursor: not-allowed; }
 
         @media (max-width: 480px) {
             .msg { max-width: 88%; font-size: 13px; }
+            .header { padding: 10px 12px; }
+            .input-area { padding: 8px 10px 12px; }
         }
     </style>
 </head>
 <body>
 
-<div class="container" id="container">
-    <div class="top-bar">
-        <div></div>
-        <button class="new-chat-btn" id="newChatBtn">محادثة جديدة +</button>
-    </div>
-
-    <div class="chat-box" id="chatBox">
-        <div class="msg bot">هلا وسهلا بك! أنا نبراس، جاهز لأخدمك. وش أخبارك اليوم؟ 😊 <span class="time">الآن</span></div>
-    </div>
+<div class="header">
+    <h1>💬 نبراس</h1>
+    <button class="new-chat-btn" id="newChatBtn">محادثة جديدة</button>
 </div>
 
-<div class="input-bar">
-    <div class="input-wrapper">
+<div class="chat-container" id="chatBox">
+    <div class="msg bot">هلا وسهلا بك! أنا نبراس، جاهز لأخدمك. وش أخبارك اليوم؟ 😊 <span class="time">الآن</span></div>
+</div>
+
+<div class="input-area">
+    <div class="input-wrap">
+        <button class="icon-btn" id="imgBtn"><i class="fa-solid fa-image"></i></button>
+        <button class="icon-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
         <input type="text" id="userInput" placeholder="اكتب سؤالك هنا...">
-        <button class="send-btn" id="sendBtn">➤</button>
+        <button class="send-btn" id="sendBtn"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
 </div>
 
@@ -224,11 +244,21 @@ HTML = """
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
     const newChatBtn = document.getElementById('newChatBtn');
+    const micBtn = document.getElementById('micBtn');
+    const imgBtn = document.getElementById('imgBtn');
     let sessionId = 'user_' + Date.now();
 
     function getTime() {
         return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
     }
+
+    // التعرف على الصوت
+    const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    rec.lang = 'ar-SA';
+    rec.continuous = false;
+    micBtn.onclick = () => { rec.start(); micBtn.style.color='#0d6efd'; };
+    rec.onresult = e => { userInput.value = e.results[0][0].transcript; micBtn.style.color='#6c757d'; sendBtn.click(); };
+    rec.onend = () => micBtn.style.color='#6c757d';
 
     function appendMessage(role, text) {
         const div = document.createElement('div');
@@ -287,6 +317,10 @@ HTML = """
         chatBox.innerHTML = '';
         sessionId = 'user_' + Date.now();
         appendMessage('bot', 'هلا وسهلا! وش أخبارك اليوم؟');
+    });
+
+    imgBtn.addEventListener('click', () => {
+        alert('📸 خاصية رفع الصور قيد التطوير قريباً بإذن الله');
     });
 
     userInput.focus();
