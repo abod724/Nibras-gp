@@ -48,7 +48,7 @@ def get_date():
 # ─── ذاكرة المحادثة ───
 chat_sessions = {}
 
-# ─── الواجهة الثابتة بالقائمة المنسدلة ───
+# ─── الواجهة النهائية الثابتة تماماً ───
 HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -60,20 +60,19 @@ HTML = """
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
         html, body {
-            height: 100%;
-            overflow: hidden;
+            /* شلنا 100vh و overflow:hidden المسببة للمشكلة */
+            min-height: 100%;
             background-color: #f8f9fa;
             color: #212529;
         }
         body {
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100dvh; /* نستخدم dvh الجديدة التي تتعامل مع الجوال بشكل صحيح */
             position: fixed;
             width: 100%;
         }
 
-        /* شريط العنوان ثابت ولا يتحرك */
         .header {
             background: #ffffff;
             padding: 12px 16px;
@@ -83,11 +82,9 @@ HTML = """
             border-bottom: 1px solid #e9ecef;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
             flex-shrink: 0;
-            position: relative;
             z-index: 10;
         }
 
-        /* القائمة المنسدلة */
         .dropdown {
             position: relative;
             display: inline-block;
@@ -131,7 +128,6 @@ HTML = """
         .dropdown-content button:hover { background-color: #f8f9fa; color: #0d6efd; }
         .show { display: block; }
 
-        /* منطقة الدردشة ثابتة الارتفاع وتنزل فقط داخلها */
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -139,7 +135,6 @@ HTML = """
             display: flex;
             flex-direction: column;
             gap: 10px;
-            position: relative;
         }
 
         .msg {
@@ -196,13 +191,11 @@ HTML = """
             30% { transform: translateY(-4px); }
         }
 
-        /* شريط الادخال ثابت في الاسفل */
         .input-area {
             background: white;
             padding: 10px 12px 14px;
             border-top: 1px solid #e9ecef;
             flex-shrink: 0;
-            position: relative;
             z-index: 10;
         }
         .input-wrap {
@@ -303,7 +296,6 @@ HTML = """
     const dropdown = document.getElementById('myDropdown');
     let sessionId = 'user_' + Date.now();
 
-    // إغلاق القائمة إذا نقرت خارجها
     window.onclick = function(event) {
         if (!event.target.matches('#menuBtn')) {
             if (dropdown.classList.contains('show')) {
@@ -324,7 +316,6 @@ HTML = """
         return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
     }
 
-    // التعرف على الصوت
     const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
     rec.lang = 'ar-SA';
     rec.continuous = false;
@@ -376,10 +367,9 @@ HTML = """
             appendMessage('bot', '⚠️ تعذر الاتصال، جرب مرة أخرى');
         }
         sendBtn.disabled = false;
-        userInput.focus();
+        // ✅ شلنا userInput.focus() المسبب للارتجاع تماماً
     }
 
-    // الأحداث
     sendBtn.addEventListener('click', () => sendMessage(userInput.value));
     userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') sendMessage(userInput.value);
@@ -390,7 +380,7 @@ HTML = """
         alert('📸 خاصية رفع الصور قيد التطوير قريباً بإذن الله');
     });
 
-    userInput.focus();
+    // ✅ شلنا التركيز التلقائي عند فتح الصفحة
 </script>
 
 </body>
@@ -414,11 +404,9 @@ def chat():
         chat_sessions[session_id] = []
     chat_sessions[session_id].append({"role": "user", "content": user_msg})
 
-    # البحث الذكي
     search_keywords = ["أخبار", "حدث", "اليوم", "سعر", "طقس", "مباراة", "نتيجة", "جديد", "آخر"]
     search_context = search_web(user_msg) if any(kw in user_msg.lower() for kw in search_keywords) else ""
 
-    # التعليمات النهائية
     system_prompt = f"""أنت نبراس، صديق ومساعد سعودي.
 {NBRAS_KNOWLEDGE}
 التاريخ اليوم: {get_date()}.
