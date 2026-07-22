@@ -115,16 +115,13 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 .app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
 
-/* زر الزائد يسار - مقاس دقيق 20×20 */
 .header .icon-btn.left{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
 .header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
 .header .icon-btn.left:active{transform:scale(0.95)}
 
-/* زر القائمة يمين */
 .header .icon-btn.right{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
 .header .icon-btn.right:hover{background:#f3f4f6}
 
-/* القائمة تفتح أسفل اليمين */
 .dropdown{display:none;position:absolute;top:60px;right:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
 @keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .dropdown.active{display:block}
@@ -277,12 +274,12 @@ def chat():
     session["last_sources"] = sources
     session["last_had_search"] = FORCE_WEB_SEARCH or bool(sources)
 
+    # ========== التعليمات المعدلة بالكامل كما طلبت ==========
     system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
-🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء واضحة**، طبيعية جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
-🔹 اجعل حديثك متفاعل، واختم إجابتك دائماً بسؤال أو خيار لكي تكمل الحديث معه.
-🔹 إذا كان السؤال يحتاج معلومات حديثة، أخبار، أسعار، مواعيد، نتائج، أو أي شيء يتغير بسرعة: استخدم نتائج البحث التي جلبتها لك.
-🔹 وإذا كان السؤال معلومات عامة أو حديث عادي: لا تبحث وتكلم من معلوماتك مع الحفاظ على نفس اللهجة والتفاعل.
-🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في الإجابة الرئيسية.
+🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء وواضحة**، كلام طبيعي جداً كأنك تتكلم مع أخ أو صديق مقرب، لا تستخدم لغة رسمية ولا مصطلحات صعبة ولا كلام جامد.
+🔹 **التفاعل أهم شيء**: اجعل إجابتك ودية، واختمها دائماً بسؤال أو خيار لكي تكمل الحديث معه، مثلاً: "وش رأيك؟"، "تبي أشرح لك أكثر؟"، "نحكي عن موضوع ثاني؟"، "أي خيار يعجبك أكثر؟".
+🔹 **البحث الذكي**: إذا كان السؤال عن أخبار حديثة، نتائج مباريات، أسعار، طقس، مواعيد، أو أي شيء يتغير بسرعة: استخدم المعلومات اللي جلبتها لك من البحث. وإذا كان سؤال عادي أو معلومات عامة أو حديث شخصي: لا تحتاج بحث، وتكلم بطبيعتك.
+🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في الإجابة، وإذا سألك عنها بنفسه تعطيه إياها.
 🔹 تاريخ اليوم: {get_real_date()}
 {('🔹 معلومات حديثة جلبتها لك:\n'+search_text) if search_text else ''}
 """
