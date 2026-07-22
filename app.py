@@ -48,7 +48,7 @@ def get_date():
 # ─── ذاكرة المحادثة ───
 chat_sessions = {}
 
-# ─── الواجهة البيضاء الجديدة بالمقاسات المضبوطة ───
+# ─── الواجهة الثابتة بالقائمة المنسدلة ───
 HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -59,14 +59,21 @@ HTML = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        body {
+        html, body {
+            height: 100%;
+            overflow: hidden;
             background-color: #f8f9fa;
             color: #212529;
+        }
+        body {
             display: flex;
             flex-direction: column;
             height: 100vh;
+            position: fixed;
+            width: 100%;
         }
 
+        /* شريط العنوان ثابت ولا يتحرك */
         .header {
             background: #ffffff;
             padding: 12px 16px;
@@ -75,13 +82,17 @@ HTML = """
             justify-content: space-between;
             border-bottom: 1px solid #e9ecef;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
         }
-        .header h1 {
-            font-size: 18px;
-            font-weight: 600;
-            color: #0d6efd;
+
+        /* القائمة المنسدلة */
+        .dropdown {
+            position: relative;
+            display: inline-block;
         }
-        .new-chat-btn {
+        .dropbtn {
             background: #e7f1ff;
             color: #0d6efd;
             border: none;
@@ -91,8 +102,36 @@ HTML = """
             cursor: pointer;
             transition: 0.2s;
         }
-        .new-chat-btn:hover { background: #0d6efd; color: white; }
+        .dropbtn:hover { background: #0d6efd; color: white; }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 160px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            margin-top: 8px;
+            overflow: hidden;
+            border: 1px solid #e9ecef;
+            z-index: 999;
+        }
+        .dropdown-content button {
+            color: #212529;
+            padding: 10px 16px;
+            text-decoration: none;
+            display: block;
+            width: 100%;
+            text-align: right;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .dropdown-content button:hover { background-color: #f8f9fa; color: #0d6efd; }
+        .show { display: block; }
 
+        /* منطقة الدردشة ثابتة الارتفاع وتنزل فقط داخلها */
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -100,6 +139,7 @@ HTML = """
             display: flex;
             flex-direction: column;
             gap: 10px;
+            position: relative;
         }
 
         .msg {
@@ -109,6 +149,7 @@ HTML = """
             font-size: 14px;
             line-height: 1.6;
             word-wrap: break-word;
+            flex-shrink: 0;
         }
         .msg.user {
             background: #0d6efd;
@@ -140,6 +181,7 @@ HTML = """
             border: 1px solid #e9ecef;
             display: flex;
             gap: 4px;
+            flex-shrink: 0;
         }
         .typing span {
             width: 7px; height: 7px;
@@ -154,10 +196,14 @@ HTML = """
             30% { transform: translateY(-4px); }
         }
 
+        /* شريط الادخال ثابت في الاسفل */
         .input-area {
             background: white;
             padding: 10px 12px 14px;
             border-top: 1px solid #e9ecef;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
         }
         .input-wrap {
             display: flex;
@@ -192,6 +238,7 @@ HTML = """
             align-items: center;
             justify-content: center;
             transition: 0.2s;
+            flex-shrink: 0;
         }
         .icon-btn:hover { background: #e9ecef; color: #0d6efd; }
 
@@ -208,6 +255,7 @@ HTML = """
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
         }
         .send-btn:hover { transform: scale(1.05); }
         .send-btn:disabled { background: #adb5bd; cursor: not-allowed; }
@@ -222,8 +270,14 @@ HTML = """
 <body>
 
 <div class="header">
-    <h1>💬 نبراس</h1>
-    <button class="new-chat-btn" id="newChatBtn">محادثة جديدة</button>
+    <button class="dropbtn" id="newChatBtn">محادثة جديدة</button>
+    <div class="dropdown">
+        <button class="dropbtn" id="menuBtn"><i class="fa-solid fa-bars"></i> خيارات</button>
+        <div class="dropdown-content" id="myDropdown">
+            <button onclick="resetChat()">🔄 محادثة جديدة</button>
+            <button onclick="alert('⚙️ الإعدادات قيد التطوير')">⚙️ الإعدادات</button>
+        </div>
+    </div>
 </div>
 
 <div class="chat-container" id="chatBox">
@@ -243,10 +297,28 @@ HTML = """
     const chatBox = document.getElementById('chatBox');
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
-    const newChatBtn = document.getElementById('newChatBtn');
     const micBtn = document.getElementById('micBtn');
     const imgBtn = document.getElementById('imgBtn');
+    const menuBtn = document.getElementById('menuBtn');
+    const dropdown = document.getElementById('myDropdown');
     let sessionId = 'user_' + Date.now();
+
+    // إغلاق القائمة إذا نقرت خارجها
+    window.onclick = function(event) {
+        if (!event.target.matches('#menuBtn')) {
+            if (dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+            }
+        }
+    }
+    menuBtn.onclick = (e) => { e.stopPropagation(); dropdown.classList.toggle('show'); };
+
+    function resetChat() {
+        dropdown.classList.remove('show');
+        chatBox.innerHTML = '';
+        sessionId = 'user_' + Date.now();
+        appendMessage('bot', 'هلا وسهلا! وش أخبارك اليوم؟');
+    }
 
     function getTime() {
         return new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
@@ -312,12 +384,7 @@ HTML = """
     userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') sendMessage(userInput.value);
     });
-
-    newChatBtn.addEventListener('click', () => {
-        chatBox.innerHTML = '';
-        sessionId = 'user_' + Date.now();
-        appendMessage('bot', 'هلا وسهلا! وش أخبارك اليوم؟');
-    });
+    document.getElementById('newChatBtn').addEventListener('click', resetChat);
 
     imgBtn.addEventListener('click', () => {
         alert('📸 خاصية رفع الصور قيد التطوير قريباً بإذن الله');
