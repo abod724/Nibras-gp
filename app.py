@@ -57,7 +57,6 @@ def is_pure_date_question(prompt):
 def user_asks_for_sources(prompt):
     p = prompt.strip().lower()
     patterns = [
-        r"نعم", r"ايه", r"اي", r"أيوا", r"أيوه", r"ابغاها", r"اريدها",
         r"المصدر", r"المصادر", r"الروابط", r"الرابط",
         r"عطني المصدر", r"وريني المصدر", r"من وين جبتها", r"من أين جبت هذا",
         r"المرجع", r"المراجع", r"الموقع", r"أظهر لي المصدر",
@@ -70,16 +69,11 @@ def user_asks_for_sources(prompt):
 def MUST_SEARCH(prompt):
     p = prompt.strip().lower()
     force_patterns = [
-        r"خبر|أخبار|حدث|ماذا حدث|وش صار|ايش صار|اللي صار|حادث|كارثة|إطلاق|تصريح|بيان|عاجل|مستجد|مستجدات|اخر الاخبار|اخر المستجدات",
-        r"اليوم|هذا الأسبوع|هذا الشهر|هذه السنة|الآن|حاليا|حالي|آخر|أحدث|جديد|مؤخرا|اللحظة|لحظي|هسا|هذه الايام",
+        r"خبر|أخبار|حدث|وش صار|ايش صار|مستجدات|اخر الاخبار",
+        r"اليوم|هذا الأسبوع|هذا الشهر|الآن|حاليا|آخر|أحدث|جديد|مؤخرا",
         r"202[4-9]|203",
-        r"حرب|هجوم|قصف|اغتيال|انقلاب|ثورة|علاقات بين|مؤتمر|قمة|اتفاقية|عقوبات|تصعيد|هدنة|سياسي|وزير|رئيس|ملك|أمير|برلمان|حكومة|دولة|وزارة|نظام",
-        r"مباراة|نتيجة|جدول|دوري|كأس|أبطال|المنتخب|لعب|فاز|خسر|بطولة|كأس العالم|الاندية|الشوط|هدف|ترتيب|موسم|القائميه|المقانيص",
-        r"سعر|سعر اليوم|كم يساوي|كم قيمة|سوق|أسهم|عملة|صرف|ذهب|نفط|بتكوين|عملات|أسعار|تضخم|بنك مركزي|ارتفاع|انخفاض",
-        r"طقس|حرارة|درجة الحرارة|مطر|رياح|حالة الطقس|اعصار|غبار|رطوبة",
-        r"فلم جديد|مسلسل جديد|موعد عرض|حلقة جديدة|مسلسل|فلم|حفل|مهرجان",
-        r"موعد اختبار|موعد تسجيل|شروط القبول|تقديرات|نتائج الاختبارات|قبول|تسجيل|قرار جديد|قانون جديد|نظام جديد",
-        r"ابحث لي|ابحث في|ابحث|تفقد لي|شوف لي|أريد معلومات عن|هل يوجد|تأكد لي|دقق لي|تحقق لي|فحص لي",
+        r"مباراة|نتيجة|دوري|كأس|المنتخب|فاز|خسر|ترتيب|سعر|طقس|حرارة|مطر",
+        r"موعد|نتيجة اختبار|قرار جديد|قانون جديد",
     ]
     for pat in force_patterns:
         if re.search(pat, p):
@@ -114,20 +108,16 @@ HTML = """
 html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
 .app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
-
 .header .icon-btn.left{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
 .header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
 .header .icon-btn.left:active{transform:scale(0.95)}
-
 .header .icon-btn.right{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
 .header .icon-btn.right:hover{background:#f3f4f6}
-
 .dropdown{display:none;position:absolute;top:60px;right:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
 @keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .dropdown.active{display:block}
 .dropdown .item{padding:8px 15px;font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#1f2937;transition:all 0.15s ease;margin:2px 5px;border-radius:6px}
 .dropdown .item:hover{background:#f9fafb;color:#005c99}
-
 .chat-box{flex:1 1 auto;min-height:0;overflow-y:auto;padding:24px 18px;background:#f9fafb;display:flex;flex-direction:column;gap:14px}
 .msg{max-width:78%;padding:12px 18px;border-radius:20px;font-size:15px;line-height:1.7;word-wrap:break-word;animation:fadeIn 0.25s ease}
 .msg.user{background:linear-gradient(135deg,#0077b6,#005c99);color:white;align-self:flex-end;border-bottom-right-radius:6px}
@@ -146,7 +136,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
 .input-bar .wrap input{flex:1;border:none;background:transparent;padding:10px 8px;font-size:15px;outline:none;color:#111827}
 .input-bar .wrap input::placeholder{color:#9ca3af}
 .input-bar .wrap .icon-btn{background:none;border:none;font-size:18px;color:#6b7280;cursor:pointer;padding:6px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease}
-.input-bar .wrap .icon-btn:hover{background:rgba(0,92,153,0.08);color:#005c99}
+.input-bar .wrap .icon-btn:hover{background:rgba(0,92,153,0.08);color:#0077b6}
 .input-bar .send-btn{background:linear-gradient(135deg,#0077b6,#005c99);color:white;border:none;border-radius:50%;width:42px;height:42px;min-width:42px;min-height:42px;font-size:18px;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,92,153,0.2)}
 .input-bar .send-btn:disabled{background:#d1d5db;box-shadow:none}
 .chat-image{max-width:160px;border-radius:12px;margin-top:6px}
@@ -161,7 +151,7 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
         <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
         <div class="dropdown" id="dropdownMenu">
             <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
-            <div class="item" onclick="alert('🔍 البحث بالويب مفعل عند الحاجة')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
+            <div class="item" onclick="alert('🔍 البحث يعمل تلقائياً حسب الحاجة')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
             <div class="item" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> تحديث</div>
             <div class="item" onclick="alert('💬 مطور: أبو مشعل المطيري')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
         </div>
@@ -179,7 +169,6 @@ html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-fam
         <button class="send-btn" id="sendBtn"><i class="fa-regular fa-paper-plane"></i></button>
     </div>
 </div>
-
 <script>
 const chatBox = document.getElementById('chatBox');
 const userInput = document.getElementById('userInput');
@@ -190,10 +179,8 @@ const fileInput = document.getElementById('fileInput');
 const menuBtn = document.getElementById('menuBtn');
 const dropdown = document.getElementById('dropdownMenu');
 const newChatBtn = document.getElementById('newChatBtn');
-
 let pendingImages = [];
 function getTime(){return new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}
-
 function appendBotMessage(text, images){
     const div = document.createElement('div');
     div.className = 'msg bot';
@@ -210,11 +197,9 @@ function appendUserMessage(text, images){
 }
 function showTyping(){const d=document.createElement('div');d.className='typing';d.id='typing';d.innerHTML='<span></span><span></span><span></span>';chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
 function hideTyping(){document.getElementById('typing')?.remove()}
-
 menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
 document.addEventListener('click',()=>{dropdown.classList.remove('active')});
 newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('هلا وسهلا! أنا نبراس، وش أخبارك اليوم؟ 😊')});
-
 sendBtn.addEventListener('click',async ()=>{
     const text = userInput.value.trim();
     if(!text && !pendingImages.length) return;
@@ -274,14 +259,14 @@ def chat():
     session["last_sources"] = sources
     session["last_had_search"] = FORCE_WEB_SEARCH or bool(sources)
 
-    # ========== التعليمات المعدلة بالكامل كما طلبت ==========
-    system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
-🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء وواضحة**، كلام طبيعي جداً كأنك تتكلم مع أخ أو صديق مقرب، لا تستخدم لغة رسمية ولا مصطلحات صعبة ولا كلام جامد.
-🔹 **التفاعل أهم شيء**: اجعل إجابتك ودية، واختمها دائماً بسؤال أو خيار لكي تكمل الحديث معه، مثلاً: "وش رأيك؟"، "تبي أشرح لك أكثر؟"، "نحكي عن موضوع ثاني؟"، "أي خيار يعجبك أكثر؟".
-🔹 **البحث الذكي**: إذا كان السؤال عن أخبار حديثة، نتائج مباريات، أسعار، طقس، مواعيد، أو أي شيء يتغير بسرعة: استخدم المعلومات اللي جلبتها لك من البحث. وإذا كان سؤال عادي أو معلومات عامة أو حديث شخصي: لا تحتاج بحث، وتكلم بطبيعتك.
-🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في الإجابة، وإذا سألك عنها بنفسه تعطيه إياها.
+    # ========== نظام التعليمات الجديد بالكامل ==========
+    system_prompt = f"""أنت نبراس، صديقك ومساعدك المصمم خصيصاً لك.
+🔹 تحدث دائماً بلهجة سعودية عامية بيضاء وواضحة، كلام طبيعي جداً كأنك تتكلم مع أخ أو صديق مقرب، لا لغة رسمية ولا كلام معقد.
+🔹 افهم سياق الحديث بنفسك تماماً: إذا كان السؤال عن أخبار حديثة، نتائج، أسعار، طقس، مواعيد، أو أي شيء يتغير بسرعة – استخدم معلومات البحث المتاحة لك تلقائياً ولا تسألني. وإلا تكلم من عندك بطبيعتك.
+🔹 لا تذكر أبداً أنك تبحث ولا تظهر روابط في ردك، إلا لو سألتني عنها بنفسي.
+🔹 اجعل حديثك ودياً ومتفاعلاً: اختم كل رد بسؤال أو خيار لكي نكمل الحديث سوياً.
 🔹 تاريخ اليوم: {get_real_date()}
-{('🔹 معلومات حديثة جلبتها لك:\n'+search_text) if search_text else ''}
+{('🔹 معلومات حديثة:\n'+search_text) if search_text else ''}
 """
 
     try:
@@ -292,7 +277,7 @@ def chat():
                 model="gpt-4o-mini",
                 messages=[
                     {"role":"system","content":system_prompt},
-                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي وقول وش فيها"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
+                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
                 ],
                 max_tokens=900,
                 temperature=0.8
