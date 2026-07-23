@@ -84,3 +84,16 @@ def MUST_SEARCH(prompt):
         if re.search(pat, p):
             return True
     return False
+def search_web(query):
+    sources = []
+    text = ""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=3))
+        if not results:
+            return "", []
+        sources = [{"title": r.get('title',''), "url": r.get('href',''), "body": r.get('body','')} for r in results]
+        text = "\n".join(f"• {r.get('title','')}: {r.get('body','')[:180]}" for r in results)
+    except Exception:
+        pass
+    return text, sources
