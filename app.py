@@ -278,7 +278,7 @@ def chat():
 
     system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
 🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء واضحة**، طبيعية
-ارجع لملف المعرفه knowledge.md اذا ماتحتاج
+   knowledge.md اذا ماتحتاج بحث ويب ارجع لملف
 بحث بالويب هذى ضروري
  جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
 🔹 اجعل حديثك متفاعل، واختم إجابتك دائماً بسؤال أو خيار لكي تكمل الحديث معه.
@@ -299,8 +299,8 @@ def chat():
                     {"role":"system","content":system_prompt},
                     {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي وقول وش فيها"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
                 ],
-                max_tokens=900,
-                temperature=0.8
+                max_tokens=600,
+                temperature=0.7
             )
         else:
             res = client.chat.completions.create(
