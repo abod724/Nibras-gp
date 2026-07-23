@@ -234,3 +234,49 @@ def chat():
 تاريخ اليوم: {get_real_date()}
 {('🔹 معلومات حديثة جلبتها لك:\n'+search_text) if search_text else ''}
 """
+try:
+        if images:
+            img = Image.open(BytesIO(base64.b64decode(images[0].split(',')[1])))
+            buf = BytesIO()
+            img.save(buf, 'JPEG')
+            b64 = base64.b64encode(buf.getvalue()).decode()
+
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": user_msg or "شوف لي الصورة دي وقول وش فيها"},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+                        ]
+                    }
+                ],
+                max_tokens=900,
+                temperature=0.8
+            )
+        else:
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg or "هلا نبراس"}
+                ],
+                max_tokens=900,
+                temperature=0.8
+            )
+
+        reply = clean_reply_from_links(res.choices[0].message.content.strip())
+
+        if session.get("last_had_search"):
+            reply += "\n💡 لو تبي المصادر قل لي"
+
+        return jsonify({"reply": reply})
+
+    except Exception as e:
+        return jsonify({"reply": f"⚠️ عذراً صار خطأ: {str(e)}"})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
