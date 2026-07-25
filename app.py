@@ -260,7 +260,7 @@ def chat():
     images = data.get("images", [])
 
     if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج"]):
-        return jsonify({"reply": "أنا من صنع وروح أبو مشعل المطيري 🤖❤️"})
+        return jsonify({"reply": "أنا سمي نبراس طورني وبرمجني أبو مشعل المطيري 🤖❤️"})
 
     if user_msg and is_pure_date_question(user_msg):
         return jsonify({"reply": f"اليوم هو {get_real_date()}"})
@@ -268,7 +268,7 @@ def chat():
     if user_msg and user_asks_for_sources(user_msg):
         last_sources = session.get("last_sources", [])
         last_search = session.get("last_had_search", False)
-        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else "المعلومة دي ما احتجت بحث من النت، معلوماتي عنها جاهزة 😊"
+        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else" ابحث بالويب اذا اسوال يحتاج بحث"
         for i,s in enumerate(last_sources,1): reply += f"{i}. {s['title']}\n{s['url']}\n\n"
         return jsonify({"reply": reply.strip()})
 
