@@ -367,8 +367,8 @@ def chat():
             instructions=SYSTEM_PROMPT,
             input=user_message,
             tools=[{"type": "web_search"}],
-            temperature=0.9,
-            max_output_tokens=4000  # زيادة عدد الكلمات لمنع التقطيع
+            temperature=0.8,
+            max_output_tokens=600  # زيادة عدد الكلمات لمنع التقطيع
         )
 
         reply = response.output_text.strip()
