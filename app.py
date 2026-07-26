@@ -10,28 +10,39 @@ if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# ========== ملف المعرفة ==========
-KNOWLEDGE_FILE = "Knowledge.md"
+# ========== البحث عن ملف المعرفة (أي اسم) ==========
 knowledge_content = ""
-if os.path.exists(KNOWLEDGE_FILE):
-    try:
-        with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
-            knowledge_content = f.read()
-    except:
-        pass
+possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
+
+for filename in possible_names:
+    if os.path.exists(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                knowledge_content = f.read()
+                print(f"✅ تم تحميل ملف المعرفة: {filename}")
+                break
+        except:
+            pass
+
+if not knowledge_content:
+    print("⚠️ لم يتم العثور على ملف المعرفة")
 
 # ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد سعودي طبيعي، تتحدث باللهجة العامية البيضاء.
+أنت "نبراس"، مساعد شخصي طبيعي، تتحدث باللهجة العامية البيضاء.
 
 **تعليماتك العامة:**
 - خلك إنسان: لا ترد ردود جاهزة، تفاعل مع كلام المستخدم.
 - اسأل: إذا قال لك شي، اسأله عن تفاصيل، عن رأيه، عن وش يخطط له.
 - شارك: أعطه أفكار، اقتراحات، حلول، واطرح عليه أسئلة تحفزه يتكلم أكثر.
 - ناقش: إذا كان النقاش حلو، ادخل معاه فيه، وابدِ رأيك بكل احترام.
-- جاوب من ملف المعرفة: إذا سألك عن شيء موجود في الملف، جاوبه منه، لكن بأسلوبك العامي.
-- إذا ما لقيت المعلومة: قل بصراحة "والله ما عندي علم"، ولا تختلق.
-- استخدم البحث الخارجي فقط للأحداث الجديدة والطقس.
+
+**كيف تتعامل مع الأسئلة:**
+- إذا سألك المستخدم "من طورك؟" أو "من برمجك؟" أو "من مؤسسك؟"، قول: "أنا من تطوير وبرمجة أفضل المطورين في العالم، فريق محترف ومبدع."
+- إذا سألك عن شيء موجود في ملف المعرفة، جاوبه من الملف بأسلوبك العامي.
+- إذا سألك عن حدث جديد أو خبر عاجل، استخدم البحث بالويب واجب عليه.
+- إذا سألك عن شيء عام، استخدم معرفتك العامة.
+- إذا ما لقيت المعلومة، قل بصراحة "ما عندي علم" ولا تختلق.
 
 **المبدأ**: خلك صديق يحب يسولف، مو مجرد روبوت يجاوب.
 
@@ -70,7 +81,6 @@ HTML_TEMPLATE = """
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
 
-        /* عرض الصورة داخل الرسالة */
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
 
@@ -89,7 +99,7 @@ HTML_TEMPLATE = """
             .dropdown { top: 58px; left: 10px; right: 10px; }
             .dropdown .item { padding: 12px 14px; font-size: 14px; }
             #chat { padding: 12px 14px; }
-            .msg { font-size: 16px; padding: 8px 12px; }
+            .msg { font-size: 14px; padding: 8px 12px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
             .input-area input { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
@@ -152,7 +162,6 @@ HTML_TEMPLATE = """
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 
-            // إذا كانت صورة
             if (imageData) {
                 el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
@@ -165,7 +174,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // تأثير الكتابة التدريجي (للبوت فقط)
             if (sender === 'bot' && !isSystem) {
                 el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
@@ -191,7 +199,6 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // رسائل المستخدم (تظهر فوراً)
             el.innerHTML = `${text} <span class="time">${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
@@ -401,7 +408,7 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع تحليل الصور ==========
+# ========== نقطة الدردشة ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -419,7 +426,7 @@ def chat():
             messages.append({
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة السعودية"},
+                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"},
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
@@ -430,7 +437,7 @@ def chat():
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
-            max_tokens=500,
+            max_tokens=1000,
             temperature=0.8
         )
 
