@@ -19,20 +19,50 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-def search_web(query):
-    try:
-        res = requests.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "kl": "ar-sa"}, timeout=10).json()
-        return res.get("AbstractText") or ""
-    except:
-        return ""
+# ---------------------------------------------------------
+# 🔥 بحث ويب احترافي (DuckDuckGo + Bing إذا توفر مفتاح)
+# ---------------------------------------------------------
 
-# 🧠 التعليمات الجديدة المفتوحة كما طلبت
+BING_KEY = os.environ.get("BING_API_KEY")  # اختياري
+
+def search_web(query):
+    # 1) بحث DuckDuckGo المجاني
+    try:
+        ddg = requests.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "kl": "ar-sa"},
+            timeout=10
+        ).json()
+
+        ddg_result = ddg.get("AbstractText") or ""
+    except:
+        ddg_result = ""
+
+    # 2) بحث Bing (إذا عندك مفتاح)
+    bing_result = ""
+    if BING_KEY:
+        try:
+            url = "https://api.bing.microsoft.com/v7.0/search"
+            headers = {"Ocp-Apim-Subscription-Key": BING_KEY}
+            params = {"q": query, "mkt": "ar-SA"}
+
+            res = requests.get(url, headers=headers, params=params, timeout=10).json()
+            if "webPages" in res:
+                bing_result = res["webPages"]["value"][0]["snippet"]
+        except:
+            bing_result = ""
+
+    # 3) دمج النتائج
+    final = bing_result or ddg_result
+    return final.strip()
+
+# ---------------------------------------------------------
+
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ودود ومتعاون لأهل السعودية والخليج.
 تحدث باللهجة السعودية العامية الواضحة والطبيعية تماماً كإنسان حقيقي.
 تفاعل مع المستخدم بكل رحابة صدر، جاوب على أسئلته، واطلب منه التفاصيل إن احتجت، واقترح عليه أمور مفيدة، واطرح عليه أسئلة لتبادل الحديث والفائدة.
 لا تقل "لا أقدر أبحث"، أنت تحصل على معلومات حديثة تم جلبها لك عند الحاجة، وكذلك معلوماتك الخاصة، استخدمها بطريقتك الخاصة.
-تكلم براحتك ولا توجد قيود على طول الرد، المهم أن تكون ودوداً ومفيداً ومتجاوباً.
 
 معلوماتك الخاصة:
 {knowledge_content}
@@ -162,21 +192,26 @@ def chat():
     msg = request.json.get("m", "").strip()
     if not msg:
         return jsonify({"reply": "اكتب شيء أساعدك فيه"})
-    
+
     search_words = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة","تاريخ","عام","سوق","حركة"]
     need_search = any(k in msg.lower() for k in search_words)
+
     search_result = search_web(msg) if need_search else ""
-    
+
     full_data = f"""
     السؤال: {msg}
     معلومات متاحة: {search_result if search_result else 'لا يحتاج بحث خارجي'}
     """
-    
+
     res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":full_data}],
+        messages=[
+            {"role":"system","content":SYSTEM_PROMPT},
+            {"role":"user","content":full_data}
+        ],
         temperature=0.8
     )
+
     return jsonify({"reply": res.choices[0].message.content.strip()})
 
 if __name__ == '__main__':
