@@ -20,7 +20,7 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-# ========== نظام التعليمات (تفاعلي وإنساني) ==========
+# ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد سعودي طبيعي، تتحدث باللهجة العامية البيضاء.
 
@@ -149,28 +149,56 @@ HTML_TEMPLATE = """
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
 
-            let content = '';
-            if (imageData) {
-                content = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span>`;
-            } else {
-                content = text;
-            }
-
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-            el.innerHTML = `${content} <span class="time">${time}</span>`;
+
+            // إذا كانت صورة
+            if (imageData) {
+                el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
+                chatBox.appendChild(el);
+                chatBox.scrollTop = chatBox.scrollHeight;
+                if (!isSystem && sender !== 'error') {
+                    conversationHistory.push({ role: sender, content: '📷 رفع صورة' });
+                    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
+                    saveHistory(sender, text);
+                }
+                return;
+            }
+
+            // تأثير الكتابة التدريجي (للبوت فقط)
+            if (sender === 'bot' && !isSystem) {
+                el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
+                chatBox.appendChild(el);
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                const typingSpan = el.querySelector('.typing-text');
+                let index = 0;
+                function typeChar() {
+                    if (index < text.length) {
+                        typingSpan.textContent += text.charAt(index);
+                        index++;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        setTimeout(typeChar, 20);
+                    }
+                }
+                typeChar();
+
+                if (!isSystem && sender !== 'error') {
+                    conversationHistory.push({ role: sender, content: text });
+                    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
+                    saveHistory(sender, text);
+                }
+                return;
+            }
+
+            // رسائل المستخدم (تظهر فوراً)
+            el.innerHTML = `${text} <span class="time">${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
 
             if (!isSystem && sender !== 'error') {
-                if (!imageData) {
-                    conversationHistory.push({ role: sender, content: text });
-                } else {
-                    conversationHistory.push({ role: sender, content: '📷 رفع صورة' });
-                }
-                if (conversationHistory.length > 20) {
-                    conversationHistory = conversationHistory.slice(-20);
-                }
+                conversationHistory.push({ role: sender, content: text });
+                if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
                 saveHistory(sender, text);
             }
         }
