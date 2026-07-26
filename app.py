@@ -19,24 +19,34 @@ if os.path.exists(KNOWLEDGE_FILE):
     try:
         with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
             knowledge_content = f.read()
+            print("✅ تم تحميل ملف المعرفة بنجاح")
     except:
         pass
 
-# ========== دوال الذاكرة (مع مسار مطلق) ==========
+# ========== دوال الذاكرة (مسار مطلق) ==========
 MEMORY_FILE = os.path.join(os.path.dirname(__file__), "memory.json")
+print(f"📁 مسار ملف الذاكرة: {MEMORY_FILE}")
 
 def load_memory():
     if os.path.exists(MEMORY_FILE):
         try:
             with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
+                data = json.load(f)
+                print(f"✅ تم تحميل الذاكرة، عدد المستخدمين: {len(data)}")
+                return data
+        except Exception as e:
+            print(f"⚠️ خطأ في قراءة الذاكرة: {e}")
             return {}
+    print("ℹ️ ملف الذاكرة غير موجود، سيتم إنشاؤه")
     return {}
 
 def save_memory(memory):
-    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(memory, f, ensure_ascii=False, indent=2)
+    try:
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(memory, f, ensure_ascii=False, indent=2)
+        print("✅ تم حفظ الذاكرة بنجاح")
+    except Exception as e:
+        print(f"❌ خطأ في حفظ الذاكرة: {e}")
 
 def get_user_memory(user_id):
     memory = load_memory()
@@ -46,16 +56,17 @@ def update_user_memory(user_id, role, content):
     memory = load_memory()
     if user_id not in memory:
         memory[user_id] = []
+        print(f"👤 مستخدم جديد: {user_id}")
     memory[user_id].append({
         "role": role,
         "content": content,
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
+    # نحتفظ بآخر 50 رسالة
     if len(memory[user_id]) > 50:
         memory[user_id] = memory[user_id][-50:]
     save_memory(memory)
-    # نطبع تأكيد في السجلات عشان نعرف إنها اشتغلت
-    print(f"✅ تم حفظ رسالة للمستخدم {user_id} في memory.json")
+    print(f"💾 تم حفظ رسالة للمستخدم {user_id} (عدد رسائله: {len(memory[user_id])})")
 
 # ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
@@ -396,19 +407,22 @@ def chat():
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
         user_id = request.remote_addr
+        print(f"📩 رسالة من {user_id}: {user_message[:50]}...")
 
-        # تسجيل رسالة المستخدم في الذاكرة
+        # حفظ رسالة المستخدم
         update_user_memory(user_id, "user", user_message)
 
-        # جلب آخر 10 رسائل من الذاكرة
+        # جلب آخر 10 رسائل للمستخدم
         history = get_user_memory(user_id)[-10:]
 
         # بناء السياق الكامل للمحادثة
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
             messages.append({"role": msg["role"], "content": msg["content"]})
-        # نضيف الرسالة الحالية (قد تكون موجودة في التاريخ ولكن نضيفها للتأكيد)
+        # نضيف الرسالة الحالية (للتأكيد)
         messages.append({"role": "user", "content": user_message})
+
+        print(f"🔄 سياق المحادثة: {len(messages)} رسائل")
 
         response = client.responses.create(
             model="gpt-4o-mini",
@@ -419,13 +433,15 @@ def chat():
         )
 
         reply = response.output_text.strip()
+        print(f"🤖 رد نبراس: {reply[:50]}...")
 
-        # تسجيل رد نبراس في الذاكرة
+        # حفظ رد نبراس
         update_user_memory(user_id, "assistant", reply)
 
         return jsonify({"reply": reply})
 
     except Exception as e:
+        print(f"❌ خطأ: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
