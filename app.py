@@ -20,19 +20,28 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-# ========== تعليمات النظام ==========
+# ========== تعليمات النظام (معدلة للهجة السعودية ومنع الروابط) ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ودود ومتعاون لأهل السعودية والخليج.
-تحدث باللهجة السعودية العامية الواضحة والطبيعية تماماً كإنسان حقيقي.
-تفاعل مع المستخدم بكل رحابة صدر، جاوب على أسئلته، واطلب منه التفاصيل إن احتجت، واقترح عليه أمور مفيدة، واطرح عليه أسئلة لتبادل الحديث والفائدة.
 
-معلوماتك الخاصة:
+**اللهجة:**  
+تحدث باللهجة السعودية العامية البيضاء الطبيعية تماماً، مثل:  
+"كيف الحال؟"، "وش أخبارك؟"، "تمام يا عزيزي"، "طيب بس كذا"، "إيوه"، "لا حول ولا قوة إلا بالله".  
+لا تستخدم الفصحى أبداً، ولا تستخدم كلمات رسمية أو إخبارية جافة. كن عفويًا وكأنك تتحدث مع صديق في مجلس.
+
+**الأسلوب:**  
+- جاوب بإجابات طويلة ومفصلة، واشرح الأمور بطريقة مفهومة.  
+- إذا كان الرد يحتوي على معلومات من البحث، ادمجها بطريقة طبيعية في كلامك، ولا تذكر المصادر أو الروابط أبداً.  
+- لا تضع أي روابط أو أسماء مواقع في ردك.  
+- لا تذكر "وفقاً لـ" أو "حسب موقع كذا". فقط قدم المعلومة وكأنها من معرفتك.
+
+**معلوماتك الخاصة:**  
 {knowledge_content}
 
-عندما يسألك المستخدم عن أخبار حديثة أو أحداث جارية، استخدم أداة البحث للحصول على إجابات محدثة.
+**ملاحظة:** عندما يسألك المستخدم عن أخبار حديثة، استخدم أداة البحث، ولكن أعد صياغة المعلومة بلهجتك الخاصة دون ذكر المصادر.
 """
 
-# ========== الواجهة (مع تأثير الكتابة التدريجية) ==========
+# ========== الواجهة (بدون تغيير) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -121,41 +130,33 @@ HTML_TEMPLATE = """
         const menuToggle = document.getElementById('menuToggle');
         const dropdown = document.getElementById('dropdown');
 
-        // ===== دالة إضافة رسالة مع تأثير الكتابة التدريجية =====
         function addMessage(text, sender = 'bot', isSystem = false) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
-            
-            // نضيف الوقت أولاً (لن يظهر إلا بعد الكتابة)
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-            
-            // نضع النص فارغاً ونبدأ بكتابته تدريجياً
             el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
 
             const textSpan = el.querySelector('.typing-text');
             let index = 0;
-            
             function typeChar() {
                 if (index < text.length) {
                     textSpan.textContent += text.charAt(index);
                     index++;
                     chatBox.scrollTop = chatBox.scrollHeight;
-                    setTimeout(typeChar, 20); // سرعة الكتابة (20 مللي ثانية لكل حرف)
+                    setTimeout(typeChar, 15);
                 }
             }
             typeChar();
 
-            // حفظ التاريخ (بعد الانتهاء من الكتابة)
             if (!isSystem && sender !== 'error') {
                 saveHistory(sender, text);
             }
         }
 
-        // ===== باقي الدوال كما هي =====
         function saveHistory(sender, text) {
             let hist = JSON.parse(localStorage.getItem('niras_history') || '[]');
             hist.push({ sender, text, time: new Date().toISOString() });
@@ -367,8 +368,8 @@ def chat():
             instructions=SYSTEM_PROMPT,
             input=user_message,
             tools=[{"type": "web_search"}],
-            temperature=0.8,
-            max_output_tokens=600  # زيادة عدد الكلمات لمنع التقطيع
+            temperature=0.9,
+            max_output_tokens=4000
         )
 
         reply = response.output_text.strip()
