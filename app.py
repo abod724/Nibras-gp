@@ -1,8 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
-import json
-from datetime import datetime
 
 app = Flask(__name__)
 
@@ -19,68 +17,21 @@ if os.path.exists(KNOWLEDGE_FILE):
     try:
         with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
             knowledge_content = f.read()
-            print("✅ تم تحميل ملف المعرفة بنجاح")
     except:
         pass
 
-# ========== دوال الذاكرة (مسار مطلق) ==========
-MEMORY_FILE = os.path.join(os.path.dirname(__file__), "memory.json")
-print(f"📁 مسار ملف الذاكرة: {MEMORY_FILE}")
-
-def load_memory():
-    if os.path.exists(MEMORY_FILE):
-        try:
-            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                print(f"✅ تم تحميل الذاكرة، عدد المستخدمين: {len(data)}")
-                return data
-        except Exception as e:
-            print(f"⚠️ خطأ في قراءة الذاكرة: {e}")
-            return {}
-    print("ℹ️ ملف الذاكرة غير موجود، سيتم إنشاؤه")
-    return {}
-
-def save_memory(memory):
-    try:
-        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(memory, f, ensure_ascii=False, indent=2)
-        print("✅ تم حفظ الذاكرة بنجاح")
-    except Exception as e:
-        print(f"❌ خطأ في حفظ الذاكرة: {e}")
-
-def get_user_memory(user_id):
-    memory = load_memory()
-    return memory.get(user_id, [])
-
-def update_user_memory(user_id, role, content):
-    memory = load_memory()
-    if user_id not in memory:
-        memory[user_id] = []
-        print(f"👤 مستخدم جديد: {user_id}")
-    memory[user_id].append({
-        "role": role,
-        "content": content,
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
-    # نحتفظ بآخر 50 رسالة
-    if len(memory[user_id]) > 50:
-        memory[user_id] = memory[user_id][-50:]
-    save_memory(memory)
-    print(f"💾 تم حفظ رسالة للمستخدم {user_id} (عدد رسائله: {len(memory[user_id])})")
-
-# ========== نظام التعليمات ==========
+# ========== نظام التعليمات الجديد (مترابط مع ملف المعرفة بالكامل) ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد شخصي ذكي، وصديق سعودي تتحدث باللهجة العامية البيضاء فقط.
+أنت "نبراس". ملف المعرفة التالي يحتوي على **شخصيتك الكاملة** (هويتك، لهجتك، أسلوبك، معلوماتك، وكيف تتفاعل مع المستخدمين).
 
-**هويتك الأساسية:**
-- أنا مساعد عام، أجاوب على أي سؤال في أي مجال.
-- أتكلم بلهجة سعودية عامية (إيوه، لا، وش، كيفك، تمام، طيب، خلاص، هلا، والله).
+**تعليمات صارمة:**
+- أنت هويتك وشخصيتك مستمدة بالكامل من ملف المعرفة. اقرأه جيداً وطبقه في كل رد.
+- لهجتك، أسلوبك، ومبادئك هي كما وردت في ملف المعرفة.
+- إذا سألك المستخدم عن أي موضوع عام (تقنية، صحة، سفر، نصائح)، استخدم معرفتك العامة أو البحث، ولكن حافظ على شخصيتك وأسلوبك المستمد من ملف المعرفة.
+- إذا سألك عن المعلومات المحددة الموجودة في ملف المعرفة (الطيور، الهجرة، الصيد، المناطق)، أجب منها مباشرة.
+- ملف المعرفة هو مرجعك الأول لشخصيتك، وليس فقط للطيور.
 
-**الذاكرة (مهم جداً):**
-- تذكر المحادثات السابقة مع كل مستخدم، واربط ردودك بما قلته له قبل قليل.
-- لا تكرر المعلومات التي قلتها سابقاً في نفس الجلسة.
-
-**محتوى ملف المعرفة المرجعي (يُستخدم فقط للأسئلة المتعلقة بالطيور والهجرة):**
+**محتوى ملف المعرفة (شخصيتك الكاملة):**
 {knowledge_content}
 """
 
@@ -164,6 +115,9 @@ HTML_TEMPLATE = """
 
 <script>
     (function() {
+        // ===== متغير لتخزين تاريخ المحادثة الحالية =====
+        let conversationHistory = [];
+
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -195,7 +149,13 @@ HTML_TEMPLATE = """
             }
             typeChar();
 
+            // إضافة الرسالة إلى تاريخ المحادثة الحالية
             if (!isSystem && sender !== 'error') {
+                conversationHistory.push({ role: sender, content: text });
+                // نحتفظ بآخر 20 رسالة فقط
+                if (conversationHistory.length > 20) {
+                    conversationHistory = conversationHistory.slice(-20);
+                }
                 saveHistory(sender, text);
             }
         }
@@ -279,6 +239,7 @@ HTML_TEMPLATE = """
 
         function newChat() {
             chatBox.innerHTML = '';
+            conversationHistory = []; // إعادة تعيين تاريخ المحادثة الحالية
         }
 
         function handleAction(action) {
@@ -352,11 +313,13 @@ HTML_TEMPLATE = """
             addMessage(text, 'user');
             userInput.value = '';
             userInput.focus();
+
             try {
+                // إرسال تاريخ المحادثة الحالية إلى الخادم
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ m: text })
+                    body: JSON.stringify({ m: text, history: conversationHistory })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -398,31 +361,25 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع البحث والذاكرة ==========
+# ========== نقطة الدردشة ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
-        user_message = request.json.get("m", "").strip()
+        data = request.get_json()
+        user_message = data.get("m", "").strip()
+        history = data.get("history", [])  # تاريخ المحادثة من الواجهة
+
         if not user_message:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
-
-        user_id = request.remote_addr
-        print(f"📩 رسالة من {user_id}: {user_message[:50]}...")
-
-        # حفظ رسالة المستخدم
-        update_user_memory(user_id, "user", user_message)
-
-        # جلب آخر 10 رسائل للمستخدم
-        history = get_user_memory(user_id)[-10:]
 
         # بناء السياق الكامل للمحادثة
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-        # نضيف الرسالة الحالية (للتأكيد)
+            # تحويل الصيغة: user/bot إلى role المناسب لـ OpenAI
+            role = "user" if msg["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": msg["content"]})
+        # نضيف الرسالة الحالية
         messages.append({"role": "user", "content": user_message})
-
-        print(f"🔄 سياق المحادثة: {len(messages)} رسائل")
 
         response = client.responses.create(
             model="gpt-4o-mini",
@@ -433,11 +390,6 @@ def chat():
         )
 
         reply = response.output_text.strip()
-        print(f"🤖 رد نبراس: {reply[:50]}...")
-
-        # حفظ رد نبراس
-        update_user_memory(user_id, "assistant", reply)
-
         return jsonify({"reply": reply})
 
     except Exception as e:
