@@ -47,8 +47,8 @@ def index():
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-        html,body{height:100%;background:#fff;color:#111}
-        .container{display:flex;flex-direction:column;height:100vh}
+        html,body{height:100dvh;background:#fff;color:#111;overflow:hidden}
+        .container{display:flex;flex-direction:column;height:100dvh}
         .header{padding:10px 15px;position:relative}
         .menu{position:absolute;top:10px;right:15px;border:none;background:none;font-size:20px;cursor:pointer}
         .dropdown{position:absolute;top:40px;right:15px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.15);border-radius:8px;display:none;flex-direction:column;min-width:140px;z-index:999}
