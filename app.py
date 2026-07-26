@@ -2,16 +2,19 @@ from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
 import requests
+import base64
+from io import BytesIO
+from PIL import Image
 
 app = Flask(__name__)
 
-# 🔑 قراءة المفتاح والإعدادات
+# 🔑 المفتاح
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
-    raise Exception("❌ المفتاح غير موجود في الإعدادات")
+    raise Exception("❌ المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# 📚 قراءة ملف المعرفة
+# 📚 ملف المعرفة
 KNOWLEDGE_FILE = "Knowledge.md"
 knowledge_content = ""
 if os.path.exists(KNOWLEDGE_FILE):
@@ -19,30 +22,28 @@ if os.path.exists(KNOWLEDGE_FILE):
         with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
             knowledge_content = f.read()
     except:
-        knowledge_content = ""
+        pass
 
-# 🔍 دالة البحث في الويب
+# 🔍 البحث
 def search_web(query):
     try:
-        res = requests.get("https://api.duckduckgo.com/", 
-                          params={"q": query, "format": "json", "t": "nibras", "kl": "ar-sa"}, 
-                          timeout=8).json()
-        return res.get("AbstractText") or None
+        res = requests.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "kl": "ar-sa"}, timeout=8).json()
+        return res.get("AbstractText") or ""
     except:
-        return None
+        return ""
 
-# 🧠 شخصية نبراس ونظام الرد
+# 🧠 التعليمات النهائية
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد مخصص لأهل السعودية والخليج، متخصص في تربية الحلال والطيور والمقانيص والبر.
-تحدث باللهجة السعودية العامية الواضحة، جمل قصيرة ومباشرة، لا تطيل ولا تتفلسف.
-إذا كان السؤال عن معلومات حديثة، أسعار، مواعيد، أخبار، أو شيء لم تكن تعرفه، قم بالبحث تلقائياً وأجب بالصحيح.
-اجعل ردودك طبيعية كإنسان، ورحب وتفاعل بود. لا تذكر المصادر إلا إذا طلب منك.
+أنت "نبراس"، مساعد أهل السعودية والخليج.
+تحدث باللهجة السعودية العامية الواضحة، جمل قصيرة وطبيعية كإنسان حقيقي.
+🔴 أمر صارم: لا تقل أبداً "لا أقدر أبحث" أو "لا أملك معلومات حديثة". إذا كان السؤال عن سعر، موعد، أخبار، نتيجة، أو شيء حديث، سيتم جلب المعلومات لك تلقائياً، فأجب بها مباشرة وبشكل دقيق.
+تفاعل مع المستخدم بود ورحب به، وكن ودوداً. لا تطيل ولا تكثر الكلام.
 
 معلوماتك الخاصة:
 {knowledge_content}
 """
 
-# 📱 الواجهة الكاملة
+# 📱 الواجهة الكاملة مع الصوت والصور والكتابة المتقطعة
 @app.route('/')
 def index():
     return render_template_string('''
@@ -50,79 +51,174 @@ def index():
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>نبراس</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-        html,body{height:100%;overflow:hidden;background:#ffffff;color:#111}
-        .app{width:100%;height:100vh;display:flex;flex-direction:column}
-        .header{position:sticky;top:0;z-index:999;display:flex;justify-content:flex-end;padding:12px 16px;border-bottom:1px solid #eee;background:#fff}
-        .menu-btn{border:none;background:none;font-size:18px;color:#333;cursor:pointer;padding:6px}
-        .dropdown{position:absolute;top:50px;left:12px;right:12px;background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.1);display:none;flex-direction:column;z-index:1000;border:1px solid #eee}
-        .dropdown.show{display:flex}
-        .dropdown .item{padding:12px 16px;font-size:14px;color:#333;border:none;background:none;text-align:right;cursor:pointer;border-bottom:1px solid #f5f5f5}
-        .dropdown .item:last-child{border-bottom:none}
-        #chat{flex:1;overflow-y:auto;padding:12px;background:#fff}
-        .msg{max-width:80%;padding:10px 14px;border-radius:18px;font-size:15px;line-height:1.5;margin-bottom:8px;position:relative}
-        .msg.user{align-self:flex-end;background:#f0f0f0;border-bottom-left-radius:6px}
-        .msg.bot{align-self:flex-start;background:#f8f8f8;border-bottom-right-radius:6px}
-        .time{font-size:10px;color:#999;margin-top:4px;display:block}
-        .speak-btn{position:absolute;left:8px;bottom:4px;border:none;background:none;color:#888;font-size:14px;cursor:pointer;padding:2px}
-        .input-area{display:flex;align-items:center;gap:6px;padding:8px 12px;margin:8px;background:#f9f9f9;border-radius:30px;border:1px solid #eee;position:sticky;bottom:0}
-        .input-area input{flex:1;border:none;background:transparent;padding:10px;font-size:15px;outline:none;color:#111}
-        .btn-icon{border:none;background:none;color:#666;font-size:18px;cursor:pointer;padding:4px}
-        .send{background:#333;color:white;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:14px}
+        body,html{height:100%;background:#ffffff;color:#111111}
+        .wrap{display:flex;flex-direction:column;height:100vh}
+        .head{padding:14px 16px;border-bottom:1px solid #eeeeee;font-weight:bold;font-size:18px}
+        #chat{flex:1;overflow-y:auto;padding:12px 16px;scroll-behavior:smooth}
+        .msg{max-width:82%;padding:12px 16px;border-radius:20px;margin-bottom:10px;position:relative;white-space:pre-wrap;line-height:1.5}
+        .user-msg{background:#e3f2fd;margin-left:auto;border-bottom-right-radius:6px}
+        .bot-msg{background:#f5f5f5;margin-right:auto;border-bottom-left-radius:6px}
+        .time{font-size:11px;color:#888;margin-top:5px;display:block}
+        .speak-btn{position:absolute;left:8px;bottom:4px;border:none;background:none;color:#666;cursor:pointer;font-size:14px}
+        .input-area{display:flex;align-items:center;gap:10px;padding:12px 16px;margin:10px 16px;background:#f9f9f9;border-radius:30px;border:1px solid #eeeeee}
+        .input-area input{flex:1;border:none;background:transparent;outline:none;font-size:15px}
+        .icon-btn{border:none;background:none;cursor:pointer;font-size:18px;color:#555;padding:6px}
+        .send-btn{background:#2563eb;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:14px}
+        .preview-img{max-width:200px;border-radius:12px;margin-top:8px;cursor:pointer}
+        #file-input{display:none}
     </style>
 </head>
 <body>
-<div class="app">
-    <div class="header">
-        <button class="menu-btn" id="menu"><i class="fas fa-ellipsis-v"></i></button>
-    </div>
-    <div class="dropdown" id="list">
-        <button class="item" id="new"><i class="fas fa-plus"></i> محادثة جديدة</button>
-    </div>
+<div class="wrap">
+    <div class="head">نبراس</div>
     <div id="chat"></div>
     <div class="input-area">
-        <button class="btn-icon" id="mic"><i class="fas fa-microphone"></i></button>
-        <input type="text" id="txt" placeholder="اكتب رسالتك..." />
-        <button class="send" id="go"><i class="fas fa-paper-plane"></i></button>
+        <input type="file" id="file-input" accept="image/*" />
+        <button class="icon-btn" id="img-btn" title="رفع صورة"><i class="fas fa-image"></i></button>
+        <button class="icon-btn" id="mic-btn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
+        <input type="text" id="txt-input" placeholder="اكتب رسالتك..." />
+        <button class="icon-btn send-btn" id="send-btn" title="إرسال"><i class="fas fa-paper-plane"></i></button>
     </div>
 </div>
+
 <script>
-function speak(t){if('speechSynthesis'in window){let u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';u.rate=0.9;speechSynthesis.speak(u);}}
-function addMsg(tp,txt){let d=document.createElement('div');d.className='msg '+tp;d.innerHTML=txt+`<span class="time">${new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</span>`;if(tp==='bot'){let b=document.createElement('button');b.className='speak-btn';b.innerHTML='<i class="fas fa-volume-up"></i>';b.title='استمع للرد';b.onclick=()=>speak(txt);d.appendChild(b);}chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
-document.getElementById('menu').onclick=()=>document.getElementById('list').classList.toggle('show');
-document.addEventListener('click',e=>{if(!e.target.closest('.header')&&!e.target.closest('.dropdown'))document.getElementById('list').classList.remove('show');});
-document.getElementById('new').onclick=()=>{chat.innerHTML='';document.getElementById('list').classList.remove('show');};
-let rec=null;document.getElementById('mic').onclick=function(){if(!('webkitSpeechRecognition'in window))return;if(rec){rec.stop();this.classList.remove('on');return;}rec=new webkitSpeechRecognition();rec.lang='ar-SA';rec.onresult=e=>{txt.value=e.results[0][0].transcript;this.classList.remove('on');go.click()};this.classList.add('on');rec.start();};
-document.getElementById('go').onclick=send;document.getElementById('txt').onkeydown=e=>e.key==='Enter'&&send();
-async function send(){let t=txt.value.trim();if(!t)return;addMsg('user',t);txt.value='';try{let r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({m:t})});let d=await r.json();addMsg('bot',d.reply||'تم الاستلام')}catch{addMsg('bot','تعذر الاتصال')}}
+const chat = document.getElementById('chat');
+const txtInput = document.getElementById('txt-input');
+const sendBtn = document.getElementById('send-btn');
+const micBtn = document.getElementById('mic-btn');
+const imgBtn = document.getElementById('img-btn');
+const fileInput = document.getElementById('file-input');
+let selectedImage = null;
+
+// نص منطوق
+function speakText(text) {
+    if (!window.speechSynthesis) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ar-SA';
+    utter.rate = 1;
+    speechSynthesis.speak(utter);
+}
+
+// كتابة متقطعة حرف حرف
+async function typeMessage(element, text) {
+    element.textContent = '';
+    for (let char of text) {
+        element.textContent += char;
+        chat.scrollTop = chat.scrollHeight;
+        await new Promise(res => setTimeout(res, 20));
+    }
+}
+
+// إضافة رسالة
+function addMessage(role, text, imgSrc = null) {
+    const div = document.createElement('div');
+    div.className = `msg ${role === 'user' ? 'user-msg' : 'bot-msg'}`;
+    const time = new Date().toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'});
+    
+    if (imgSrc) {
+        const img = document.createElement('img');
+        img.src = imgSrc;
+        img.className = 'preview-img';
+        div.appendChild(img);
+    }
+
+    const textSpan = document.createElement('span');
+    div.appendChild(textSpan);
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'time';
+    timeSpan.textContent = time;
+    div.appendChild(timeSpan);
+
+    if (role === 'bot') {
+        const spkBtn = document.createElement('button');
+        spkBtn.className = 'speak-btn';
+        spkBtn.innerHTML = '🔊';
+        spkBtn.title = 'استمع للرسالة';
+        spkBtn.onclick = () => speakText(text);
+        div.appendChild(spkBtn);
+        await typeMessage(textSpan, text);
+    } else {
+        textSpan.textContent = text;
+    }
+
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// إرسال الرسالة
+async function sendMessage() {
+    const text = txtInput.value.trim();
+    if (!text && !selectedImage) return;
+    
+    addMessage('user', text, selectedImage);
+    txtInput.value = '';
+    selectedImage = null;
+
+    try {
+        const res = await fetch('/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+        addMessage('bot', data.reply || 'عذراً، حصل خطأ');
+    } catch {
+        addMessage('bot', 'تعذر الاتصال، جرب مرة أخرى');
+    }
+}
+
+// أحداث الأزرار
+sendBtn.onclick = sendMessage;
+txtInput.onkeydown = e => e.key === 'Enter' && sendMessage();
+imgBtn.onclick = () => fileInput.click();
+fileInput.onchange = e => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = ev => selectedImage = ev.target.result;
+        reader.readAsDataURL(file);
+    }
+};
+micBtn.onclick = () => alert('خاصية الصوت قيد التجهيز، اكتب رسالتك حالياً');
 </script>
 </body>
 </html>
     ''')
 
-# 📨 استقبال ومعالجة الرسائل
+# 📨 معالجة الرسائل
 @app.route('/chat', methods=['POST'])
 def chat():
-    msg = request.json.get("m", "").strip()
-    if not msg:
-        return jsonify({"reply": "اكتب رسالتك أولاً"})
+    user_msg = request.json.get("message", "").strip()
+    if not user_msg:
+        return jsonify({"reply": "اكتب لي شيء أساعدك فيه"})
 
-    # تحديد الحاجة للبحث
-    need_search = any(w in msg.lower() for w in ["متى","كم سعر","اسعار","احدث","اخبار","نتيجة","موسم","سنة","تاريخ","اليوم"])
-    search_res = search_web(msg) if need_search else ""
-    full_prompt = f"{SYSTEM_PROMPT}\n\nالسؤال: {msg}\n\nمعلومات حديثة: {search_res or 'لا يوجد'}"
+    # تحديد هل يحتاج بحث
+    search_words = ["متى", "سعر", "اسعار", "اخبار", "نتيجة", "موسم", "موعد", "احدث", "جديد", "سوق", "حركة"]
+    do_search = any(word in user_msg.lower() for word in search_words)
+    extra_info = search_web(user_msg) if do_search else ""
 
-    # طلب الرد من الذكاء الاصطناعي
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role":"system","content":full_prompt},{"role":"user","content":msg}],
-        temperature=0.7
-    )
-    return jsonify({"reply": res.choices[0].message.content.strip()})
+    # بناء الطلب
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_msg + (f"\n\nمعلومات حديثة: {extra_info}" if extra_info else "")}
+    ]
+
+    # استدعاء الذكاء
+    try:
+        res = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.7
+        )
+        reply = res.choices[0].message.content.strip()
+        return jsonify({"reply": reply})
+    except Exception as e:
+        return jsonify({"reply": "عذراً حصل خطأ بسيط، حاول مرة أخرى"})
 
 if __name__ == '__main__':
     app.run(debug=False)
