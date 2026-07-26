@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
-import time
 
 app = Flask(__name__)
 
@@ -33,7 +32,7 @@ SYSTEM_PROMPT = f"""
 عندما يسألك المستخدم عن أخبار حديثة أو أحداث جارية، استخدم أداة البحث للحصول على إجابات محدثة.
 """
 
-# ========== الواجهة (نفس واجهتك الأصلية مع القائمة المنسدلة) ==========
+# ========== الواجهة (مع تأثير الكتابة التدريجية) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -47,11 +46,9 @@ HTML_TEMPLATE = """
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
 
-        /* شريط علوي مع ٣ نقاط */
         .header { display: flex; justify-content: flex-end; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
         .header .menu-btn { background: none; border: none; font-size: 22px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
 
-        /* القائمة المنسدلة */
         .dropdown { position: absolute; top: 64px; left: 14px; right: 14px; background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); display: none; flex-direction: column; z-index: 100; border: 1px solid #eaedf2; }
         .dropdown.show { display: flex; }
         .dropdown .item { display: flex; align-items: center; gap: 12px; padding: 14px 18px; font-size: 15px; color: #1a2b3c; background: none; border: none; width: 100%; text-align: right; cursor: pointer; border-bottom: 1px solid #f0f2f5; }
@@ -124,20 +121,41 @@ HTML_TEMPLATE = """
         const menuToggle = document.getElementById('menuToggle');
         const dropdown = document.getElementById('dropdown');
 
+        // ===== دالة إضافة رسالة مع تأثير الكتابة التدريجية =====
         function addMessage(text, sender = 'bot', isSystem = false) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
+            
+            // نضيف الوقت أولاً (لن يظهر إلا بعد الكتابة)
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-            el.innerHTML = `${text} <span class="time">${time}</span>`;
+            
+            // نضع النص فارغاً ونبدأ بكتابته تدريجياً
+            el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
+
+            const textSpan = el.querySelector('.typing-text');
+            let index = 0;
+            
+            function typeChar() {
+                if (index < text.length) {
+                    textSpan.textContent += text.charAt(index);
+                    index++;
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    setTimeout(typeChar, 20); // سرعة الكتابة (20 مللي ثانية لكل حرف)
+                }
+            }
+            typeChar();
+
+            // حفظ التاريخ (بعد الانتهاء من الكتابة)
             if (!isSystem && sender !== 'error') {
                 saveHistory(sender, text);
             }
         }
 
+        // ===== باقي الدوال كما هي =====
         function saveHistory(sender, text) {
             let hist = JSON.parse(localStorage.getItem('niras_history') || '[]');
             hist.push({ sender, text, time: new Date().toISOString() });
@@ -336,7 +354,7 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع البحث بالويب ==========
+# ========== نقطة الدردشة مع البحث ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -344,13 +362,13 @@ def chat():
         if not user_message:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
-        # استخدام Responses API مع تفعيل البحث
         response = client.responses.create(
             model="gpt-4o-mini",
             instructions=SYSTEM_PROMPT,
             input=user_message,
-            tools=[{"type": "web_search"}],  # البحث الفعلي
-            temperature=0.8
+            tools=[{"type": "web_search"}],
+            temperature=0.9,
+            max_output_tokens=4000  # زيادة عدد الكلمات لمنع التقطيع
         )
 
         reply = response.output_text.strip()
