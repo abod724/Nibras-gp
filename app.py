@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
+import json
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -20,27 +22,62 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-# ========== تعليمات النظام (تم تعديلها فقط) ==========
+# ========== دوال الذاكرة (التخزين الدائم) ==========
+MEMORY_FILE = "memory.json"
+
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_memory(memory):
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(memory, f, ensure_ascii=False, indent=2)
+
+def get_user_memory(user_id):
+    memory = load_memory()
+    return memory.get(user_id, [])
+
+def update_user_memory(user_id, role, content):
+    memory = load_memory()
+    if user_id not in memory:
+        memory[user_id] = []
+    memory[user_id].append({
+        "role": role,
+        "content": content,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    # نحتفظ بآخر 50 رسالة فقط عشان الملف ما يكبر
+    if len(memory[user_id]) > 50:
+        memory[user_id] = memory[user_id][-50:]
+    save_memory(memory)
+
+# ========== نظام التعليمات الجديد (مساعد عام) ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد ودود ومتعاون، تتحدث باللهجة السعودية العامية البيضاء الطبيعية، وكأنك صديق للمستخدم.
+أنت "نبراس"، مساعد شخصي ذكي، وصديق سعودي تتحدث باللهجة العامية البيضاء فقط.
 
-**قواعد الأولوية الصارمة (الأهم):**
-1. **ملف المعرفة هو مصدرك الأساسي**: إذا سألك المستخدم عن أي شيء متعلق بـ (الهجرة، الطيور، الصيد، المواسم، المناطق، الصقور، أو أي مكان في السعودية مثل حفر الباطن، تبوك، الرياض، إلخ)، **يجب** أن تجيب مباشرة من ملف المعرفة (`Knowledge.md`) ولا تبحث في الويب أبداً لهذه المواضيع.
-2. **استخدم البحث بالويب فقط في حالتين**:
-   - إذا سأل المستخدم عن أخبار حديثة جداً (حدث اليوم أو البارحة).
-   - إذا سأل عن حالة الطقس أو نتيجة مباراة أو سؤال لا يوجد جوابه في ملف المعرفة.
-3. **تحذير شديد**: لا تخلط أبداً بين مواضيع الطيور والهجرة وبين المواصلات أو الحافلات أو الخدمات العامة. إذا قال المستخدم "حفر الباطن" فتأكد من السياق، فإذا كان يسأل عن الطيور فاستخدم ملف المعرفة، ولا تذكر الحافلات أو سابتكو أبداً في سياق الهجرة.
+**هويتك الأساسية:**
+- أنا مساعد عام، أجاوب على أي سؤال في أي مجال (تقنية، صحة، سفر، أخبار، طبخ، نصائح حياتية، إلخ).
+- أتكلم بلهجة سعودية عامية (إيوه، لا، وش، كيفك، تمام، طيب، خلاص، هلا، والله).
 
-**أسلوبك في الرد:**
-- جاوب بإجابات وافية ومفصلة، واشرح الأمور بطريقة مفهومة.
-- اطرح أسئلة جانبية على المستخدم لفهمه بشكل أعمق، وشاركه آراءك وأفكارك بحماس.
-- إذا كانت المعلومة في ملف المعرفة، اذكرها بثقة وكأنها من معرفتك الشخصية، ولا تقل "وفقاً لملف المعرفة".
+**كيف تتعامل مع المعلومة:**
+- ملف المعرفة يحتوي على معلومات إضافية عن الطيور والهجرة والصيد في السعودية.
+- **لا تذكر الطيور أو الهجرة** إلا إذا سألك المستخدم عنها تحديداً (مثل: متى هجرة الطيور، أو وين الصقور).
+- إذا كان السؤال عاماً (مثل: أخبار اليوم، نصيحة، شرح تقني)، استخدم معرفتك العامة وابحث إذا لزم الأمر.
 
-**معلوماتك الخاصة (من ملف المعرفة):**
+**الذاكرة (مهم جداً):**
+- تذكر المحادثات السابقة مع كل مستخدم، واربط ردودك بما قلته له قبل قليل.
+- لا تكرر المعلومات التي قلتها سابقاً في نفس الجلسة.
+
+**محتوى ملف المعرفة المرجعي (يُستخدم فقط للأسئلة المتعلقة بالطيور والهجرة):**
 {knowledge_content}
 """
 
-# ========== الواجهة (بدون أي تغيير) ==========
+# ========== الواجهة (بدون تغيير) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -354,7 +391,7 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع البحث ==========
+# ========== نقطة الدردشة مع البحث والذاكرة ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -362,20 +399,41 @@ def chat():
         if not user_message:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
+        # تحديد هوية المستخدم (عنوان IP)
+        user_id = request.remote_addr
+
+        # تسجيل رسالة المستخدم في الذاكرة
+        update_user_memory(user_id, "user", user_message)
+
+        # جلب آخر 10 رسائل من ذاكرة المستخدم
+        history = get_user_memory(user_id)[-10:]
+
+        # بناء قائمة الرسائل المرسلة إلى OpenAI
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        # نضيف الرسالة الحالية (لأنها قد تكون موجودة بالفعل في التاريخ، لكن نضيفها للتأكيد)
+        messages.append({"role": "user", "content": user_message})
+
+        # استدعاء OpenAI مع السياق الكامل
         response = client.responses.create(
             model="gpt-4o-mini",
-            instructions=SYSTEM_PROMPT,
-            input=user_message,
+            input=messages,
             tools=[{"type": "web_search"}],
             temperature=0.9,
             max_output_tokens=4000
         )
 
         reply = response.output_text.strip()
+
+        # تسجيل رد نبراس في الذاكرة
+        update_user_memory(user_id, "assistant", reply)
+
         return jsonify({"reply": reply})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
