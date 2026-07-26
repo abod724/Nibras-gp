@@ -1,321 +1,128 @@
-from flask import Flask, request, jsonify, session
-from openai import OpenAI
+from flask import Flask, request, jsonify, render_template_string
+import openai
 import os
-import re
-from datetime import datetime
-import pytz
-from duckduckgo_search import DDGS
-import base64
-from io import BytesIO
-from PIL import Image
+import requests
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "nibras_gt_secure_key_2026")
 
+# 🔑 قراءة المفتاح والإعدادات
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
-    raise Exception("❌ OPENAI_API_KEY غير موجود")
+    raise Exception("❌ المفتاح غير موجود في الإعدادات")
+client = openai.OpenAI(api_key=API_KEY)
 
-client = OpenAI(api_key=API_KEY)
-
-KNOWLEDGE_FILE = "knowledge.md"
+# 📚 قراءة ملف المعرفة
+KNOWLEDGE_FILE = "Knowledge.md"
 knowledge_content = ""
 if os.path.exists(KNOWLEDGE_FILE):
     try:
         with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
             knowledge_content = f.read()
-    except Exception:
+    except:
         knowledge_content = ""
 
-def get_real_date():
-    tz = pytz.timezone('Asia/Riyadh')
-    return datetime.now(tz).strftime("%A، %d %B %Y")
-
-def clean_reply_from_links(reply):
-    reply = re.sub(r'https?://\S+|www\.\S+', '', reply)
-    reply = re.sub(r'[\[\(]?\s*[a-zA-Z0-9-]+\.(?:com|net|org|sa|gov|edu|me|news|tv|io|co|ly|info|online)\s*[\]\)]*', '', reply)
-    reply = re.sub(r'\(\s*\)', '', reply)
-    reply = re.sub(r'\[\s*\]', '', reply)
-    reply = re.sub(r'\s{2,}', ' ', reply)
-    reply = re.sub(r'[،.]\s*[،.]', '،', reply)
-    reply = re.sub(r'\s+([،.])', r'\1', reply)
-    return reply.strip()
-
-def is_pure_date_question(prompt):
-    p = prompt.strip().lower()
-    pure_patterns = [
-        r"^وش اليوم\??$", r"^ايش اليوم\??$", r"^كم التاريخ\??$", r"^شو التاريخ\??$",
-        r"^اعطني التاريخ\??$", r"^تاريخ اليوم\??$", r"^اليوم كم\??$",
-        r"^اليوم ايش\??$", r"^اليوم وش\??$", r"^كم تاريخ اليوم\??$", r"^شو تاريخ اليوم\??$",
-        r"^ما هو تاريخ اليوم\??$", r"^ما هو اليوم\??$",
-    ]
-    for pattern in pure_patterns:
-        if re.fullmatch(pattern, p):
-            return True
-    return False
-
-def user_asks_for_sources(prompt):
-    p = prompt.strip().lower()
-    patterns = [
-        r"نعم", r"ايه", r"اي", r"أيوا", r"أيوه", r"ابغاها", r"اريدها",
-        r"المصدر", r"المصادر", r"الروابط", r"الرابط",
-        r"عطني المصدر", r"وريني المصدر", r"من وين جبتها", r"من أين جبت هذا",
-        r"المرجع", r"المراجع", r"الموقع", r"أظهر لي المصدر",
-    ]
-    for pat in patterns:
-        if re.search(pat, p):
-            return True
-    return False
-
-def MUST_SEARCH(prompt):
-    p = prompt.strip().lower()
-    force_patterns = [
-        r"خبر|أخبار|حدث|ماذا حدث|وش صار|ايش صار|اللي صار|حادث|كارثة|إطلاق|تصريح|بيان|عاجل|مستجد|مستجدات|اخر الاخبار|اخر المستجدات",
-        r"اليوم|هذا الأسبوع|هذا الشهر|هذه السنة|الآن|حاليا|حالي|آخر|أحدث|جديد|مؤخرا|اللحظة|لحظي|هسا|هذه الايام",
-        r"202[4-9]|203",
-        r"حرب|هجوم|قصف|اغتيال|انقلاب|ثورة|علاقات بين|مؤتمر|قمة|اتفاقية|عقوبات|تصعيد|هدنة|سياسي|وزير|رئيس|ملك|أمير|برلمان|حكومة|دولة|وزارة|نظام",
-        r"مباراة|نتيجة|جدول|دوري|كأس|أبطال|المنتخب|لعب|فاز|خسر|بطولة|كأس العالم|الاندية|الشوط|هدف|ترتيب|موسم|القائميه|المقانيص",
-        r"سعر|سعر اليوم|كم يساوي|كم قيمة|سوق|أسهم|عملة|صرف|ذهب|نفط|بتكوين|عملات|أسعار|تضخم|بنك مركزي|ارتفاع|انخفاض",
-        r"طقس|حرارة|درجة الحرارة|مطر|رياح|حالة الطقس|اعصار|غبار|رطوبة",
-        r"فلم جديد|مسلسل جديد|موعد عرض|حلقة جديدة|مسلسل|فلم|حفل|مهرجان",
-        r"موعد اختبار|موعد تسجيل|شروط القبول|تقديرات|نتائج الاختبارات|قبول|تسجيل|قرار جديد|قانون جديد|نظام جديد",
-        r"ابحث لي|ابحث في|ابحث|تفقد لي|شوف لي|أريد معلومات عن|هل يوجد|تأكد لي|دقق لي|تحقق لي|فحص لي",
-    ]
-    for pat in force_patterns:
-        if re.search(pat, p):
-            return True
-    return False
-
+# 🔍 دالة البحث في الويب
 def search_web(query):
-    sources = []
-    text = ""
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=3))
-        if not results:
-            return "", []
-        sources = [{"title": r.get('title',''), "url": r.get('href',''), "body": r.get('body','')} for r in results]
-        text = "\n".join(f"• {r.get('title','')}: {r.get('body','')[:180]}" for r in results)
-    except Exception:
-        pass
-    return text, sources
+        res = requests.get("https://api.duckduckgo.com/", 
+                          params={"q": query, "format": "json", "t": "nibras", "kl": "ar-sa"}, 
+                          timeout=8).json()
+        return res.get("AbstractText") or None
+    except:
+        return None
 
-HTML = """
+# 🧠 شخصية نبراس ونظام الرد
+SYSTEM_PROMPT = f"""
+أنت "نبراس"، مساعد مخصص لأهل السعودية والخليج، متخصص في تربية الحلال والطيور والمقانيص والبر.
+تحدث باللهجة السعودية العامية الواضحة، جمل قصيرة ومباشرة، لا تطيل ولا تتفلسف.
+إذا كان السؤال عن معلومات حديثة، أسعار، مواعيد، أخبار، أو شيء لم تكن تعرفه، قم بالبحث تلقائياً وأجب بالصحيح.
+اجعل ردودك طبيعية كإنسان، ورحب وتفاعل بود. لا تذكر المصادر إلا إذا طلب منك.
+
+معلوماتك الخاصة:
+{knowledge_content}
+"""
+
+# 📱 الواجهة الكاملة
+@app.route('/')
+def index():
+    return render_template_string('''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<title>نبراس GT</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;min-height:100%;margin:0;padding:0;background:#fff;font-family:'Segoe UI',sans-serif;overscroll-behavior:none}
-.app{min-height:100dvh;height:100dvh;max-width:750px;margin:0 auto;background:#fff;display:flex;flex-direction:column;position:relative;overflow:hidden}
-.header{height:52px;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#fff;flex-shrink:0}
-
-/* زر الزائد يسار - مقاس دقيق 20×20 */
-.header .icon-btn.left{width:20px;height:20px;border-radius:50%;border:1.5px solid #111827;background:transparent;color:#111827;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
-.header .icon-btn.left:hover{background:#f3f4f6;transform:scale(1.08)}
-.header .icon-btn.left:active{transform:scale(0.95)}
-
-/* زر القائمة يمين */
-.header .icon-btn.right{width:26px;height:26px;border:none;background:transparent;color:#111827;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;border-radius:8px}
-.header .icon-btn.right:hover{background:#f3f4f6}
-
-/* القائمة تفتح أسفل اليمين */
-.dropdown{display:none;position:absolute;top:60px;right:16px;background:#fff;border-radius:11px;box-shadow:0 5px 18px rgba(0,0,0,0.06);padding:5px 0;width:160px;border:none;z-index:99;animation:dropShow 0.2s ease}
-@keyframes dropShow{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-.dropdown.active{display:block}
-.dropdown .item{padding:8px 15px;font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#1f2937;transition:all 0.15s ease;margin:2px 5px;border-radius:6px}
-.dropdown .item:hover{background:#f9fafb;color:#005c99}
-
-.chat-box{flex:1 1 auto;min-height:0;overflow-y:auto;padding:24px 18px;background:#f9fafb;display:flex;flex-direction:column;gap:14px}
-.msg{max-width:78%;padding:12px 18px;border-radius:20px;font-size:15px;line-height:1.7;word-wrap:break-word;animation:fadeIn 0.25s ease}
-.msg.user{background:linear-gradient(135deg,#0077b6,#005c99);color:white;align-self:flex-end;border-bottom-right-radius:6px}
-.msg.bot{background:white;align-self:flex-start;border-bottom-left-radius:6px}
-.msg .time{font-size:10px;color:#9ca3af;display:inline-block;margin-top:4px}
-.msg.user .time{color:rgba(255,255,255,0.7)}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.typing{display:flex;gap:5px;background:white;padding:12px 18px;border-radius:20px;border-bottom-left-radius:6px;align-self:flex-start}
-.typing span{width:8px;height:8px;background:#d1d5db;border-radius:50%;animation:bounce 1.2s infinite}
-.typing span:nth-child(2){animation-delay:0.2s}
-.typing span:nth-child(3){animation-delay:0.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-.input-bar{flex-shrink:0;background:white;padding:12px 18px max(18px, env(safe-area-inset-bottom));border-top:1px solid #f3f4f6;display:flex;gap:12px;align-items:center}
-.input-bar .wrap{flex:1;display:flex;align-items:center;background:#f9fafb;border-radius:30px;padding:6px 16px;border:1px solid transparent;transition:all 0.2s ease}
-.input-bar .wrap:focus-within{border-color:#005c99;background:white;box-shadow:0 0 0 3px rgba(0,92,153,0.06)}
-.input-bar .wrap input{flex:1;border:none;background:transparent;padding:10px 8px;font-size:15px;outline:none;color:#111827}
-.input-bar .wrap input::placeholder{color:#9ca3af}
-.input-bar .wrap .icon-btn{background:none;border:none;font-size:18px;color:#6b7280;cursor:pointer;padding:6px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease}
-.input-bar .wrap .icon-btn:hover{background:rgba(0,92,153,0.08);color:#005c99}
-.input-bar .send-btn{background:linear-gradient(135deg,#0077b6,#005c99);color:white;border:none;border-radius:50%;width:42px;height:42px;min-width:42px;min-height:42px;font-size:18px;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,92,153,0.2)}
-.input-bar .send-btn:disabled{background:#d1d5db;box-shadow:none}
-.chat-image{max-width:160px;border-radius:12px;margin-top:6px}
-::-webkit-scrollbar{width:5px;background:transparent}
-::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:10px}
-</style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>نبراس</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+        html,body{height:100%;overflow:hidden;background:#ffffff;color:#111}
+        .app{width:100%;height:100vh;display:flex;flex-direction:column}
+        .header{position:sticky;top:0;z-index:999;display:flex;justify-content:flex-end;padding:12px 16px;border-bottom:1px solid #eee;background:#fff}
+        .menu-btn{border:none;background:none;font-size:18px;color:#333;cursor:pointer;padding:6px}
+        .dropdown{position:absolute;top:50px;left:12px;right:12px;background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.1);display:none;flex-direction:column;z-index:1000;border:1px solid #eee}
+        .dropdown.show{display:flex}
+        .dropdown .item{padding:12px 16px;font-size:14px;color:#333;border:none;background:none;text-align:right;cursor:pointer;border-bottom:1px solid #f5f5f5}
+        .dropdown .item:last-child{border-bottom:none}
+        #chat{flex:1;overflow-y:auto;padding:12px;background:#fff}
+        .msg{max-width:80%;padding:10px 14px;border-radius:18px;font-size:15px;line-height:1.5;margin-bottom:8px;position:relative}
+        .msg.user{align-self:flex-end;background:#f0f0f0;border-bottom-left-radius:6px}
+        .msg.bot{align-self:flex-start;background:#f8f8f8;border-bottom-right-radius:6px}
+        .time{font-size:10px;color:#999;margin-top:4px;display:block}
+        .speak-btn{position:absolute;left:8px;bottom:4px;border:none;background:none;color:#888;font-size:14px;cursor:pointer;padding:2px}
+        .input-area{display:flex;align-items:center;gap:6px;padding:8px 12px;margin:8px;background:#f9f9f9;border-radius:30px;border:1px solid #eee;position:sticky;bottom:0}
+        .input-area input{flex:1;border:none;background:transparent;padding:10px;font-size:15px;outline:none;color:#111}
+        .btn-icon{border:none;background:none;color:#666;font-size:18px;cursor:pointer;padding:4px}
+        .send{background:#333;color:white;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:14px}
+    </style>
 </head>
 <body>
 <div class="app">
     <div class="header">
-        <button class="icon-btn left" id="newChatBtn"><i class="fa-solid fa-plus"></i></button>
-        <button class="icon-btn right" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
-        <div class="dropdown" id="dropdownMenu">
-            <div class="item" onclick="alert('📅 '+new Date().toLocaleDateString('ar-SA'))"><i class="fa-regular fa-calendar"></i> التاريخ</div>
-            <div class="item" onclick="alert('🔍 البحث بالويب مفعل عند الحاجة')"><i class="fa-solid fa-globe"></i> بحث ويب</div>
-            <div class="item" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> تحديث</div>
-            <div class="item" onclick="alert('💬 مطور: أبو مشعل المطيري')"><i class="fa-regular fa-circle-question"></i> عن نبراس</div>
-        </div>
+        <button class="menu-btn" id="menu"><i class="fas fa-ellipsis-v"></i></button>
     </div>
-    <div class="chat-box" id="chatBox">
-        <div class="msg bot">هلا وسهلا بك! أنا نبراس، جاهز لأجيبك بكل راحة. وش عندك اليوم؟ 😊<span class="time">الآن</span></div>
+    <div class="dropdown" id="list">
+        <button class="item" id="new"><i class="fas fa-plus"></i> محادثة جديدة</button>
     </div>
-    <div class="input-bar">
-        <div class="wrap">
-            <button class="icon-btn" id="micBtn"><i class="fa-solid fa-microphone"></i></button>
-            <button class="icon-btn" id="imageBtn"><i class="fa-regular fa-image"></i></button>
-            <input type="text" id="userInput" placeholder="اكتب ما في خاطرك...">
-            <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
-        </div>
-        <button class="send-btn" id="sendBtn"><i class="fa-regular fa-paper-plane"></i></button>
+    <div id="chat"></div>
+    <div class="input-area">
+        <button class="btn-icon" id="mic"><i class="fas fa-microphone"></i></button>
+        <input type="text" id="txt" placeholder="اكتب رسالتك..." />
+        <button class="send" id="go"><i class="fas fa-paper-plane"></i></button>
     </div>
 </div>
-
 <script>
-const chatBox = document.getElementById('chatBox');
-const userInput = document.getElementById('userInput');
-const sendBtn = document.getElementById('sendBtn');
-const micBtn = document.getElementById('micBtn');
-const imageBtn = document.getElementById('imageBtn');
-const fileInput = document.getElementById('fileInput');
-const menuBtn = document.getElementById('menuBtn');
-const dropdown = document.getElementById('dropdownMenu');
-const newChatBtn = document.getElementById('newChatBtn');
-
-let pendingImages = [];
-function getTime(){return new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}
-
-function appendBotMessage(text, images){
-    const div = document.createElement('div');
-    div.className = 'msg bot';
-    div.innerHTML = text + (images&&images.length?images.map(s=>`<br><img class="chat-image" src="${s}">`).join(''):'') + ` <span class="time">${getTime()}</span>`;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-function appendUserMessage(text, images){
-    const div = document.createElement('div');
-    div.className = 'msg user';
-    div.innerHTML = text + (images&&images.length?images.map(s=>`<br><img class="chat-image" src="${s}">`).join(''):'') + ` <span class="time">${getTime()}</span>`;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-function showTyping(){const d=document.createElement('div');d.className='typing';d.id='typing';d.innerHTML='<span></span><span></span><span></span>';chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
-function hideTyping(){document.getElementById('typing')?.remove()}
-
-menuBtn.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.toggle('active')});
-document.addEventListener('click',()=>{dropdown.classList.remove('active')});
-newChatBtn.addEventListener('click',()=>{chatBox.innerHTML='';appendBotMessage('هلا وسهلا! أنا نبراس، وش أخبارك اليوم؟ 😊')});
-
-sendBtn.addEventListener('click',async ()=>{
-    const text = userInput.value.trim();
-    if(!text && !pendingImages.length) return;
-    appendUserMessage(text, pendingImages);
-    userInput.value='';pendingImages=[];
-    showTyping();
-    try{
-        const res = await fetch('/chat',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({message:text, images:pendingImages})
-        });
-        const data = await res.json();
-        hideTyping();
-        appendBotMessage(data.reply || '⚠️ عذراً، حدث خطأ');
-    }catch(e){hideTyping();appendBotMessage('⚠️ تعذر الاتصال بالخادم')}
-});
-userInput.addEventListener('keydown',e=>{if(e.key==='Enter') sendBtn.click()});
-imageBtn.addEventListener('click',()=>fileInput.click());
-fileInput.addEventListener('change',e=>{
-    Array.from(e.target.files).forEach(f=>{
-        const r=new FileReader();r.onload=ev=>pendingImages.push(ev.target.result);r.readAsDataURL(f);
-    });
-});
-micBtn.addEventListener('click',()=>alert('🎤 خاصية الصوت قيد التجهيز'));
+function speak(t){if('speechSynthesis'in window){let u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';u.rate=0.9;speechSynthesis.speak(u);}}
+function addMsg(tp,txt){let d=document.createElement('div');d.className='msg '+tp;d.innerHTML=txt+`<span class="time">${new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</span>`;if(tp==='bot'){let b=document.createElement('button');b.className='speak-btn';b.innerHTML='<i class="fas fa-volume-up"></i>';b.title='استمع للرد';b.onclick=()=>speak(txt);d.appendChild(b);}chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+document.getElementById('menu').onclick=()=>document.getElementById('list').classList.toggle('show');
+document.addEventListener('click',e=>{if(!e.target.closest('.header')&&!e.target.closest('.dropdown'))document.getElementById('list').classList.remove('show');});
+document.getElementById('new').onclick=()=>{chat.innerHTML='';document.getElementById('list').classList.remove('show');};
+let rec=null;document.getElementById('mic').onclick=function(){if(!('webkitSpeechRecognition'in window))return;if(rec){rec.stop();this.classList.remove('on');return;}rec=new webkitSpeechRecognition();rec.lang='ar-SA';rec.onresult=e=>{txt.value=e.results[0][0].transcript;this.classList.remove('on');go.click()};this.classList.add('on');rec.start();};
+document.getElementById('go').onclick=send;document.getElementById('txt').onkeydown=e=>e.key==='Enter'&&send();
+async function send(){let t=txt.value.trim();if(!t)return;addMsg('user',t);txt.value='';try{let r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({m:t})});let d=await r.json();addMsg('bot',d.reply||'تم الاستلام')}catch{addMsg('bot','تعذر الاتصال')}}
 </script>
 </body>
 </html>
-"""
+    ''')
 
-@app.route("/")
-def index():
-    session.clear()
-    return HTML
-
-@app.route("/chat", methods=["POST"])
+# 📨 استقبال ومعالجة الرسائل
+@app.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    user_msg = (data.get("message") or "").strip()
-    images = data.get("images", [])
+    msg = request.json.get("m", "").strip()
+    if not msg:
+        return jsonify({"reply": "اكتب رسالتك أولاً"})
 
-    if user_msg and any(k in user_msg for k in ["برمج", "مطور", "سواك", "المبرمج"]):
-        return jsonify({"reply": "أنا سمي نبراس طورني وبرمجني أبو مشعل المطيري 🤖❤️"})
+    # تحديد الحاجة للبحث
+    need_search = any(w in msg.lower() for w in ["متى","كم سعر","اسعار","احدث","اخبار","نتيجة","موسم","سنة","تاريخ","اليوم"])
+    search_res = search_web(msg) if need_search else ""
+    full_prompt = f"{SYSTEM_PROMPT}\n\nالسؤال: {msg}\n\nمعلومات حديثة: {search_res or 'لا يوجد'}"
 
-    if user_msg and is_pure_date_question(user_msg):
-        return jsonify({"reply": f"اليوم هو {get_real_date()}"})
+    # طلب الرد من الذكاء الاصطناعي
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role":"system","content":full_prompt},{"role":"user","content":msg}],
+        temperature=0.7
+    )
+    return jsonify({"reply": res.choices[0].message.content.strip()})
 
-    if user_msg and user_asks_for_sources(user_msg):
-        last_sources = session.get("last_sources", [])
-        last_search = session.get("last_had_search", False)
-        reply = "✅ تفضل هذه هي المصادر:\n\n" if (last_search and last_sources) else" ابحث بالويب اذا اسوال يحتاج بحث"
-        for i,s in enumerate(last_sources,1): reply += f"{i}. {s['title']}\n{s['url']}\n\n"
-        return jsonify({"reply": reply.strip()})
-
-    FORCE_WEB_SEARCH = MUST_SEARCH(user_msg) if user_msg else False
-    search_text, sources = search_web(user_msg) if (user_msg and FORCE_WEB_SEARCH) else ("", [])
-    session["last_sources"] = sources
-    session["last_had_search"] = FORCE_WEB_SEARCH or bool(sources)
-
-    system_prompt = f"""أنت نبراس، المساعد الذكي المصمم خصيصاً لأبو مشعل المطيري.
-🔹 تحدث دائماً بـ **لهجة سعودية عامية بيضاء واضحة**، طبيعية جداً كأنك تتكلم مع أخ أو صديق، لا تستخدم لغة رسمية ولا كلام معقد.
-🔹 اجعل حديثك متفاعل، واختم إجابتك دائماً بسؤال أو خيار لكي تكمل الحديث معه.
-🔹 إذا كان السؤال يحتاج معلومات حديثة، أخبار، أسعار، مواعيد، نتائج، أو أي شيء يتغير بسرعة: استخدم نتائج البحث التي جلبتها لك.
-🔹 وإذا كان السؤال معلومات عامة أو حديث عادي: لا تبحث وتكلم من معلوماتك مع الحفاظ على نفس اللهجة والتفاعل.
-🔹 لا تذكر أبداً أنك ذكاء اصطناعي، ولا تظهر روابط أو مصادر في الإجابة الرئيسية.
-🔹 تاريخ اليوم: {get_real_date()}
-{('🔹 معلومات حديثة جلبتها لك:\n'+search_text) if search_text else ''}
-"""
-
-    try:
-        if images:
-            img = Image.open(BytesIO(base64.b64decode(images[0].split(',')[1])))
-            buf = BytesIO();img.save(buf,'JPEG');b64=base64.b64encode(buf.getvalue()).decode()
-            res = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role":"system","content":system_prompt},
-                    {"role":"user","content":[{"type":"text","text":user_msg or "شوف لي الصورة دي وقول وش فيها"},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}
-                ],
-                max_tokens=900,
-                temperature=0.8
-            )
-        else:
-            res = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role":"system","content":system_prompt},
-                    {"role":"user","content":user_msg or "هلا نبراس"}
-                ],
-                max_tokens=900,
-                temperature=0.8
-            )
-        reply = clean_reply_from_links(res.choices[0].message.content.strip())
-        if session.get("last_had_search"):
-            reply += "\n💡 لو تريد المصادر قل لي وأجيبك بها."
-        return jsonify({"reply": reply})
-    except Exception as e:
-        return jsonify({"reply": f"⚠️ عذراً صار خطأ: {str(e)}"})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == '__main__':
+    app.run(debug=False)
