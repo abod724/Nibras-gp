@@ -20,22 +20,26 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-# ========== نظام التعليمات الجديد (مترابط مع ملف المعرفة بالكامل) ==========
+# ========== نظام التعليمات (تفاعلي وإنساني) ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس". ملف المعرفة التالي يحتوي على **شخصيتك الكاملة** (هويتك، لهجتك، أسلوبك، معلوماتك، وكيف تتفاعل مع المستخدمين).
+أنت "نبراس"، مساعد سعودي طبيعي، تتحدث باللهجة العامية البيضاء.
 
-**تعليمات صارمة:**
-- أنت هويتك وشخصيتك مستمدة بالكامل من ملف المعرفة. اقرأه جيداً وطبقه في كل رد.
-- لهجتك، أسلوبك، ومبادئك هي كما وردت في ملف المعرفة.
-- إذا سألك المستخدم عن أي موضوع عام (تقنية، صحة، سفر، نصائح)، استخدم معرفتك العامة أو البحث، ولكن حافظ على شخصيتك وأسلوبك المستمد من ملف المعرفة.
-- إذا سألك عن المعلومات المحددة الموجودة في ملف المعرفة (الطيور، الهجرة، الصيد، المناطق)، أجب منها مباشرة.
-- ملف المعرفة هو مرجعك الأول لشخصيتك، وليس فقط للطيور.
+**تعليماتك العامة:**
+- خلك إنسان: لا ترد ردود جاهزة، تفاعل مع كلام المستخدم.
+- اسأل: إذا قال لك شي، اسأله عن تفاصيل، عن رأيه، عن وش يخطط له.
+- شارك: أعطه أفكار، اقتراحات، حلول، واطرح عليه أسئلة تحفزه يتكلم أكثر.
+- ناقش: إذا كان النقاش حلو، ادخل معاه فيه، وابدِ رأيك بكل احترام.
+- جاوب من ملف المعرفة: إذا سألك عن شيء موجود في الملف، جاوبه منه، لكن بأسلوبك العامي.
+- إذا ما لقيت المعلومة: قل بصراحة "والله ما عندي علم"، ولا تختلق.
+- استخدم البحث الخارجي فقط للأحداث الجديدة والطقس.
 
-**محتوى ملف المعرفة (شخصيتك الكاملة):**
+**المبدأ**: خلك صديق يحب يسولف، مو مجرد روبوت يجاوب.
+
+**ملف المعرفة:**
 {knowledge_content}
 """
 
-# ========== الواجهة (بدون تغيير) ==========
+# ========== الواجهة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -66,6 +70,10 @@ HTML_TEMPLATE = """
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
 
+        /* عرض الصورة داخل الرسالة */
+        .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
+        .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
+
         .input-area { display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; }
         .input-area input { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; }
         .input-area input::placeholder { color: #9aabbc; }
@@ -86,6 +94,7 @@ HTML_TEMPLATE = """
             .input-area input { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
             .input-area .btn-icon { width: 34px; height: 34px; font-size: 18px; }
+            .msg .image-upload { max-height: 150px; }
         }
     </style>
 </head>
@@ -115,7 +124,6 @@ HTML_TEMPLATE = """
 
 <script>
     (function() {
-        // ===== متغير لتخزين تاريخ المحادثة الحالية =====
         let conversationHistory = [];
 
         const chatBox = document.getElementById('chat');
@@ -127,32 +135,39 @@ HTML_TEMPLATE = """
         const menuToggle = document.getElementById('menuToggle');
         const dropdown = document.getElementById('dropdown');
 
-        function addMessage(text, sender = 'bot', isSystem = false) {
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
+
+            let content = '';
+            if (imageData) {
+                content = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span>`;
+            } else {
+                content = text;
+            }
+
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-            el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
+            el.innerHTML = `${content} <span class="time">${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            const textSpan = el.querySelector('.typing-text');
-            let index = 0;
-            function typeChar() {
-                if (index < text.length) {
-                    textSpan.textContent += text.charAt(index);
-                    index++;
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                    setTimeout(typeChar, 15);
-                }
-            }
-            typeChar();
-
-            // إضافة الرسالة إلى تاريخ المحادثة الحالية
             if (!isSystem && sender !== 'error') {
-                conversationHistory.push({ role: sender, content: text });
-                // نحتفظ بآخر 20 رسالة فقط
+                if (!imageData) {
+                    conversationHistory.push({ role: sender, content: text });
+                } else {
+                    conversationHistory.push({ role: sender, content: '📷 رفع صورة' });
+                }
                 if (conversationHistory.length > 20) {
                     conversationHistory = conversationHistory.slice(-20);
                 }
@@ -239,7 +254,7 @@ HTML_TEMPLATE = """
 
         function newChat() {
             chatBox.innerHTML = '';
-            conversationHistory = []; // إعادة تعيين تاريخ المحادثة الحالية
+            conversationHistory = [];
         }
 
         function handleAction(action) {
@@ -309,17 +324,29 @@ HTML_TEMPLATE = """
 
         async function sendMessage() {
             const text = userInput.value.trim();
-            if (!text) return;
-            addMessage(text, 'user');
+            const file = fileInput.files[0];
+            if (!text && !file) return;
+
+            let imageData = null;
+            if (file) {
+                imageData = await toBase64(file);
+                addMessage(file.name, 'user', false, imageData);
+                let imgs = getImages();
+                imgs.push(imageData);
+                saveImages(imgs);
+                fileInput.value = '';
+            }
+            if (text) {
+                addMessage(text, 'user');
+            }
             userInput.value = '';
             userInput.focus();
 
             try {
-                // إرسال تاريخ المحادثة الحالية إلى الخادم
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ m: text, history: conversationHistory })
+                    body: JSON.stringify({ message: text, image: imageData, history: conversationHistory })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -336,21 +363,6 @@ HTML_TEMPLATE = """
         userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
         fileBtn.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', function() {
-            if (this.files && this.files.length > 0) {
-                const file = this.files[0];
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    let imgs = getImages();
-                    imgs.push(ev.target.result);
-                    saveImages(imgs);
-                    addMessage(`تم رفع ${file.name}`, 'user');
-                    addMessage('حُفظت الصورة في مكتبتك.', 'bot', true);
-                    fileInput.value = '';
-                };
-                reader.readAsDataURL(file);
-            }
-        });
     })();
 </script>
 </body>
@@ -361,35 +373,40 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة ==========
+# ========== نقطة الدردشة مع تحليل الصور ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
         data = request.get_json()
-        user_message = data.get("m", "").strip()
-        history = data.get("history", [])  # تاريخ المحادثة من الواجهة
+        user_message = data.get("message", "").strip()
+        image_data = data.get("image", None)
+        history = data.get("history", [])
 
-        if not user_message:
-            return jsonify({"reply": "اكتب شيء أساعدك فيه"})
-
-        # بناء السياق الكامل للمحادثة
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
-            # تحويل الصيغة: user/bot إلى role المناسب لـ OpenAI
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["content"]})
-        # نضيف الرسالة الحالية
-        messages.append({"role": "user", "content": user_message})
 
-        response = client.responses.create(
-            model="gpt-4o-mini",
-            input=messages,
-            tools=[{"type": "web_search"}],
-            temperature=0.9,
-            max_output_tokens=4000
+        if image_data:
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة السعودية"},
+                    {"type": "image_url", "image_url": {"url": image_data}}
+                ]
+            })
+        else:
+            if user_message:
+                messages.append({"role": "user", "content": user_message})
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=500,
+            temperature=0.8
         )
 
-        reply = response.output_text.strip()
+        reply = response.choices[0].message.content.strip()
         return jsonify({"reply": reply})
 
     except Exception as e:
