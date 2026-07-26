@@ -22,8 +22,8 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-# ========== دوال الذاكرة (التخزين الدائم) ==========
-MEMORY_FILE = "memory.json"
+# ========== دوال الذاكرة (مع مسار مطلق) ==========
+MEMORY_FILE = os.path.join(os.path.dirname(__file__), "memory.json")
 
 def load_memory():
     if os.path.exists(MEMORY_FILE):
@@ -51,23 +51,19 @@ def update_user_memory(user_id, role, content):
         "content": content,
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
-    # نحتفظ بآخر 50 رسالة فقط عشان الملف ما يكبر
     if len(memory[user_id]) > 50:
         memory[user_id] = memory[user_id][-50:]
     save_memory(memory)
+    # نطبع تأكيد في السجلات عشان نعرف إنها اشتغلت
+    print(f"✅ تم حفظ رسالة للمستخدم {user_id} في memory.json")
 
-# ========== نظام التعليمات الجديد (مساعد عام) ==========
+# ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي، وصديق سعودي تتحدث باللهجة العامية البيضاء فقط.
 
 **هويتك الأساسية:**
-- أنا مساعد عام، أجاوب على أي سؤال في أي مجال (تقنية، صحة، سفر، أخبار، طبخ، نصائح حياتية، إلخ).
+- أنا مساعد عام، أجاوب على أي سؤال في أي مجال.
 - أتكلم بلهجة سعودية عامية (إيوه، لا، وش، كيفك، تمام، طيب، خلاص، هلا، والله).
-
-**كيف تتعامل مع المعلومة:**
-- ملف المعرفة يحتوي على معلومات إضافية عن الطيور والهجرة والصيد في السعودية.
-- **لا تذكر الطيور أو الهجرة** إلا إذا سألك المستخدم عنها تحديداً (مثل: متى هجرة الطيور، أو وين الصقور).
-- إذا كان السؤال عاماً (مثل: أخبار اليوم، نصيحة، شرح تقني)، استخدم معرفتك العامة وابحث إذا لزم الأمر.
 
 **الذاكرة (مهم جداً):**
 - تذكر المحادثات السابقة مع كل مستخدم، واربط ردودك بما قلته له قبل قليل.
@@ -399,23 +395,21 @@ def chat():
         if not user_message:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
-        # تحديد هوية المستخدم (عنوان IP)
         user_id = request.remote_addr
 
         # تسجيل رسالة المستخدم في الذاكرة
         update_user_memory(user_id, "user", user_message)
 
-        # جلب آخر 10 رسائل من ذاكرة المستخدم
+        # جلب آخر 10 رسائل من الذاكرة
         history = get_user_memory(user_id)[-10:]
 
-        # بناء قائمة الرسائل المرسلة إلى OpenAI
+        # بناء السياق الكامل للمحادثة
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
             messages.append({"role": msg["role"], "content": msg["content"]})
-        # نضيف الرسالة الحالية (لأنها قد تكون موجودة بالفعل في التاريخ، لكن نضيفها للتأكيد)
+        # نضيف الرسالة الحالية (قد تكون موجودة في التاريخ ولكن نضيفها للتأكيد)
         messages.append({"role": "user", "content": user_message})
 
-        # استدعاء OpenAI مع السياق الكامل
         response = client.responses.create(
             model="gpt-4o-mini",
             input=messages,
@@ -433,7 +427,6 @@ def chat():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
