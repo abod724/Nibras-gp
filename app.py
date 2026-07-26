@@ -5,13 +5,11 @@ import requests
 
 app = Flask(__name__)
 
-# 🔑 الاتصال الصحيح بـ OpenAI
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
-    raise Exception("❌ المفتاح غير موجود في الإعدادات")
+    raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# 📚 ملف المعرفة
 KNOWLEDGE_FILE = "Knowledge.md"
 knowledge_content = ""
 if os.path.exists(KNOWLEDGE_FILE):
@@ -21,25 +19,20 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
-# 🔍 دالة البحث وتأكدنا أنها تعمل
 def search_web(query):
     try:
-        res = requests.get(
-            "https://api.duckduckgo.com/",
-            params={"q": query, "format": "json", "kl": "ar-sa", "no_html": "1", "skip_disambig": "1"},
-            timeout=10
-        ).json()
+        res = requests.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "kl": "ar-sa"}, timeout=10).json()
         return res.get("AbstractText") or ""
-    except Exception as e:
+    except:
         return ""
 
-# 🧠 التعليمات وربط البحث بشكل صريح
+# 🧠 التعليمات الجديدة المفتوحة كما طلبت
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد أهل السعودية والخليج.
-تحدث باللهجة السعودية العامية الواضحة، جمل قصيرة وطبيعية كإنسان حقيقي.
-🔴 أمر صارم: لا تقل أبداً "لا أقدر أبحث" أو "لا توجد معلومات حديثة".
-سيتم تزويدك بمعلومات تم جلبها من البحث الحديث، استخدمها مباشرة وأجب بها بدقة.
-تفاعل مع المستخدم بود ورحب به، ولا تطيل الكلام ولا تكثر التفاصيل.
+أنت "نبراس"، مساعد ودود ومتعاون لأهل السعودية والخليج.
+تحدث باللهجة السعودية العامية الواضحة والطبيعية تماماً كإنسان حقيقي.
+تفاعل مع المستخدم بكل رحابة صدر، جاوب على أسئلته، واطلب منه التفاصيل إن احتجت، واقترح عليه أمور مفيدة، واطرح عليه أسئلة لتبادل الحديث والفائدة.
+لا تقل "لا أقدر أبحث"، أنت تحصل على معلومات حديثة تم جلبها لك عند الحاجة، وكذلك معلوماتك الخاصة، استخدمها بطريقتك الخاصة.
+تكلم براحتك ولا توجد قيود على طول الرد، المهم أن تكون ودوداً ومفيداً ومتجاوباً.
 
 معلوماتك الخاصة:
 {knowledge_content}
@@ -65,7 +58,7 @@ def index():
         .dropdown button{padding:12px 15px;border:none;background:none;text-align:right;cursor:pointer;border-bottom:1px solid #eee}
         .dropdown button:last-child{border-bottom:none}
         #chat{flex:1;overflow-y:auto;padding:15px}
-        .msg{max-width:80%;padding:12px 15px;border-radius:18px;margin-bottom:10px;position:relative;white-space:pre-wrap}
+        .msg{max-width:85%;padding:12px 15px;border-radius:18px;margin-bottom:10px;position:relative;white-space:pre-wrap;line-height:1.6}
         .user{background:#f0f0f0;margin-left:auto}
         .bot{background:#f8f8f8;margin-right:auto}
         .time{font-size:11px;color:#999;margin-top:5px;display:block;text-align:left}
@@ -152,11 +145,7 @@ async function sendIt(){
     addMsg('user', v);
     txtMsg.value = '';
     try{
-        const res = await fetch('/chat', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({m: v})
-        });
+        const res = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({m:v})});
         const data = await res.json();
         addMsg('bot', data.reply || 'تم الاستلام');
     }catch{
@@ -168,35 +157,27 @@ async function sendIt(){
 </html>
     ''')
 
-# 📨 هنا تم الربط الصحيح للبحث مع OpenAI
 @app.route('/chat', methods=['POST'])
 def chat():
     msg = request.json.get("m", "").strip()
     if not msg:
         return jsonify({"reply": "اكتب شيء أساعدك فيه"})
     
-    # تحديد الكلمات التي تستدعي البحث
-    search_words = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة","تاريخ","عام","سوق","حركة","حالة الطقس"]
+    search_words = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة","تاريخ","عام","سوق","حركة"]
     need_search = any(k in msg.lower() for k in search_words)
-    
-    # جلب نتيجة البحث
     search_result = search_web(msg) if need_search else ""
     
-    # بناء الرسالة وربط نتيجة البحث مباشرة مع الذكاء الاصطناعي
-    full_message = f"""
+    full_data = f"""
     السؤال: {msg}
-    معلومات حديثة تم جلبها من البحث: {search_result if search_result else 'لا يحتاج بحث خارجي، استخدم معلوماتك وملف معرفتك'}
+    معلومات متاحة: {search_result if search_result else 'لا يحتاج بحث خارجي'}
     """
     
-    response = client.chat.completions.create(
+    res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": full_message}
-        ],
-        temperature=0.7
+        messages=[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":full_data}],
+        temperature=0.8
     )
-    return jsonify({"reply": response.choices[0].message.content.strip()})
+    return jsonify({"reply": res.choices[0].message.content.strip()})
 
 if __name__ == '__main__':
     app.run(debug=False)
