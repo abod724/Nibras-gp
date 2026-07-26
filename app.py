@@ -5,11 +5,13 @@ import requests
 
 app = Flask(__name__)
 
+# 🔑 الاتصال الصحيح بـ OpenAI
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
-    raise Exception("المفتاح غير موجود")
+    raise Exception("❌ المفتاح غير موجود في الإعدادات")
 client = openai.OpenAI(api_key=API_KEY)
 
+# 📚 ملف المعرفة
 KNOWLEDGE_FILE = "Knowledge.md"
 knowledge_content = ""
 if os.path.exists(KNOWLEDGE_FILE):
@@ -19,20 +21,27 @@ if os.path.exists(KNOWLEDGE_FILE):
     except:
         pass
 
+# 🔍 دالة البحث وتأكدنا أنها تعمل
 def search_web(query):
     try:
-        res = requests.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "kl": "ar-sa"}, timeout=8).json()
+        res = requests.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "kl": "ar-sa", "no_html": "1", "skip_disambig": "1"},
+            timeout=10
+        ).json()
         return res.get("AbstractText") or ""
-    except:
+    except Exception as e:
         return ""
 
+# 🧠 التعليمات وربط البحث بشكل صريح
 SYSTEM_PROMPT = f"""
-أنت نبراس، مساعد أهل السعودية والخليج.
-تحدث باللهجة السعودية العامية، جمل قصيرة وطبيعية كإنسان.
-لا تقل أبداً "لا أقدر أبحث"، إذا السؤال حديث أو سعر أو موعد سيتم جلب المعلومات لك تلقائياً فأجب بها مباشرة.
-تفاعل بود ولا تطيل الكلام.
+أنت "نبراس"، مساعد أهل السعودية والخليج.
+تحدث باللهجة السعودية العامية الواضحة، جمل قصيرة وطبيعية كإنسان حقيقي.
+🔴 أمر صارم: لا تقل أبداً "لا أقدر أبحث" أو "لا توجد معلومات حديثة".
+سيتم تزويدك بمعلومات تم جلبها من البحث الحديث، استخدمها مباشرة وأجب بها بدقة.
+تفاعل مع المستخدم بود ورحب به، ولا تطيل الكلام ولا تكثر التفاصيل.
 
-معلوماتك:
+معلوماتك الخاصة:
 {knowledge_content}
 """
 
@@ -159,18 +168,32 @@ async function sendIt(){
 </html>
     ''')
 
+# 📨 هنا تم الربط الصحيح للبحث مع OpenAI
 @app.route('/chat', methods=['POST'])
 def chat():
     msg = request.json.get("m", "").strip()
     if not msg:
         return jsonify({"reply": "اكتب شيء أساعدك فيه"})
-    search_words = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة","تاريخ","عام"]
+    
+    # تحديد الكلمات التي تستدعي البحث
+    search_words = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة","تاريخ","عام","سوق","حركة","حالة الطقس"]
     need_search = any(k in msg.lower() for k in search_words)
+    
+    # جلب نتيجة البحث
     search_result = search_web(msg) if need_search else ""
-    full_prompt = f"{SYSTEM_PROMPT}\n\nالسؤال: {msg}\n\nمعلومات تم جلبها: {search_result or 'لا يحتاج بحث خارجي'}"
+    
+    # بناء الرسالة وربط نتيجة البحث مباشرة مع الذكاء الاصطناعي
+    full_message = f"""
+    السؤال: {msg}
+    معلومات حديثة تم جلبها من البحث: {search_result if search_result else 'لا يحتاج بحث خارجي، استخدم معلوماتك وملف معرفتك'}
+    """
+    
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role":"system","content":full_prompt},{"role":"user","content":msg}],
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": full_message}
+        ],
         temperature=0.7
     )
     return jsonify({"reply": response.choices[0].message.content.strip()})
