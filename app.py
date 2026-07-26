@@ -29,10 +29,10 @@ def search_web(query):
 SYSTEM_PROMPT = f"""
 أنت نبراس، مساعد أهل السعودية والخليج.
 تحدث باللهجة السعودية العامية، جمل قصيرة وطبيعية كإنسان.
-لا تقل أبداً لا أقدر أبحث، إذا السؤال حديث أو سعر أو موعد سيتم جلب المعلومات لك تلقائياً فأجب بها مباشرة.
+✅ أمر صارم: إذا كان السؤال عن معلومات حديثة، أسعار، تواريخ، أخبار، أو أي شيء يتطلب تحديث، سيتم البحث تلقائياً، فأجب بالمعلومة الصحيحة ولا تقل أبداً "لا أقدر أبحث".
 تفاعل بود ولا تطيل الكلام.
 
-معلوماتك:
+معلوماتك الخاصة:
 {knowledge_content}
 """
 
@@ -93,20 +93,57 @@ const menuBtn = document.getElementById('menuBtn');
 const menuList = document.getElementById('menuList');
 
 function speakNow(t){if(window.speechSynthesis){let u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';speechSynthesis.speak(u);}}
-async function writeType(el,txt){el.textContent='';for(let c of txt){el.textContent+=c;chat.scrollTop=chat.scrollHeight;await new Promise(r=>setTimeout(r,20));}}
-function addMsg(who,txt){let d=document.createElement('div');d.className='msg '+(who=='user'?'user':'bot');let t=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
-if(who=='bot'){let b=document.createElement('button');b.className='speak';b.innerHTML='🔊';b.onclick=()=>speakNow(txt);d.appendChild(b);writeType(d,txt+`\n<span class="time">${t}</span>`);}
-else{d.textContent=txt;d.innerHTML+=`<span class="time">${t}</span>`;}
-chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+async function writeType(el,txt){
+    el.textContent='';
+    for(let c of txt){
+        el.textContent += c;
+        chat.scrollTop = chat.scrollHeight;
+        await new Promise(r => setTimeout(r, 20));
+    }
+}
+function addMsg(who,txt){
+    let d = document.createElement('div');
+    d.className = 'msg ' + (who == 'user' ? 'user' : 'bot');
+    let timeSpan = document.createElement('span');
+    timeSpan.className = 'time';
+    timeSpan.textContent = new Date().toLocaleTimeString('ar-SA',{hour:'2-digit', minute:'2-digit'});
+    
+    if(who == 'bot'){
+        let b = document.createElement('button');
+        b.className = 'speak';
+        b.innerHTML = '🔊';
+        b.onclick = () => speakNow(txt);
+        d.appendChild(b);
+        await writeType(d, txt);
+        d.appendChild(timeSpan);
+    }else{
+        d.textContent = txt;
+        d.appendChild(timeSpan);
+    }
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+}
 
-menuBtn.onclick=()=>menuList.classList.toggle('active');
-document.addEventListener('click',e=>{if(!e.target.closest('.header'))menuList.classList.remove('active');});
-document.getElementById('newChat').onclick=()=>{chat.innerHTML='';menuList.classList.remove('active');};
-document.getElementById('oldChat').onclick=()=>{alert('قيد التجهيز');menuList.classList.remove('active');};
+menuBtn.onclick = () => menuList.classList.toggle('active');
+document.addEventListener('click', e => {if(!e.target.closest('.header')) menuList.classList.remove('active');});
+document.getElementById('newChat').onclick = () => {chat.innerHTML = ''; menuList.classList.remove('active');};
+document.getElementById('oldChat').onclick = () => {alert('قيد التجهيز'); menuList.classList.remove('active');};
 
-sendBtn.onclick=sendIt;
-txtMsg.onkeydown=e=>e.key==='Enter'&&sendIt();
-async function sendIt(){let v=txtMsg.value.trim();if(!v)return;addMsg('user',v);txtMsg.value='';try{let r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({m:v})});let j=await r.json();addMsg('bot',j.reply||'تم')}catch{addMsg('bot','خطأ')}}
+sendBtn.onclick = sendIt;
+txtMsg.onkeydown = e => e.key === 'Enter' && sendIt();
+async function sendIt(){
+    let v = txtMsg.value.trim();
+    if(!v) return;
+    addMsg('user', v);
+    txtMsg.value = '';
+    try{
+        let r = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({m:v})});
+        let j = await r.json();
+        addMsg('bot', j.reply || 'تم');
+    }catch{
+        addMsg('bot', 'خطأ في الاتصال');
+    }
+}
 </script>
 </body>
 </html>
@@ -117,10 +154,10 @@ def chat():
     msg = request.json.get("m", "").strip()
     if not msg:
         return jsonify({"reply": "اكتب شيء"})
-    keys = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة"]
+    keys = ["متى","سعر","اسعار","اخبار","موسم","موعد","احدث","نتيجة","تاريخ","عام"]
     need = any(k in msg.lower() for k in keys)
     info = search_web(msg) if need else ""
-    full = f"{SYSTEM_PROMPT}\nالسؤال: {msg}\nمعلومات: {info or ''}"
+    full = f"{SYSTEM_PROMPT}\nالسؤال: {msg}\nمعلومات تم جلبها: {info or 'لا يحتاج بحث خارجي'}"
     res = client.chat.completions.create(model="gpt-4o-mini",messages=[{"role":"system","content":full},{"role":"user","content":msg}],temperature=0.7)
     return jsonify({"reply": res.choices[0].message.content.strip()})
 
