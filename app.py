@@ -10,7 +10,7 @@ if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# ========== البحث عن ملف المعرفة (أي اسم) ==========
+# ========== البحث عن ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 
@@ -38,7 +38,7 @@ SYSTEM_PROMPT = f"""
 - ناقش: إذا كان النقاش حلو، ادخل معاه فيه، وابدِ رأيك بكل احترام.
 
 **كيف تتعامل مع الأسئلة:**
-- إذا سألك المستخدم "من طورك؟" أو "من برمجك؟" أو "من مؤسسك؟"، قول: "أنا من تطوير وبرمجة أفضل المطورين في العالم، فريق محترف ومبدع."
+- إذا سألك المستخدم "من طورك؟" أو "من برمجك؟"، قول: "أنا من تطوير وبرمجة أفضل المطورين في العالم، فريق محترف ومبدع."
 - إذا سألك عن شيء موجود في ملف المعرفة، جاوبه من الملف بأسلوبك العامي.
 - إذا سألك عن حدث جديد أو خبر عاجل، استخدم البحث بالويب واجب عليه.
 - إذا سألك عن شيء عام، استخدم معرفتك العامة.
@@ -63,27 +63,22 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
-
         .header { display: flex; justify-content: flex-end; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
         .header .menu-btn { background: none; border: none; font-size: 22px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
-
         .dropdown { position: absolute; top: 64px; left: 14px; right: 14px; background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); display: none; flex-direction: column; z-index: 100; border: 1px solid #eaedf2; }
         .dropdown.show { display: flex; }
         .dropdown .item { display: flex; align-items: center; gap: 12px; padding: 14px 18px; font-size: 15px; color: #1a2b3c; background: none; border: none; width: 100%; text-align: right; cursor: pointer; border-bottom: 1px solid #f0f2f5; }
         .dropdown .item:last-child { border-bottom: none; }
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
-
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
         .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; }
         .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
         .msg.bot { align-self: flex-start; background: #f5f7fa; color: #1a2b3c; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
-
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
-
         .input-area { display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; }
         .input-area input { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; }
         .input-area input::placeholder { color: #9aabbc; }
@@ -93,7 +88,6 @@ HTML_TEMPLATE = """
         .input-area .mic-btn.listening { color: #c33; background: #fde8e8; }
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
-
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
@@ -110,19 +104,15 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="app">
-
     <div class="header">
         <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
     </div>
-
     <div class="dropdown" id="dropdown">
         <button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button>
         <button class="item" data-action="library"><i class="fas fa-layer-group"></i> المكتبة</button>
         <button class="item" data-action="history"><i class="fas fa-history"></i> المحادثات السابقة</button>
     </div>
-
     <div id="chat"></div>
-
     <div class="input-area">
         <button class="btn-icon mic-btn" id="micBtn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
         <button class="btn-icon" id="fileBtn" title="رفع صورة"><i class="fas fa-image"></i></button>
@@ -131,11 +121,9 @@ HTML_TEMPLATE = """
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
 </div>
-
 <script>
     (function() {
         let conversationHistory = [];
-
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -158,10 +146,8 @@ HTML_TEMPLATE = """
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
-
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-
             if (imageData) {
                 el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
@@ -173,12 +159,10 @@ HTML_TEMPLATE = """
                 }
                 return;
             }
-
             if (sender === 'bot' && !isSystem) {
                 el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
-
                 const typingSpan = el.querySelector('.typing-text');
                 let index = 0;
                 function typeChar() {
@@ -190,7 +174,6 @@ HTML_TEMPLATE = """
                     }
                 }
                 typeChar();
-
                 if (!isSystem && sender !== 'error') {
                     conversationHistory.push({ role: sender, content: text });
                     if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
@@ -198,11 +181,9 @@ HTML_TEMPLATE = """
                 }
                 return;
             }
-
             el.innerHTML = `${text} <span class="time">${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
-
             if (!isSystem && sender !== 'error') {
                 conversationHistory.push({ role: sender, content: text });
                 if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
@@ -333,10 +314,8 @@ HTML_TEMPLATE = """
             recognition.lang = 'ar-SA';
             recognition.continuous = false;
             recognition.interimResults = false;
-
             this.classList.add('listening');
             addMessage('جاري الاستماع...', 'bot', true);
-
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 userInput.value = transcript;
@@ -361,7 +340,6 @@ HTML_TEMPLATE = """
             const text = userInput.value.trim();
             const file = fileInput.files[0];
             if (!text && !file) return;
-
             let imageData = null;
             if (file) {
                 imageData = await toBase64(file);
@@ -376,7 +354,6 @@ HTML_TEMPLATE = """
             }
             userInput.value = '';
             userInput.focus();
-
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -396,7 +373,6 @@ HTML_TEMPLATE = """
 
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-
         fileBtn.addEventListener('click', () => fileInput.click());
     })();
 </script>
@@ -417,11 +393,17 @@ def chat():
         image_data = data.get("image", None)
         history = data.get("history", [])
 
+        # ===== التحقق من وجود رسالة أو صورة =====
+        if not user_message and not image_data:
+            return jsonify({"reply": "اكتب شيء أساعدك فيه"})
+
+        # ===== بناء السياق للمحادثة =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["content"]})
 
+        # ===== إضافة الصورة (إذا وجدت) =====
         if image_data:
             messages.append({
                 "role": "user",
@@ -434,17 +416,51 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
-        # ===== التعديل الوحيد: استخدام function بدلاً من web_search =====
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=1000,
-            temperature=0.8,
-            tools=[{"type": "function", "function": {"name": "web_search"}}]  # <--- التعديل هنا
-        )
+        # ===== استدعاء النموذج مع البحث بالويب (Responses API) =====
+        # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
+        # نأخذ آخر رسالة من المستخدم كمدخل، والسياق نضعه في instructions
+        full_context = ""
+        for msg in messages:
+            if msg["role"] == "system":
+                continue
+            if msg["role"] == "user":
+                if isinstance(msg["content"], list):
+                    # إذا كان هناك صورة، نكتفي بالنص
+                    for part in msg["content"]:
+                        if part["type"] == "text":
+                            full_context += part["text"] + "\n"
+                else:
+                    full_context += msg["content"] + "\n"
+            elif msg["role"] == "assistant":
+                full_context += "نبراس: " + msg["content"] + "\n"
 
-        reply = response.choices[0].message.content.strip()
-        return jsonify({"reply": reply})
+        # استخدام Responses API للبحث بالويب
+        try:
+            response = client.responses.create(
+                model="gpt-4o-mini",
+                instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
+                input=user_message or "حلل هذه الصورة",
+                tools=[{"type": "web_search"}],
+                temperature=0.8,
+                max_output_tokens=1000
+            )
+            reply = response.output_text.strip()
+            if not reply:
+                reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
+            return jsonify({"reply": reply})
+        except Exception as e:
+            # إذا فشل البحث بالويب، نستخدم الطريقة العادية
+            print(f"⚠️ خطأ في البحث بالويب: {e}")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.8
+            )
+            reply = response.choices[0].message.content.strip()
+            if not reply:
+                reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+            return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ خطأ: {e}")
