@@ -93,7 +93,7 @@ HTML_TEMPLATE = """
             .dropdown { top: 58px; left: 10px; right: 10px; }
             .dropdown .item { padding: 12px 14px; font-size: 14px; }
             #chat { padding: 12px 14px; }
-            .msg { font-size: 14px; padding: 8px 12px; }
+            .msg { font-size: 15px; padding: 8px 12px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
             .input-area input { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
