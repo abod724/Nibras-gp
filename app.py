@@ -434,13 +434,13 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
-        # ===== التعديل الوحيد: إضافة أداة البحث =====
+        # ===== التعديل الوحيد: استخدام function بدلاً من web_search =====
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
             max_tokens=1000,
             temperature=0.8,
-            tools=[{"type": "web_search"}]  # <--- هنا التعديل
+            tools=[{"type": "function", "function": {"name": "web_search"}}]  # <--- التعديل هنا
         )
 
         reply = response.choices[0].message.content.strip()
