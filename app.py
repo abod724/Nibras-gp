@@ -78,7 +78,7 @@ HTML_TEMPLATE = """
             max-width: 80%;
             padding: 10px 16px;
             border-radius: 20px;
-            font-size: 15px;
+            font-size: 17px;
             line-height: 1.6;
             word-wrap: break-word;
             white-space: pre-wrap;
