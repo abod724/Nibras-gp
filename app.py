@@ -72,9 +72,31 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; }
-        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
-        .msg.bot { align-self: flex-start; background: #f5f7fa; color: #1a2b3c; border-bottom-right-radius: 6px; }
+        
+        /* ===== التعديلات المطلوبة ===== */
+        .msg {
+            max-width: 80%;
+            padding: 10px 16px;
+            border-radius: 20px;
+            font-size: 15px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            white-space: pre-wrap;  /* يحافظ على الأسطر والمسافات */
+        }
+        .msg.user {
+            align-self: flex-end;
+            background: #eef2f7;
+            color: #1a2b3c;
+            border-bottom-left-radius: 6px;
+        }
+        .msg.bot {
+            align-self: flex-start;
+            background: #ffffff;    /* خلفية بيضاء */
+            color: #1a2b3c;
+            border-bottom-right-radius: 6px;
+        }
+        /* ============================= */
+
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
