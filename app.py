@@ -738,6 +738,7 @@ def chat():
 
         # ===== اختيار الطريقة المناسبة =====
         if image_data:
+            # الصور: نستخدم chat.completions (gpt-4o)
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
@@ -748,21 +749,29 @@ def chat():
             if not reply:
                 reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
         else:
-            # ===== البحث بالويب =====
-            full_context = ""
-            for msg in messages:
-                if msg["role"] == "system": continue
-                if msg["role"] == "user":
-                    if isinstance(msg["content"], list):
-                        for part in msg["content"]:
-                            if part["type"] == "text":
-                                full_context += part["text"] + "\n"
-                    else:
-                        full_context += msg["content"] + "\n"
-                elif msg["role"] == "assistant":
-                    full_context += "نبراس: " + msg["content"] + "\n"
+            # ===== البحث بالويب (إجبارياً للأسئلة الحديثة) =====
+            keywords = ["تاريخ", "اليوم", "أخبار", "طقس", "حدث", "جديد", "الساعة", "وقت", "مباراة", "نتيجة", "سعر", "عملة", "سوق", "تحديث"]
+            needs_search = any(k in user_message for k in keywords)
+
+            if needs_search:
+                print(f"🔍 سيتم استخدام البحث بالويب للسؤال: {user_message}")
+            else:
+                print(f"ℹ️ سؤال عام (قد لا يحتاج بحث): {user_message}")
 
             try:
+                full_context = ""
+                for msg in messages:
+                    if msg["role"] == "system": continue
+                    if msg["role"] == "user":
+                        if isinstance(msg["content"], list):
+                            for part in msg["content"]:
+                                if part["type"] == "text":
+                                    full_context += part["text"] + "\n"
+                        else:
+                            full_context += msg["content"] + "\n"
+                    elif msg["role"] == "assistant":
+                        full_context += "نبراس: " + msg["content"] + "\n"
+
                 print("🔍 محاولة البحث بالويب...")
                 response = client.responses.create(
                     model="gpt-4o-mini",
