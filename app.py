@@ -51,7 +51,7 @@ SYSTEM_PROMPT = f"""
 {knowledge_content}
 """
 
-# ========== الواجهة ==========
+# ========== الواجهة (مع تأثير الكتابة فقط) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -60,8 +60,6 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
     <title>نبراس</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
-    <!-- مكتبة Markdown -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
@@ -83,6 +81,7 @@ HTML_TEMPLATE = """
             font-size: 17px;
             line-height: 1.6;
             word-wrap: break-word;
+            white-space: pre-wrap;
         }
         .msg.user {
             align-self: flex-end;
@@ -97,24 +96,6 @@ HTML_TEMPLATE = """
             color: #1a2b3c;
             border-bottom-right-radius: 6px;
             font-size: 17px;
-        }
-        /* تنسيق Markdown */
-        .msg.bot strong { font-weight: bold; }
-        .msg.bot em { font-style: italic; }
-        .msg.bot ul, .msg.bot ol { padding-right: 20px; margin: 6px 0; }
-        .msg.bot li { margin: 2px 0; }
-        .msg.bot h1, .msg.bot h2, .msg.bot h3 { margin: 8px 0 4px; font-weight: bold; }
-        .msg.bot code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
-        .msg.bot pre { background: #f0f0f0; padding: 8px; border-radius: 8px; overflow-x: auto; }
-        .msg.bot blockquote { border-right: 4px solid #ccc; padding-right: 10px; margin: 6px 0; color: #555; }
-        .msg.bot a { color: #4a6a8a; text-decoration: underline; }
-        /* تأثير تلاشي للرسائل */
-        .msg.bot.fade-in {
-            animation: fadeIn 0.6s ease forwards;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
@@ -429,7 +410,7 @@ HTML_TEMPLATE = """
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 
-            // ===== الصور والملفات (تظهر فوراً) =====
+            // ===== الصور والملفات =====
             if (imageData && sender === 'user') {
                 let content = '';
                 if (fileInfo && fileInfo.type && fileInfo.type.startsWith('video/')) {
@@ -456,16 +437,22 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // ===== رسائل البوت (مع تنسيق Markdown + تأثير تلاشي) =====
+            // ===== رسائل البوت (تأثير الكتابة) =====
             if (sender === 'bot' && !isSystem) {
-                // تحويل النص إلى HTML باستخدام marked
-                const formattedHtml = marked.parse(text);
-                // إضافة الوقت
-                el.innerHTML = `${formattedHtml} <span class="time">${time}</span>`;
-                // إضافة كلاس التأثير
-                el.classList.add('fade-in');
+                el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
+                const typingSpan = el.querySelector('.typing-text');
+                let index = 0;
+                function typeChar() {
+                    if (index < text.length) {
+                        typingSpan.textContent += text.charAt(index);
+                        index++;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        setTimeout(typeChar, 20);
+                    }
+                }
+                typeChar();
                 if (!isSystem && sender !== 'error') {
                     conversationHistory.push({ role: sender, content: text });
                     if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
@@ -474,7 +461,7 @@ HTML_TEMPLATE = """
                 return;
             }
 
-            // ===== رسائل المستخدم (تظهر فوراً) =====
+            // ===== رسائل المستخدم =====
             el.innerHTML = `${text} <span class="time">${time}</span>`;
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
