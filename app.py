@@ -103,8 +103,9 @@ HTML_TEMPLATE = """
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         
-        /* ===== مربع الكتابة المتوسع ===== */
-        .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
+        /* ===== مربع الكتابة المتوسع مع معاينة الصورة ===== */
+        .input-area { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
+        .input-area .input-row { display: flex; align-items: flex-end; gap: 6px; }
         .input-area textarea {
             flex: 1;
             border: none;
@@ -123,7 +124,6 @@ HTML_TEMPLATE = """
         }
         .input-area textarea::placeholder { color: #9aabbc; }
         
-        /* ===== أزرار الإدخال ===== */
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
@@ -131,6 +131,41 @@ HTML_TEMPLATE = """
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
         
+        /* ===== معاينة الصورة ===== */
+        .image-preview {
+            display: none;
+            position: relative;
+            padding: 4px 0 0 0;
+            margin: 0 4px;
+        }
+        .image-preview.show { display: block; }
+        .image-preview img {
+            max-height: 80px;
+            max-width: 100%;
+            border-radius: 12px;
+            border: 1px solid #dce1e8;
+            object-fit: cover;
+        }
+        .image-preview .remove-preview {
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            background: #c33;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .image-preview .remove-preview:hover { background: #a33; }
+        /* ============================= */
+
         /* ===== زر + وخياراته ===== */
         .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
         .plus-btn:hover { background: #e8ecf0; }
@@ -185,6 +220,7 @@ HTML_TEMPLATE = """
             .plus-options { bottom: 60px; padding: 8px; gap: 6px; }
             .plus-options .option-btn { width: 44px; height: 44px; font-size: 18px; }
             .msg .image-upload { max-height: 150px; }
+            .image-preview img { max-height: 60px; }
         }
     </style>
 </head>
@@ -200,15 +236,21 @@ HTML_TEMPLATE = """
     </div>
     <div id="chat"></div>
     <div class="input-area">
-        <button class="btn-icon mic-btn" id="micBtn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
-        <button class="plus-btn" id="plusBtn" title="إضافة"><i class="fas fa-plus"></i></button>
-        <div class="plus-options" id="plusOptions">
-            <button class="option-btn camera" id="cameraBtn" title="كاميرا"><i class="fas fa-camera"></i></button>
-            <button class="option-btn gallery" id="galleryBtn" title="معرض الصور"><i class="fas fa-images"></i></button>
-            <button class="option-btn files" id="filesBtn" title="ملفات"><i class="fas fa-folder"></i></button>
+        <div class="image-preview" id="imagePreview">
+            <img id="previewImg" src="" alt="معاينة الصورة" />
+            <button class="remove-preview" id="removePreviewBtn" title="إزالة الصورة">×</button>
         </div>
-        <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
-        <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
+        <div class="input-row">
+            <button class="btn-icon mic-btn" id="micBtn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
+            <button class="plus-btn" id="plusBtn" title="إضافة"><i class="fas fa-plus"></i></button>
+            <div class="plus-options" id="plusOptions">
+                <button class="option-btn camera" id="cameraBtn" title="كاميرا"><i class="fas fa-camera"></i></button>
+                <button class="option-btn gallery" id="galleryBtn" title="معرض الصور"><i class="fas fa-images"></i></button>
+                <button class="option-btn files" id="filesBtn" title="ملفات"><i class="fas fa-folder"></i></button>
+            </div>
+            <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
+            <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
+        </div>
     </div>
     <!-- عناصر مخفية لرفع الملفات -->
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
@@ -218,7 +260,7 @@ HTML_TEMPLATE = """
 <script>
     (function() {
         let conversationHistory = [];
-        let pendingImageData = null;
+        let pendingImageData = null; // الصورة المعلقة (base64)
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -233,6 +275,32 @@ HTML_TEMPLATE = """
         const cameraBtn = document.getElementById('cameraBtn');
         const galleryBtn = document.getElementById('galleryBtn');
         const filesBtn = document.getElementById('filesBtn');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImg');
+        const removePreviewBtn = document.getElementById('removePreviewBtn');
+
+        // ===== إزالة معاينة الصورة =====
+        function clearPreview() {
+            pendingImageData = null;
+            imagePreview.classList.remove('show');
+            previewImg.src = '';
+            // إعادة تهيئة ارتفاع الـ textarea
+            userInput.style.height = 'auto';
+            userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+        }
+        removePreviewBtn.addEventListener('click', clearPreview);
+
+        // ===== عرض معاينة الصورة =====
+        function showPreview(imageData) {
+            pendingImageData = imageData;
+            previewImg.src = imageData;
+            imagePreview.classList.add('show');
+            // توسيع الـ textarea قليلاً لإفساح المجال للمعاينة
+            setTimeout(() => {
+                userInput.style.height = 'auto';
+                userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+            }, 50);
+        }
 
         // ===== توسيع مربع الكتابة =====
         userInput.addEventListener('input', function() {
@@ -268,12 +336,11 @@ HTML_TEMPLATE = """
                 const reader = new FileReader();
                 reader.onload = function(ev) {
                     const imgData = ev.target.result;
-                    pendingImageData = imgData;
-                    addMessage(file.name, 'user', false, imgData);
+                    showPreview(imgData);
+                    // حفظ الصورة في المكتبة أيضاً
                     let imgs = getImages();
                     imgs.push(imgData);
                     saveImages(imgs);
-                    sendMessageAfterMedia();
                     cameraInput.value = '';
                 };
                 reader.readAsDataURL(file);
@@ -293,12 +360,10 @@ HTML_TEMPLATE = """
                 const reader = new FileReader();
                 reader.onload = function(ev) {
                     const imgData = ev.target.result;
-                    pendingImageData = imgData;
-                    addMessage(file.name, 'user', false, imgData);
+                    showPreview(imgData);
                     let imgs = getImages();
                     imgs.push(imgData);
                     saveImages(imgs);
-                    sendMessageAfterMedia();
                     fileInput.value = '';
                 };
                 reader.readAsDataURL(file);
@@ -336,7 +401,7 @@ HTML_TEMPLATE = """
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
             if (imageData) {
-                pendingImageData = imageData;
+                // في حال إرسال الصورة مباشرة (نادراً ما يُستخدم هنا)
                 el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
@@ -459,6 +524,7 @@ HTML_TEMPLATE = """
         function newChat() {
             chatBox.innerHTML = '';
             conversationHistory = [];
+            clearPreview(); // مسح المعاينة عند بدء محادثة جديدة
         }
 
         function handleAction(action) {
@@ -524,13 +590,6 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        function sendMessageAfterMedia() {
-            const text = userInput.value.trim();
-            const imageToSend = pendingImageData;
-            pendingImageData = null;
-            sendMessageInternal(text || "📎 ملف مرفق", imageToSend);
-        }
-
         async function sendMessageInternal(text, image = null) {
             userInput.value = '';
             userInput.style.height = '40px';
@@ -554,16 +613,37 @@ HTML_TEMPLATE = """
 
         async function sendMessage() {
             const text = userInput.value.trim();
-            if (!text) return;
-            addMessage(text, 'user');
+            const imageToSend = pendingImageData;
+
+            if (!text && !imageToSend) return;
+
+            // إضافة رسالة المستخدم (نص أو صورة)
+            if (imageToSend) {
+                addMessage('📷 صورة مرفقة', 'user', false, imageToSend);
+            }
+            if (text) {
+                addMessage(text, 'user');
+            }
+
+            // حفظ الصورة في المكتبة (إذا كانت موجودة)
+            if (imageToSend) {
+                let imgs = getImages();
+                imgs.push(imageToSend);
+                saveImages(imgs);
+            }
+
+            // إرسال الطلب للخادم
             userInput.value = '';
             userInput.style.height = '40px';
+            // مسح المعاينة
+            clearPreview();
             userInput.focus();
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, image: null, history: conversationHistory })
+                    body: JSON.stringify({ message: text, image: imageToSend, history: conversationHistory })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -609,7 +689,6 @@ def chat():
 
         # ===== إضافة الصورة (إذا وجدت) =====
         if image_data:
-            # طباعة في السجلات للتأكد من استقبال الصورة
             print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
             messages.append({
                 "role": "user",
@@ -624,7 +703,6 @@ def chat():
 
         # ===== اختيار الطريقة المناسبة =====
         if image_data:
-            # إذا كانت هناك صورة، نستخدم chat.completions مع gpt-4o (الذي يدعم الصور)
             try:
                 print("🖼️ تحليل الصورة باستخدام gpt-4o...")
                 response = client.chat.completions.create(
@@ -642,8 +720,6 @@ def chat():
                 print(f"❌ خطأ في تحليل الصورة: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
-            # إذا لم تكن هناك صورة، نستخدم responses.create للبحث بالويب
-            # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system":
@@ -673,7 +749,6 @@ def chat():
                     reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
                 return jsonify({"reply": reply})
             except Exception as e:
-                # إذا فشل البحث بالويب، نستخدم الطريقة العادية
                 print(f"⚠️ خطأ في البحث بالويب: {e}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
