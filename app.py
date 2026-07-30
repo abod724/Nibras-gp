@@ -1,145 +1,57 @@
-from flask import Flask, request, jsonify, render_template_string, redirect, url_for, flash
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
-from duckduckgo_search import DDGS
+from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
-import json
-import random
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "default-secret-key-change-me")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///nbras.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
-
-class User(db.Model, object):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    chats = db.relationship('Chat', backref='user', lazy=True)
-
-class Chat(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    user_message = db.Column(db.Text, nullable=False)
-    bot_response = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = "يرجى تسجيل الدخول أولاً"
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-LOGIN_TEMPLATE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تسجيل الدخول - نبراس</title>
-<style>body{font-family:Arial;background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:white;padding:40px;border-radius:30px;box-shadow:0 10px 30px rgba(0,0,0,0.05);width:100%;max-width:350px;text-align:center}h2{color:#1a2b3c;margin-bottom:20px}input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:30px;font-size:15px;outline:none}button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:30px;font-size:16px;cursor:pointer;margin-top:10px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none}.flash{color:#c33;margin:10px 0}</style>
-</head>
-<body>
-<div class="box">
-<h2>🔐 تسجيل الدخول</h2>
-{% with messages = get_flashed_messages() %}
-  {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
-{% endwith %}
-<form method="post">
-<input type="text" name="username" placeholder="اسم المستخدم" required>
-<input type="password" name="password" placeholder="كلمة المرور" required>
-<button type="submit">دخول</button>
-</form>
-<p>ليس لديك حساب؟ <a href="/register">سجل الآن</a></p>
-</div>
-</body>
-</html>
-"""
-
-REGISTER_TEMPLATE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تسجيل جديد - نبراس</title>
-<style>body{font-family:Arial;background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:white;padding:40px;border-radius:30px;box-shadow:0 10px 30px rgba(0,0,0,0.05);width:100%;max-width:350px;text-align:center}h2{color:#1a2b3c;margin-bottom:20px}input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:30px;font-size:15px;outline:none}button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:30px;font-size:16px;cursor:pointer;margin-top:10px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none}</style>
-</head>
-<body>
-<div class="box">
-<h2>📝 إنشاء حساب</h2>
-<form method="post">
-<input type="text" name="username" placeholder="اسم المستخدم" required>
-<input type="email" name="email" placeholder="البريد الإلكتروني" required>
-<input type="password" name="password" placeholder="كلمة المرور" required>
-<button type="submit">تسجيل</button>
-</form>
-<p>لديك حساب؟ <a href="/login">سجل دخول</a></p>
-</div>
-</body>
-</html>
-"""
-
+# ========== مفتاح API ==========
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
+# ========== البحث عن ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
+
 for filename in possible_names:
     if os.path.exists(filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 knowledge_content = f.read()
+                print(f"✅ تم تحميل ملف المعرفة: {filename}")
                 break
         except:
             pass
 
+if not knowledge_content:
+    print("⚠️ لم يتم العثور على ملف المعرفة")
+
+# ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي طبيعي، تتحدث باللهجة العامية البيضاء.
-تعليماتك العامة:
-- خلك إنسان: تفاعل مع كلام المستخدم، اسأل، شارك، ناقش.
-- إذا سألك "من طورك؟" قل: "أنا من تطوير وبرمجة أفضل المطورين في العالم."
-- استخدم ملف المعرفة إذا وجدت المعلومة فيه.
-- للأحداث الجديدة، استخدم البحث بالويب.
-- إذا ما لقيت المعلومة، قل "ما عندي علم".
-- إذا أرسل لك صورة، حللها وصفها بالعامية.
-ملف المعرفة:
+
+**تعليماتك العامة:**
+- خلك إنسان: لا ترد ردود جاهزة، تفاعل مع كلام المستخدم.
+- اسأل: إذا قال لك شي، اسأله عن تفاصيل، عن رأيه، عن وش يخطط له.
+- شارك: أعطه أفكار، اقتراحات، حلول، واطرح عليه أسئلة تحفزه يتكلم أكثر.
+- ناقش: إذا كان النقاش حلو، ادخل معاه فيه، وابدِ رأيك بكل احترام.
+
+**كيف تتعامل مع الأسئلة:**
+- إذا سألك المستخدم "من طورك؟" أو "من برمجك؟"، قول: "أنا من تطوير وبرمجة أفضل المطورين في العالم، فريق محترف ومبدع."
+- إذا سألك عن شيء موجود في ملف المعرفة، جاوبه من الملف بأسلوبك العامي.
+- إذا سألك عن حدث جديد أو خبر عاجل، استخدم البحث بالويب واجب عليه.
+- إذا سألك عن شيء عام، استخدم معرفتك العامة.
+- إذا ما لقيت المعلومة، قل بصراحة "ما عندي علم" ولا تختلق.
+- إذا أرسل لك المستخدم صورة، قم بتحليلها ووصفها بالتفصيل باللهجة العامية.
+
+**المبدأ**: خلك صديق يحب يسولف، مو مجرد روبوت يجاوب.
+
+**ملف المعرفة:**
 {knowledge_content}
 """
 
-ADS_FILE = "ads.json"
-ads_config = {"enabled": False, "interval": 5, "ads": []}
-if os.path.exists(ADS_FILE):
-    try:
-        with open(ADS_FILE, "r", encoding="utf-8") as f:
-            ads_config = json.load(f)
-    except:
-        pass
-
-def search_web(query):
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=2))
-            if results:
-                snippets = []
-                for r in results[:2]:
-                    title = r.get('title', '')
-                    body = r.get('body', '')
-                    if title and body:
-                        snippets.append(f"{title}: {body}")
-                if snippets:
-                    return "\n".join(snippets)
-                return results[0].get('body', 'لا توجد تفاصيل')
-            return "لم يتم العثور على نتائج."
-    except Exception:
-        return None
-
+# ========== الواجهة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -152,9 +64,7 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
-        .header .user-info { font-size: 14px; color: #1a2b3c; display: flex; align-items: center; gap: 8px; }
-        .header .user-info i { color: #4a6a8a; }
+        .header { display: flex; justify-content: flex-end; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
         .header .menu-btn { background: none; border: none; font-size: 22px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .dropdown { position: absolute; top: 64px; left: 14px; right: 14px; background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); display: none; flex-direction: column; z-index: 100; border: 1px solid #eaedf2; }
         .dropdown.show { display: flex; }
@@ -163,32 +73,104 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
-        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
-        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; }
+        
+        /* ===== خلفية بيضاء وتنظيم الكتابة ===== */
+        .msg {
+            max-width: 80%;
+            padding: 10px 16px;
+            border-radius: 20px;
+            font-size: 15px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .msg.user {
+            align-self: flex-end;
+            background: #eef2f7;
+            color: #1a2b3c;
+            border-bottom-left-radius: 6px;
+        }
+        .msg.bot {
+            align-self: flex-start;
+            background: #ffffff;
+            color: #1a2b3c;
+            border-bottom-right-radius: 6px;
+        }
+        /* ============================= */
+
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
+        
+        /* ===== مربع الكتابة المتوسع ===== */
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
-        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
+        .input-area textarea {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 4px;
+            font-size: 15px;
+            outline: none;
+            color: #1a2b3c;
+            direction: rtl;
+            resize: none;
+            overflow: hidden;
+            min-height: 40px;
+            max-height: 120px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.5;
+        }
         .input-area textarea::placeholder { color: #9aabbc; }
+        
+        /* ===== أزرار الإدخال ===== */
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
         .input-area .mic-btn.listening { color: #c33; background: #fde8e8; }
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
+        
+        /* ===== زر + وخياراته ===== */
         .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
         .plus-btn:hover { background: #e8ecf0; }
         .plus-btn.rotate { transform: rotate(45deg); }
-        .plus-options { display: none; position: absolute; bottom: 70px; right: 0; background: #ffffff; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 12px; gap: 8px; flex-direction: row; border: 1px solid #eaeef2; z-index: 50; }
+        
+        .plus-options {
+            display: none;
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            padding: 12px;
+            gap: 8px;
+            flex-direction: row;
+            border: 1px solid #eaeef2;
+            z-index: 50;
+        }
         .plus-options.show { display: flex; }
-        .plus-options .option-btn { background: #f5f7fa; border: none; border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #1a2b3c; cursor: pointer; transition: 0.2s; }
+        .plus-options .option-btn {
+            background: #f5f7fa;
+            border: none;
+            border-radius: 50%;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #1a2b3c;
+            cursor: pointer;
+            transition: 0.2s;
+        }
         .plus-options .option-btn:hover { background: #e8ecf0; transform: scale(1.05); }
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
+        /* ============================= */
+
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
@@ -209,14 +191,6 @@ HTML_TEMPLATE = """
 <body>
 <div class="app">
     <div class="header">
-        <div class="user-info">
-            {% if current_user.is_authenticated %}
-                <i class="fas fa-user-circle"></i> {{ current_user.username }}
-                <a href="/logout" style="color:#c33; font-size:13px; margin-right:8px;">خروج</a>
-            {% else %}
-                <a href="/login" style="color:#4a6a8a; font-size:14px;">دخول</a>
-            {% endif %}
-        </div>
         <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
     </div>
     <div class="dropdown" id="dropdown">
@@ -236,6 +210,7 @@ HTML_TEMPLATE = """
         <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
+    <!-- عناصر مخفية لرفع الملفات -->
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
     <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" />
     <input type="file" id="fileInputGeneric" style="display: none;" />
@@ -259,11 +234,13 @@ HTML_TEMPLATE = """
         const galleryBtn = document.getElementById('galleryBtn');
         const filesBtn = document.getElementById('filesBtn');
 
+        // ===== توسيع مربع الكتابة =====
         userInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
+        // ===== زر + =====
         let plusOpen = false;
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
@@ -278,6 +255,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== خيار الكاميرا =====
         cameraBtn.addEventListener('click', function() {
             cameraInput.click();
             plusOptions.classList.remove('show');
@@ -302,6 +280,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== خيار معرض الصور =====
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -326,6 +305,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== خيار الملفات =====
         filesBtn.addEventListener('click', function() {
             fileInputGeneric.click();
             plusOptions.classList.remove('show');
@@ -339,6 +319,15 @@ HTML_TEMPLATE = """
                 fileInputGeneric.value = '';
             }
         });
+
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
 
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
@@ -595,40 +584,11 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        user = User.query.filter_by(username=request.form['username']).first()
-        if user and check_password_hash(user.password_hash, request.form['password']):
-            login_user(user)
-            return redirect(url_for('index'))
-        flash('اسم المستخدم أو كلمة المرور غير صحيحة')
-    return render_template_string(LOGIN_TEMPLATE)
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        hashed = generate_password_hash(request.form['password'])
-        new_user = User(
-            username=request.form['username'],
-            email=request.form['email'],
-            password_hash=hashed
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect(url_for('login'))
-    return render_template_string(REGISTER_TEMPLATE)
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
-
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+# ========== نقطة الدردشة مع البحث بالويب وتحليل الصور ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -637,15 +597,20 @@ def chat():
         image_data = data.get("image", None)
         history = data.get("history", [])
 
+        # ===== التحقق من وجود رسالة أو صورة =====
         if not user_message and not image_data:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
+        # ===== بناء السياق للمحادثة =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["content"]})
 
+        # ===== إضافة الصورة (إذا وجدت) =====
         if image_data:
+            # طباعة في السجلات للتأكد من استقبال الصورة
+            print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
             messages.append({
                 "role": "user",
                 "content": [
@@ -653,69 +618,78 @@ def chat():
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                max_tokens=1000,
-                temperature=0.8
-            )
-            reply = response.choices[0].message.content.strip()
-            if not reply:
-                reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
-            if current_user.is_authenticated:
-                new_chat = Chat(
-                    user_id=current_user.id,
-                    user_message=user_message or "صورة",
-                    bot_response=reply
-                )
-                db.session.add(new_chat)
-                db.session.commit()
-            return jsonify({"reply": reply})
-
-        keywords = ["تاريخ", "اليوم", "أخبار", "طقس", "حدث", "جديد", "الساعة", "وقت", "مباراة", "نتيجة", "سعر", "عملة", "سوق", "تحديث", "آخر", "الآن", "2026", "2025"]
-        needs_search = any(k in user_message for k in keywords)
-
-        if needs_search:
-            search_result = search_web(user_message)
-            if search_result is None:
-                current_date = datetime.now().strftime("%Y-%m-%d")
-                search_result = f"التاريخ اليوم هو {current_date}."
-            search_prompt = f"\n\nنتيجة البحث عن '{user_message}':\n{search_result}\n\nبناءً على هذه المعلومات، أجب المستخدم باللهجة العامية."
-            messages.append({"role": "user", "content": user_message + search_prompt})
         else:
-            messages.append({"role": "user", "content": user_message})
+            if user_message:
+                messages.append({"role": "user", "content": user_message})
 
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                max_tokens=1000,
-                temperature=0.8
-            )
-            reply = response.choices[0].message.content.strip()
-            if not reply:
-                reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-        except Exception as e:
-            print(f"❌ خطأ: {e}")
-            reply = "حدث خطأ، حاول مرة أخرى."
+        # ===== اختيار الطريقة المناسبة =====
+        if image_data:
+            # إذا كانت هناك صورة، نستخدم chat.completions مع gpt-4o (الذي يدعم الصور)
+            try:
+                print("🖼️ تحليل الصورة باستخدام gpt-4o...")
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    max_tokens=1000,
+                    temperature=0.8
+                )
+                reply = response.choices[0].message.content.strip()
+                if not reply:
+                    reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
+                print(f"✅ تم تحليل الصورة بنجاح")
+                return jsonify({"reply": reply})
+            except Exception as e:
+                print(f"❌ خطأ في تحليل الصورة: {e}")
+                return jsonify({"error": str(e)}), 500
+        else:
+            # إذا لم تكن هناك صورة، نستخدم responses.create للبحث بالويب
+            # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
+            full_context = ""
+            for msg in messages:
+                if msg["role"] == "system":
+                    continue
+                if msg["role"] == "user":
+                    if isinstance(msg["content"], list):
+                        for part in msg["content"]:
+                            if part["type"] == "text":
+                                full_context += part["text"] + "\n"
+                    else:
+                        full_context += msg["content"] + "\n"
+                elif msg["role"] == "assistant":
+                    full_context += "نبراس: " + msg["content"] + "\n"
 
-        if current_user.is_authenticated:
-            new_chat = Chat(
-                user_id=current_user.id,
-                user_message=user_message,
-                bot_response=reply
-            )
-            db.session.add(new_chat)
-            db.session.commit()
-
-        return jsonify({"reply": reply})
+            try:
+                print("🔍 البحث بالويب باستخدام responses.create...")
+                response = client.responses.create(
+                    model="gpt-4o-mini",
+                    instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
+                    input=user_message,
+                    tools=[{"type": "web_search"}],
+                    temperature=0.8,
+                    max_output_tokens=1000
+                )
+                reply = response.output_text.strip()
+                if not reply:
+                    reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
+                return jsonify({"reply": reply})
+            except Exception as e:
+                # إذا فشل البحث بالويب، نستخدم الطريقة العادية
+                print(f"⚠️ خطأ في البحث بالويب: {e}")
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    max_tokens=1000,
+                    temperature=0.8
+                )
+                reply = response.choices[0].message.content.strip()
+                if not reply:
+                    reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+                return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ خطأ: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
