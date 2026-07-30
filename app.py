@@ -73,7 +73,7 @@ HTML_TEMPLATE = """
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
         
-        /* ===== التعديلات المطلوبة ===== */
+        /* ===== خلفية بيضاء وتنظيم الكتابة ===== */
         .msg {
             max-width: 80%;
             padding: 10px 16px;
@@ -81,7 +81,7 @@ HTML_TEMPLATE = """
             font-size: 15px;
             line-height: 1.6;
             word-wrap: break-word;
-            white-space: pre-wrap;  /* يحافظ على الأسطر والمسافات */
+            white-space: pre-wrap;
         }
         .msg.user {
             align-self: flex-end;
@@ -91,7 +91,7 @@ HTML_TEMPLATE = """
         }
         .msg.bot {
             align-self: flex-start;
-            background: #ffffff;    /* خلفية بيضاء */
+            background: #ffffff;
             color: #1a2b3c;
             border-bottom-right-radius: 6px;
         }
@@ -101,23 +101,42 @@ HTML_TEMPLATE = """
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
-        .input-area { display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; }
-        .input-area input { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; }
-        .input-area input::placeholder { color: #9aabbc; }
-        .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; }
+        
+        /* ===== مربع الكتابة المتوسع ===== */
+        .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; }
+        .input-area textarea {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 4px;
+            font-size: 15px;
+            outline: none;
+            color: #1a2b3c;
+            direction: rtl;
+            resize: none;
+            overflow: hidden;
+            min-height: 40px;
+            max-height: 120px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.5;
+        }
+        .input-area textarea::placeholder { color: #9aabbc; }
+        .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
         .input-area .mic-btn.listening { color: #c33; background: #fde8e8; }
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
+        /* ============================= */
+
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
             .dropdown .item { padding: 12px 14px; font-size: 14px; }
             #chat { padding: 12px 14px; }
-            .msg { font-size: 17px; padding: 8px 12px; }
+            .msg { font-size: 14px; padding: 8px 12px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
-            .input-area input { font-size: 14px; padding: 10px 2px; }
+            .input-area textarea { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
             .input-area .btn-icon { width: 34px; height: 34px; font-size: 18px; }
             .msg .image-upload { max-height: 150px; }
@@ -139,7 +158,7 @@ HTML_TEMPLATE = """
         <button class="btn-icon mic-btn" id="micBtn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
         <button class="btn-icon" id="fileBtn" title="رفع صورة"><i class="fas fa-image"></i></button>
         <input type="file" id="fileInput" accept="image/*" style="display: none;" />
-        <input type="text" id="userInput" placeholder="اكتب رسالة..." autofocus />
+        <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
 </div>
@@ -154,6 +173,12 @@ HTML_TEMPLATE = """
         const fileInput = document.getElementById('fileInput');
         const menuToggle = document.getElementById('menuToggle');
         const dropdown = document.getElementById('dropdown');
+
+        // ===== توسيع مربع الكتابة تلقائياً =====
+        userInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
 
         function toBase64(file) {
             return new Promise((resolve, reject) => {
@@ -375,6 +400,7 @@ HTML_TEMPLATE = """
                 addMessage(text, 'user');
             }
             userInput.value = '';
+            userInput.style.height = '40px'; // إعادة الحجم الطبيعي
             userInput.focus();
             try {
                 const res = await fetch('/chat', {
@@ -394,7 +420,7 @@ HTML_TEMPLATE = """
         }
 
         sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+        userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
         fileBtn.addEventListener('click', () => fileInput.click());
     })();
 </script>
