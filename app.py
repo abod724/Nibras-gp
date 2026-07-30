@@ -99,7 +99,7 @@ HTML_TEMPLATE = """
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
-        .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
+        .msg .file-label { font-size: 17px; color: #6a7b8c; margin-top: 2px; display: block; }
         .msg .file-icon { font-size: 30px; margin: 4px 0; display: block; text-align: center; }
         
         .input-area { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
@@ -166,7 +166,7 @@ HTML_TEMPLATE = """
             border-radius: 50%;
             width: 22px;
             height: 22px;
-            font-size: 17px;
+            font-size: 14px;
             cursor: pointer;
             display: flex;
             align-items: center;
