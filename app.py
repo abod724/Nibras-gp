@@ -166,7 +166,7 @@ HTML_TEMPLATE = """
             border-radius: 50%;
             width: 22px;
             height: 22px;
-            font-size: 14px;
+            font-size: 17px;
             cursor: pointer;
             display: flex;
             align-items: center;
