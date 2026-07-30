@@ -99,7 +99,7 @@ HTML_TEMPLATE = """
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
-        .msg .file-label { font-size: 17px; color: #6a7b8c; margin-top: 2px; display: block; }
+        .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         .msg .file-icon { font-size: 30px; margin: 4px 0; display: block; text-align: center; }
         
         .input-area { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
@@ -109,7 +109,7 @@ HTML_TEMPLATE = """
             border: none;
             background: transparent;
             padding: 12px 4px;
-            font-size: 15px;
+            font-size: 18px;
             outline: none;
             color: #1a2b3c;
             direction: rtl;
@@ -220,7 +220,7 @@ HTML_TEMPLATE = """
             #chat { padding: 12px 14px; }
             .msg { font-size: 14px; padding: 8px 12px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
-            .input-area textarea { font-size: 14px; padding: 10px 2px; }
+            .input-area textarea { font-size: 16px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
             .input-area .btn-icon { width: 34px; height: 34px; font-size: 18px; }
             .plus-btn { width: 34px; height: 34px; font-size: 20px; }
@@ -256,7 +256,7 @@ HTML_TEMPLATE = """
                 <button class="option-btn gallery" id="galleryBtn" title="معرض الصور"><i class="fas fa-images"></i></button>
                 <button class="option-btn files" id="filesBtn" title="ملفات"><i class="fas fa-folder"></i></button>
             </div>
-            <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
+            <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 18px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
             <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
         </div>
     </div>
@@ -340,9 +340,7 @@ HTML_TEMPLATE = """
 
         // ===== الكاميرا =====
         cameraBtn.addEventListener('click', function() {
-            // نقوم بمسح أي قيمة سابقة في الـ input
             cameraInput.value = '';
-            // ثم نفتح الكاميرا
             cameraInput.click();
             plusOptions.classList.remove('show');
             plusOpen = false;
@@ -352,17 +350,14 @@ HTML_TEMPLATE = """
         cameraInput.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
                 const file = this.files[0];
-                // التحقق من أن الملف صورة أو فيديو
                 if (file.type && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
                     const reader = new FileReader();
                     reader.onload = function(ev) {
                         showFilePreview(ev.target.result, file.name, file.type);
-                        // مسح قيمة الـ input بعد تحميل الصورة
                         cameraInput.value = '';
                     };
                     reader.readAsDataURL(file);
                 } else {
-                    // إذا كان الملف ليس صورة أو فيديو، نبلغ المستخدم
                     addMessage('الرجاء اختيار صورة أو فيديو من الكاميرا.', 'bot', true);
                     cameraInput.value = '';
                 }
