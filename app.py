@@ -261,7 +261,7 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
-    <input type="file" id="cameraInput" accept="image/*,video/*" capture="environment" style="display: none;" />
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" />
     <input type="file" id="fileInputGeneric" style="display: none;" />
 </div>
 <script>
@@ -286,38 +286,35 @@ HTML_TEMPLATE = """
         const previewContent = document.getElementById('previewContent');
         const removePreviewBtn = document.getElementById('removePreviewBtn');
 
-        // ===== وظيفة مسح المعاينة (تستخدم عند الإرسال أو الضغط على ×) =====
+        // ===== مسح المعاينة =====
         function clearPreview() {
             pendingFileData = null;
             imagePreview.classList.remove('show');
             previewContent.innerHTML = '';
-            // إعادة ضبط ارتفاع الـ textarea
             userInput.style.height = 'auto';
             userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
         }
-
         removePreviewBtn.addEventListener('click', clearPreview);
 
-        // ===== وظيفة عرض المعاينة =====
+        // ===== عرض المعاينة =====
         function showFilePreview(fileData, fileName, fileType) {
             pendingFileData = { data: fileData, name: fileName, type: fileType };
             let html = '';
-            if (fileType.startsWith('image/')) {
+            if (fileType && fileType.startsWith('image/')) {
                 html = `<img src="${fileData}" style="max-height:80px;max-width:100%;border-radius:12px;border:1px solid #dce1e8;object-fit:cover;" />`;
-            } else if (fileType.startsWith('video/')) {
+            } else if (fileType && fileType.startsWith('video/')) {
                 html = `<video src="${fileData}" style="max-height:80px;max-width:100%;border-radius:12px;border:1px solid #dce1e8;object-fit:cover;" controls></video>`;
             } else {
                 let icon = 'fa-file';
-                if (fileType.includes('pdf')) icon = 'fa-file-pdf';
-                else if (fileType.includes('word') || fileType.includes('document')) icon = 'fa-file-word';
-                else if (fileType.includes('excel') || fileType.includes('spreadsheet')) icon = 'fa-file-excel';
-                else if (fileType.includes('zip') || fileType.includes('rar')) icon = 'fa-file-archive';
-                else if (fileType.includes('text')) icon = 'fa-file-alt';
-                html = `<div class="file-info"><i class="fas ${icon}"></i><span>${fileName}</span></div>`;
+                if (fileType && fileType.includes('pdf')) icon = 'fa-file-pdf';
+                else if (fileType && (fileType.includes('word') || fileType.includes('document'))) icon = 'fa-file-word';
+                else if (fileType && (fileType.includes('excel') || fileType.includes('spreadsheet'))) icon = 'fa-file-excel';
+                else if (fileType && (fileType.includes('zip') || fileType.includes('rar'))) icon = 'fa-file-archive';
+                else if (fileType && fileType.includes('text')) icon = 'fa-file-alt';
+                html = `<div class="file-info"><i class="fas ${icon}"></i><span>${fileName || 'ملف'}</span></div>`;
             }
             previewContent.innerHTML = html;
             imagePreview.classList.add('show');
-            // توسيع الـ textarea قليلاً
             setTimeout(() => {
                 userInput.style.height = 'auto';
                 userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
@@ -354,12 +351,22 @@ HTML_TEMPLATE = """
         cameraInput.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
                 const file = this.files[0];
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    showFilePreview(ev.target.result, file.name, file.type);
-                    cameraInput.value = '';
-                };
-                reader.readAsDataURL(file);
+                // إذا كان فيديو، نعرضه
+                if (file.type && file.type.startsWith('video/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        showFilePreview(ev.target.result, file.name, file.type);
+                        cameraInput.value = '';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        showFilePreview(ev.target.result, file.name, file.type);
+                        cameraInput.value = '';
+                    };
+                    reader.readAsDataURL(file);
+                }
             }
         });
 
@@ -610,17 +617,15 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        // ===== إرسال الرسالة =====
+        // ===== إرسال =====
         async function sendMessage() {
             const text = userInput.value.trim();
             const fileData = pendingFileData;
 
             if (!text && !fileData) return;
 
-            // إضافة رسالة المستخدم (مع الملف إن وجد)
             if (fileData) {
                 addMessage(fileData.name || 'ملف', 'user', false, fileData.data, { name: fileData.name, type: fileData.type });
-                // حفظ في المكتبة إذا كان صورة
                 if (fileData.type && fileData.type.startsWith('image/')) {
                     let imgs = getImages();
                     imgs.push(fileData.data);
@@ -636,10 +641,9 @@ HTML_TEMPLATE = """
             const fileName = fileData ? fileData.name : null;
             const fileType = fileData ? fileData.type : null;
 
-            // ===== مسح المعاينة والمربع =====
             userInput.value = '';
             userInput.style.height = '40px';
-            clearPreview(); // <-- هذا هو المفتاح: يمسح المعاينة بعد الإرسال
+            clearPreview(); // 🔥 تختفي المعاينة فوراً بعد الإرسال
             userInput.focus();
 
             try {
@@ -731,7 +735,6 @@ def chat():
                 print(f"❌ خطأ: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
-            # محادثة نصية (بدون صورة) -> بحث بالويب
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system": continue
