@@ -87,11 +87,12 @@ REGISTER_TEMPLATE = """
 </html>
 """
 
-# ========== مفتاح OpenAI ==========
+# ========== قراءة المفتاح من متغيرات البيئة ==========
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
-    raise Exception("المفتاح غير موجود")
+    raise Exception("⚠️ لم يتم العثور على مفتاح OPENAI_API_KEY في متغيرات البيئة")
 client = openai.OpenAI(api_key=API_KEY)
+print(f"✅ تم تحميل مفتاح OpenAI بنجاح (الـ {API_KEY[:10]}... )")
 
 # ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
@@ -689,7 +690,7 @@ def logout():
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة ==========
+# ========== نقطة الدردشة (مع بحث ويب شغال) ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -735,6 +736,7 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
+        # ===== اختيار الطريقة المناسبة =====
         if image_data:
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -746,6 +748,7 @@ def chat():
             if not reply:
                 reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
         else:
+            # ===== البحث بالويب =====
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system": continue
@@ -760,6 +763,7 @@ def chat():
                     full_context += "نبراس: " + msg["content"] + "\n"
 
             try:
+                print("🔍 محاولة البحث بالويب...")
                 response = client.responses.create(
                     model="gpt-4o-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
@@ -771,8 +775,10 @@ def chat():
                 reply = response.output_text.strip()
                 if not reply:
                     reply = "ما قدرت أجيب لك معلومة."
+                print("✅ تم البحث بالويب بنجاح.")
             except Exception as e:
-                print(f"⚠️ خطأ في البحث: {e}")
+                print(f"⚠️ فشل البحث بالويب: {e}")
+                print("🔄 التحول إلى الطريقة العادية (gpt-4o)...")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -783,11 +789,11 @@ def chat():
                 if not reply:
                     reply = "ما قدرت أجيب لك رد."
 
-        # ===== إضافة الإعلان إذا كان موجوداً =====
+        # ===== إضافة الإعلان =====
         if ad_message:
             reply = f"{reply}\n\n---\n{ad_message}"
 
-        # ===== حفظ المحادثة في قاعدة البيانات إذا كان المستخدم مسجلاً =====
+        # ===== حفظ المحادثة =====
         if current_user.is_authenticated:
             new_chat = Chat(
                 user_id=current_user.id,
