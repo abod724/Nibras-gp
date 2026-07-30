@@ -340,6 +340,9 @@ HTML_TEMPLATE = """
 
         // ===== الكاميرا =====
         cameraBtn.addEventListener('click', function() {
+            // نقوم بمسح أي قيمة سابقة في الـ input
+            cameraInput.value = '';
+            // ثم نفتح الكاميرا
             cameraInput.click();
             plusOptions.classList.remove('show');
             plusOpen = false;
@@ -349,13 +352,20 @@ HTML_TEMPLATE = """
         cameraInput.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
                 const file = this.files[0];
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    showFilePreview(ev.target.result, file.name, file.type);
-                    // بعد تحميل الصورة في المعاينة، نقوم بمسح قيمة الـ input
+                // التحقق من أن الملف صورة أو فيديو
+                if (file.type && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        showFilePreview(ev.target.result, file.name, file.type);
+                        // مسح قيمة الـ input بعد تحميل الصورة
+                        cameraInput.value = '';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    // إذا كان الملف ليس صورة أو فيديو، نبلغ المستخدم
+                    addMessage('الرجاء اختيار صورة أو فيديو من الكاميرا.', 'bot', true);
                     cameraInput.value = '';
-                };
-                reader.readAsDataURL(file);
+                }
             }
         });
 
