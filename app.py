@@ -217,11 +217,11 @@ HTML_TEMPLATE = """
 <script>
     (function() {
         let conversationHistory = [];
+        let pendingImageData = null;
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
         const micBtn = document.getElementById('micBtn');
-        const fileBtn = document.getElementById('fileBtn');
         const fileInput = document.getElementById('fileInput');
         const cameraInput = document.getElementById('cameraInput');
         const fileInputGeneric = document.getElementById('fileInputGeneric');
@@ -246,7 +246,6 @@ HTML_TEMPLATE = """
             plusOptions.classList.toggle('show', plusOpen);
             this.classList.toggle('rotate', plusOpen);
         });
-        // إغلاق الخيارات عند الضغط خارجها
         document.addEventListener('click', function(e) {
             if (!plusBtn.contains(e.target) && !plusOptions.contains(e.target)) {
                 plusOptions.classList.remove('show');
@@ -268,6 +267,7 @@ HTML_TEMPLATE = """
                 const reader = new FileReader();
                 reader.onload = function(ev) {
                     const imgData = ev.target.result;
+                    pendingImageData = imgData;
                     addMessage(file.name, 'user', false, imgData);
                     let imgs = getImages();
                     imgs.push(imgData);
@@ -292,6 +292,7 @@ HTML_TEMPLATE = """
                 const reader = new FileReader();
                 reader.onload = function(ev) {
                     const imgData = ev.target.result;
+                    pendingImageData = imgData;
                     addMessage(file.name, 'user', false, imgData);
                     let imgs = getImages();
                     imgs.push(imgData);
@@ -335,6 +336,7 @@ HTML_TEMPLATE = """
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
             if (imageData) {
+                pendingImageData = imageData;
                 el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
@@ -522,14 +524,14 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        // ===== دالة إرسال بعد رفع وسائط =====
         function sendMessageAfterMedia() {
             const text = userInput.value.trim();
-            // نرسل رسالة فارغة أو النص الموجود
-            sendMessageInternal(text || "📎 ملف مرفق");
+            const imageToSend = pendingImageData;
+            pendingImageData = null;
+            sendMessageInternal(text || "📎 ملف مرفق", imageToSend);
         }
 
-        async function sendMessageInternal(text) {
+        async function sendMessageInternal(text, image = null) {
             userInput.value = '';
             userInput.style.height = '40px';
             userInput.focus();
@@ -537,7 +539,7 @@ HTML_TEMPLATE = """
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, image: null, history: conversationHistory })
+                    body: JSON.stringify({ message: text, image: image, history: conversationHistory })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -576,9 +578,6 @@ HTML_TEMPLATE = """
 
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-        
-        // إزالة fileBtn القديم (لم نعد بحاجة له)
-        // نوفر زر رفع الصور القديم كخيار إضافي إن وجد
     })();
 </script>
 </body>
