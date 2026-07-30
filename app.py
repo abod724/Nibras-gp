@@ -74,7 +74,6 @@ HTML_TEMPLATE = """
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
         
-        /* ===== خلفية بيضاء وتنظيم الكتابة ===== */
         .msg {
             max-width: 80%;
             padding: 10px 16px;
@@ -96,14 +95,13 @@ HTML_TEMPLATE = """
             color: #1a2b3c;
             border-bottom-right-radius: 6px;
         }
-        /* ============================= */
 
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
+        .msg .file-icon { font-size: 30px; margin: 4px 0; display: block; text-align: center; }
         
-        /* ===== مربع الكتابة المتوسع مع معاينة الصورة ===== */
         .input-area { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
         .input-area .input-row { display: flex; align-items: flex-end; gap: 6px; }
         .input-area textarea {
@@ -131,7 +129,6 @@ HTML_TEMPLATE = """
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
         
-        /* ===== معاينة الصورة ===== */
         .image-preview {
             display: none;
             position: relative;
@@ -146,6 +143,19 @@ HTML_TEMPLATE = """
             border: 1px solid #dce1e8;
             object-fit: cover;
         }
+        .image-preview .file-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #eef2f7;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: #1a2b3c;
+            max-width: 100%;
+        }
+        .image-preview .file-info i { font-size: 24px; color: #4a6a8a; }
+        .image-preview .file-info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
         .image-preview .remove-preview {
             position: absolute;
             top: -6px;
@@ -164,9 +174,7 @@ HTML_TEMPLATE = """
             padding: 0;
         }
         .image-preview .remove-preview:hover { background: #a33; }
-        /* ============================= */
 
-        /* ===== زر + وخياراته ===== */
         .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
         .plus-btn:hover { background: #e8ecf0; }
         .plus-btn.rotate { transform: rotate(45deg); }
@@ -204,7 +212,6 @@ HTML_TEMPLATE = """
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
-        /* ============================= */
 
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
@@ -221,6 +228,7 @@ HTML_TEMPLATE = """
             .plus-options .option-btn { width: 44px; height: 44px; font-size: 18px; }
             .msg .image-upload { max-height: 150px; }
             .image-preview img { max-height: 60px; }
+            .image-preview .file-info span { max-width: 100px; }
         }
     </style>
 </head>
@@ -237,8 +245,8 @@ HTML_TEMPLATE = """
     <div id="chat"></div>
     <div class="input-area">
         <div class="image-preview" id="imagePreview">
-            <img id="previewImg" src="" alt="معاينة الصورة" />
-            <button class="remove-preview" id="removePreviewBtn" title="إزالة الصورة">×</button>
+            <div id="previewContent"></div>
+            <button class="remove-preview" id="removePreviewBtn" title="إزالة">×</button>
         </div>
         <div class="input-row">
             <button class="btn-icon mic-btn" id="micBtn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
@@ -252,15 +260,14 @@ HTML_TEMPLATE = """
             <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
         </div>
     </div>
-    <!-- عناصر مخفية لرفع الملفات -->
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
-    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" />
+    <input type="file" id="cameraInput" accept="image/*,video/*" capture="environment" style="display: none;" />
     <input type="file" id="fileInputGeneric" style="display: none;" />
 </div>
 <script>
     (function() {
         let conversationHistory = [];
-        let pendingImageData = null; // الصورة المعلقة (base64)
+        let pendingFileData = null; // { data: base64, name: string, type: string }
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -276,39 +283,48 @@ HTML_TEMPLATE = """
         const galleryBtn = document.getElementById('galleryBtn');
         const filesBtn = document.getElementById('filesBtn');
         const imagePreview = document.getElementById('imagePreview');
-        const previewImg = document.getElementById('previewImg');
+        const previewContent = document.getElementById('previewContent');
         const removePreviewBtn = document.getElementById('removePreviewBtn');
 
-        // ===== إزالة معاينة الصورة =====
         function clearPreview() {
-            pendingImageData = null;
+            pendingFileData = null;
             imagePreview.classList.remove('show');
-            previewImg.src = '';
-            // إعادة تهيئة ارتفاع الـ textarea
+            previewContent.innerHTML = '';
             userInput.style.height = 'auto';
             userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
         }
         removePreviewBtn.addEventListener('click', clearPreview);
 
-        // ===== عرض معاينة الصورة =====
-        function showPreview(imageData) {
-            pendingImageData = imageData;
-            previewImg.src = imageData;
+        function showFilePreview(fileData, fileName, fileType) {
+            pendingFileData = { data: fileData, name: fileName, type: fileType };
+            let html = '';
+            if (fileType.startsWith('image/')) {
+                html = `<img src="${fileData}" style="max-height:80px;max-width:100%;border-radius:12px;border:1px solid #dce1e8;object-fit:cover;" />`;
+            } else if (fileType.startsWith('video/')) {
+                html = `<video src="${fileData}" style="max-height:80px;max-width:100%;border-radius:12px;border:1px solid #dce1e8;object-fit:cover;" controls></video>`;
+            } else {
+                // ملف عام (مستند، PDF، إلخ)
+                let icon = 'fa-file';
+                if (fileType.includes('pdf')) icon = 'fa-file-pdf';
+                else if (fileType.includes('word') || fileType.includes('document')) icon = 'fa-file-word';
+                else if (fileType.includes('excel') || fileType.includes('spreadsheet')) icon = 'fa-file-excel';
+                else if (fileType.includes('zip') || fileType.includes('rar')) icon = 'fa-file-archive';
+                else if (fileType.includes('text')) icon = 'fa-file-alt';
+                html = `<div class="file-info"><i class="fas ${icon}"></i><span>${fileName}</span></div>`;
+            }
+            previewContent.innerHTML = html;
             imagePreview.classList.add('show');
-            // توسيع الـ textarea قليلاً لإفساح المجال للمعاينة
             setTimeout(() => {
                 userInput.style.height = 'auto';
                 userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
             }, 50);
         }
 
-        // ===== توسيع مربع الكتابة =====
         userInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
-        // ===== زر + =====
         let plusOpen = false;
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
@@ -323,7 +339,7 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== خيار الكاميرا =====
+        // كاميرا
         cameraBtn.addEventListener('click', function() {
             cameraInput.click();
             plusOptions.classList.remove('show');
@@ -335,19 +351,14 @@ HTML_TEMPLATE = """
                 const file = this.files[0];
                 const reader = new FileReader();
                 reader.onload = function(ev) {
-                    const imgData = ev.target.result;
-                    showPreview(imgData);
-                    // حفظ الصورة في المكتبة أيضاً
-                    let imgs = getImages();
-                    imgs.push(imgData);
-                    saveImages(imgs);
+                    showFilePreview(ev.target.result, file.name, file.type);
                     cameraInput.value = '';
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        // ===== خيار معرض الصور =====
+        // معرض الصور (صور فقط)
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -359,18 +370,14 @@ HTML_TEMPLATE = """
                 const file = this.files[0];
                 const reader = new FileReader();
                 reader.onload = function(ev) {
-                    const imgData = ev.target.result;
-                    showPreview(imgData);
-                    let imgs = getImages();
-                    imgs.push(imgData);
-                    saveImages(imgs);
+                    showFilePreview(ev.target.result, file.name, file.type);
                     fileInput.value = '';
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        // ===== خيار الملفات =====
+        // ملفات عامة
         filesBtn.addEventListener('click', function() {
             fileInputGeneric.click();
             plusOptions.classList.remove('show');
@@ -380,8 +387,12 @@ HTML_TEMPLATE = """
         fileInputGeneric.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
                 const file = this.files[0];
-                addMessage(`📎 تم رفع: ${file.name}`, 'user');
-                fileInputGeneric.value = '';
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    showFilePreview(ev.target.result, file.name, file.type);
+                    fileInputGeneric.value = '';
+                };
+                reader.readAsDataURL(file);
             }
         });
 
@@ -394,21 +405,34 @@ HTML_TEMPLATE = """
             });
         }
 
-        function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
+        function addMessage(text, sender = 'bot', isSystem = false, imageData = null, fileInfo = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-            if (imageData) {
-                // في حال إرسال الصورة مباشرة (نادراً ما يُستخدم هنا)
-                el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
+            if (imageData && sender === 'user') {
+                let content = '';
+                if (fileInfo && fileInfo.type && fileInfo.type.startsWith('video/')) {
+                    content = `<video src="${imageData}" style="max-width:100%;max-height:200px;border-radius:12px;margin:4px 0;border:1px solid #ddd;" controls></video>`;
+                } else if (fileInfo && fileInfo.type && fileInfo.type.startsWith('image/')) {
+                    content = `<img src="${imageData}" class="image-upload" />`;
+                } else {
+                    let icon = 'fa-file';
+                    if (fileInfo && fileInfo.type && fileInfo.type.includes('pdf')) icon = 'fa-file-pdf';
+                    else if (fileInfo && fileInfo.type && fileInfo.type.includes('word')) icon = 'fa-file-word';
+                    else if (fileInfo && fileInfo.type && fileInfo.type.includes('excel')) icon = 'fa-file-excel';
+                    else if (fileInfo && fileInfo.type && fileInfo.type.includes('zip')) icon = 'fa-file-archive';
+                    else icon = 'fa-file-alt';
+                    content = `<i class="fas ${icon}" style="font-size:30px;display:block;text-align:center;margin:4px 0;"></i><span style="font-size:12px;color:#6a7b8c;display:block;text-align:center;">${fileInfo ? fileInfo.name : 'ملف'}</span>`;
+                }
+                el.innerHTML = `${content}<span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
                 if (!isSystem && sender !== 'error') {
-                    conversationHistory.push({ role: sender, content: '📷 رفع صورة' });
+                    conversationHistory.push({ role: sender, content: '📎 ملف مرفق' });
                     if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
-                    saveHistory(sender, text);
+                    saveHistory(sender, text || 'ملف');
                 }
                 return;
             }
@@ -524,7 +548,7 @@ HTML_TEMPLATE = """
         function newChat() {
             chatBox.innerHTML = '';
             conversationHistory = [];
-            clearPreview(); // مسح المعاينة عند بدء محادثة جديدة
+            clearPreview();
         }
 
         function handleAction(action) {
@@ -590,52 +614,33 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        async function sendMessageInternal(text, image = null) {
-            userInput.value = '';
-            userInput.style.height = '40px';
-            userInput.focus();
-            try {
-                const res = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, image: image, history: conversationHistory })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    addMessage(data.reply, 'bot');
-                } else {
-                    addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
-                }
-            } catch (e) {
-                addMessage('تعذر الاتصال بالسيرفر.', 'error');
-            }
-        }
-
         async function sendMessage() {
             const text = userInput.value.trim();
-            const imageToSend = pendingImageData;
+            const fileData = pendingFileData;
 
-            if (!text && !imageToSend) return;
+            if (!text && !fileData) return;
 
-            // إضافة رسالة المستخدم (نص أو صورة)
-            if (imageToSend) {
-                addMessage('📷 صورة مرفقة', 'user', false, imageToSend);
+            // عرض ملف المستخدم في الشات
+            if (fileData) {
+                addMessage(fileData.name || 'ملف', 'user', false, fileData.data, { name: fileData.name, type: fileData.type });
+                // حفظ في المكتبة إذا كان صورة
+                if (fileData.type && fileData.type.startsWith('image/')) {
+                    let imgs = getImages();
+                    imgs.push(fileData.data);
+                    saveImages(imgs);
+                }
             }
             if (text) {
                 addMessage(text, 'user');
             }
 
-            // حفظ الصورة في المكتبة (إذا كانت موجودة)
-            if (imageToSend) {
-                let imgs = getImages();
-                imgs.push(imageToSend);
-                saveImages(imgs);
-            }
+            const imageToSend = fileData && (fileData.type && fileData.type.startsWith('image/')) ? fileData.data : null;
+            const fileToSend = fileData ? fileData.data : null;
+            const fileName = fileData ? fileData.name : null;
+            const fileType = fileData ? fileData.type : null;
 
-            // إرسال الطلب للخادم
             userInput.value = '';
             userInput.style.height = '40px';
-            // مسح المعاينة
             clearPreview();
             userInput.focus();
 
@@ -643,7 +648,14 @@ HTML_TEMPLATE = """
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, image: imageToSend, history: conversationHistory })
+                    body: JSON.stringify({ 
+                        message: text, 
+                        image: imageToSend, 
+                        file: fileToSend, 
+                        fileName: fileName, 
+                        fileType: fileType,
+                        history: conversationHistory 
+                    })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -668,28 +680,29 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع البحث بالويب وتحليل الصور ==========
+# ========== نقطة الدردشة ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
         data = request.get_json()
         user_message = data.get("message", "").strip()
         image_data = data.get("image", None)
+        file_data = data.get("file", None)
+        file_name = data.get("fileName", "")
+        file_type = data.get("fileType", "")
         history = data.get("history", [])
 
-        # ===== التحقق من وجود رسالة أو صورة =====
-        if not user_message and not image_data:
-            return jsonify({"reply": "اكتب شيء أساعدك فيه"})
+        if not user_message and not image_data and not file_data:
+            return jsonify({"reply": "اكتب شيء أو ارفق ملف"})
 
-        # ===== بناء السياق للمحادثة =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for msg in history:
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["content"]})
 
-        # ===== إضافة الصورة (إذا وجدت) =====
+        # نستخدم الصورة إن وجدت، وإلا نرسل الملف كنص (مع الإشارة إلى نوعه)
         if image_data:
-            print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
+            print(f"📷 صورة: {len(image_data)} حرف")
             messages.append({
                 "role": "user",
                 "content": [
@@ -697,14 +710,17 @@ def chat():
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
+        elif file_data and file_type and not file_type.startswith('image/'):
+            # ملف ليس صورة: نرسل النص فقط مع وصف الملف
+            reply_text = f"استلمت ملفك '{file_name}' (نوعه: {file_type}). حالياً لا أستطيع تحليل هذا النوع من الملفات، لكن يمكنني مساعدتك في أي سؤال نصي."
+            return jsonify({"reply": reply_text})
         else:
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
-        # ===== اختيار الطريقة المناسبة =====
         if image_data:
             try:
-                print("🖼️ تحليل الصورة باستخدام gpt-4o...")
+                print("🖼️ تحليل الصورة...")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -714,16 +730,15 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
-                print(f"✅ تم تحليل الصورة بنجاح")
                 return jsonify({"reply": reply})
             except Exception as e:
-                print(f"❌ خطأ في تحليل الصورة: {e}")
+                print(f"❌ خطأ: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
+            # محادثة نصية (بدون صورة) -> بحث بالويب
             full_context = ""
             for msg in messages:
-                if msg["role"] == "system":
-                    continue
+                if msg["role"] == "system": continue
                 if msg["role"] == "user":
                     if isinstance(msg["content"], list):
                         for part in msg["content"]:
@@ -735,7 +750,7 @@ def chat():
                     full_context += "نبراس: " + msg["content"] + "\n"
 
             try:
-                print("🔍 البحث بالويب باستخدام responses.create...")
+                print("🔍 بحث بالويب...")
                 response = client.responses.create(
                     model="gpt-4o-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
@@ -746,10 +761,10 @@ def chat():
                 )
                 reply = response.output_text.strip()
                 if not reply:
-                    reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
+                    reply = "ما قدرت أجيب لك معلومة."
                 return jsonify({"reply": reply})
             except Exception as e:
-                print(f"⚠️ خطأ في البحث بالويب: {e}")
+                print(f"⚠️ خطأ في البحث: {e}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -758,7 +773,7 @@ def chat():
                 )
                 reply = response.choices[0].message.content.strip()
                 if not reply:
-                    reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+                    reply = "ما قدرت أجيب لك رد."
                 return jsonify({"reply": reply})
 
     except Exception as e:
