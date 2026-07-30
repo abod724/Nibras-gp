@@ -1,91 +1,8 @@
-from flask import Flask, request, jsonify, render_template_string, redirect, url_for, flash
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
-import json
-import random
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "default-secret-key-change-me")
-
-# ========== إعداد قاعدة البيانات ==========
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///nbras.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
-
-# ========== نماذج قاعدة البيانات ==========
-class User(db.Model, object):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    chats = db.relationship('Chat', backref='user', lazy=True)
-
-class Chat(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    user_message = db.Column(db.Text, nullable=False)
-    bot_response = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-# ========== نظام تسجيل الدخول ==========
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = "يرجى تسجيل الدخول أولاً"
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-# ========== قوالب HTML لتسجيل الدخول ==========
-LOGIN_TEMPLATE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تسجيل الدخول - نبراس</title>
-<style>body{font-family:Arial;background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:white;padding:40px;border-radius:30px;box-shadow:0 10px 30px rgba(0,0,0,0.05);width:100%;max-width:350px;text-align:center}h2{color:#1a2b3c;margin-bottom:20px}input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:30px;font-size:15px;outline:none}button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:30px;font-size:16px;cursor:pointer;margin-top:10px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none}.flash{color:#c33;margin:10px 0}</style>
-</head>
-<body>
-<div class="box">
-<h2>🔐 تسجيل الدخول</h2>
-{% with messages = get_flashed_messages() %}
-  {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
-{% endwith %}
-<form method="post">
-<input type="text" name="username" placeholder="اسم المستخدم" required>
-<input type="password" name="password" placeholder="كلمة المرور" required>
-<button type="submit">دخول</button>
-</form>
-<p>ليس لديك حساب؟ <a href="/register">سجل الآن</a></p>
-</div>
-</body>
-</html>
-"""
-
-REGISTER_TEMPLATE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تسجيل جديد - نبراس</title>
-<style>body{font-family:Arial;background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:white;padding:40px;border-radius:30px;box-shadow:0 10px 30px rgba(0,0,0,0.05);width:100%;max-width:350px;text-align:center}h2{color:#1a2b3c;margin-bottom:20px}input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:30px;font-size:15px;outline:none}button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:30px;font-size:16px;cursor:pointer;margin-top:10px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none}</style>
-</head>
-<body>
-<div class="box">
-<h2>📝 إنشاء حساب</h2>
-<form method="post">
-<input type="text" name="username" placeholder="اسم المستخدم" required>
-<input type="email" name="email" placeholder="البريد الإلكتروني" required>
-<input type="password" name="password" placeholder="كلمة المرور" required>
-<button type="submit">تسجيل</button>
-</form>
-<p>لديك حساب؟ <a href="/login">سجل دخول</a></p>
-</div>
-</body>
-</html>
-"""
 
 # ========== مفتاح API ==========
 API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -147,9 +64,7 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
-        .header .user-info { font-size: 14px; color: #1a2b3c; display: flex; align-items: center; gap: 8px; }
-        .header .user-info i { color: #4a6a8a; }
+        .header { display: flex; justify-content: flex-end; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
         .header .menu-btn { background: none; border: none; font-size: 22px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .dropdown { position: absolute; top: 64px; left: 14px; right: 14px; background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); display: none; flex-direction: column; z-index: 100; border: 1px solid #eaedf2; }
         .dropdown.show { display: flex; }
@@ -276,14 +191,6 @@ HTML_TEMPLATE = """
 <body>
 <div class="app">
     <div class="header">
-        <div class="user-info">
-            {% if current_user.is_authenticated %}
-                <i class="fas fa-user-circle"></i> {{ current_user.username }}
-                <a href="/logout" style="color:#c33; font-size:13px; margin-right:8px;">خروج</a>
-            {% else %}
-                <a href="/login" style="color:#4a6a8a; font-size:14px;">دخول</a>
-            {% endif %}
-        </div>
         <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
     </div>
     <div class="dropdown" id="dropdown">
@@ -677,38 +584,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ========== مسارات المصادقة ==========
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        user = User.query.filter_by(username=request.form['username']).first()
-        if user and check_password_hash(user.password_hash, request.form['password']):
-            login_user(user)
-            return redirect(url_for('index'))
-        flash('اسم المستخدم أو كلمة المرور غير صحيحة')
-    return render_template_string(LOGIN_TEMPLATE)
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        hashed = generate_password_hash(request.form['password'])
-        new_user = User(
-            username=request.form['username'],
-            email=request.form['email'],
-            password_hash=hashed
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect(url_for('login'))
-    return render_template_string(REGISTER_TEMPLATE)
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
-
-# ========== الصفحة الرئيسية ==========
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -734,6 +609,7 @@ def chat():
 
         # ===== إضافة الصورة (إذا وجدت) =====
         if image_data:
+            # طباعة في السجلات للتأكد من استقبال الصورة
             print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
             messages.append({
                 "role": "user",
@@ -748,6 +624,7 @@ def chat():
 
         # ===== اختيار الطريقة المناسبة =====
         if image_data:
+            # إذا كانت هناك صورة، نستخدم chat.completions مع gpt-4o (الذي يدعم الصور)
             try:
                 print("🖼️ تحليل الصورة باستخدام gpt-4o...")
                 response = client.chat.completions.create(
@@ -760,20 +637,13 @@ def chat():
                 if not reply:
                     reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
                 print(f"✅ تم تحليل الصورة بنجاح")
-                # حفظ المحادثة في قاعدة البيانات
-                if current_user.is_authenticated:
-                    new_chat = Chat(
-                        user_id=current_user.id,
-                        user_message=user_message or "صورة",
-                        bot_response=reply
-                    )
-                    db.session.add(new_chat)
-                    db.session.commit()
                 return jsonify({"reply": reply})
             except Exception as e:
                 print(f"❌ خطأ في تحليل الصورة: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
+            # إذا لم تكن هناك صورة، نستخدم responses.create للبحث بالويب
+            # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system":
@@ -801,7 +671,9 @@ def chat():
                 reply = response.output_text.strip()
                 if not reply:
                     reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
+                return jsonify({"reply": reply})
             except Exception as e:
+                # إذا فشل البحث بالويب، نستخدم الطريقة العادية
                 print(f"⚠️ خطأ في البحث بالويب: {e}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
@@ -812,26 +684,12 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-
-            # حفظ المحادثة في قاعدة البيانات
-            if current_user.is_authenticated:
-                new_chat = Chat(
-                    user_id=current_user.id,
-                    user_message=user_message,
-                    bot_response=reply
-                )
-                db.session.add(new_chat)
-                db.session.commit()
-
-            return jsonify({"reply": reply})
+                return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ خطأ: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
