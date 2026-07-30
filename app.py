@@ -43,6 +43,7 @@ SYSTEM_PROMPT = f"""
 - إذا سألك عن حدث جديد أو خبر عاجل، استخدم البحث بالويب واجب عليه.
 - إذا سألك عن شيء عام، استخدم معرفتك العامة.
 - إذا ما لقيت المعلومة، قل بصراحة "ما عندي علم" ولا تختلق.
+- إذا أرسل لك المستخدم صورة، قم بتحليلها ووصفها بالتفصيل باللهجة العامية.
 
 **المبدأ**: خلك صديق يحب يسولف، مو مجرد روبوت يجاوب.
 
@@ -315,7 +316,6 @@ HTML_TEMPLATE = """
             if (this.files && this.files.length > 0) {
                 const file = this.files[0];
                 addMessage(`📎 تم رفع: ${file.name}`, 'user');
-                // هنا يمكنك إرسال الملف إلى الخادم لتحليله أو تخزينه
                 fileInputGeneric.value = '';
             }
         });
@@ -620,51 +620,66 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
-        # ===== استدعاء النموذج مع البحث بالويب (Responses API) =====
-        # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
-        # نأخذ آخر رسالة من المستخدم كمدخل، والسياق نضعه في instructions
-        full_context = ""
-        for msg in messages:
-            if msg["role"] == "system":
-                continue
-            if msg["role"] == "user":
-                if isinstance(msg["content"], list):
-                    # إذا كان هناك صورة، نكتفي بالنص
-                    for part in msg["content"]:
-                        if part["type"] == "text":
-                            full_context += part["text"] + "\n"
-                else:
-                    full_context += msg["content"] + "\n"
-            elif msg["role"] == "assistant":
-                full_context += "نبراس: " + msg["content"] + "\n"
+        # ===== اختيار الطريقة المناسبة =====
+        if image_data:
+            # إذا كانت هناك صورة، نستخدم chat.completions مع gpt-4o (الذي يدعم الصور)
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    max_tokens=1000,
+                    temperature=0.8
+                )
+                reply = response.choices[0].message.content.strip()
+                if not reply:
+                    reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
+                return jsonify({"reply": reply})
+            except Exception as e:
+                print(f"❌ خطأ في تحليل الصورة: {e}")
+                return jsonify({"error": str(e)}), 500
+        else:
+            # إذا لم تكن هناك صورة، نستخدم responses.create للبحث بالويب
+            # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
+            full_context = ""
+            for msg in messages:
+                if msg["role"] == "system":
+                    continue
+                if msg["role"] == "user":
+                    if isinstance(msg["content"], list):
+                        for part in msg["content"]:
+                            if part["type"] == "text":
+                                full_context += part["text"] + "\n"
+                    else:
+                        full_context += msg["content"] + "\n"
+                elif msg["role"] == "assistant":
+                    full_context += "نبراس: " + msg["content"] + "\n"
 
-        # استخدام Responses API للبحث بالويب
-        try:
-            response = client.responses.create(
-                model="gpt-4o-mini",
-                instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
-                input=user_message or "حلل هذه الصورة",
-                tools=[{"type": "web_search"}],
-                temperature=0.8,
-                max_output_tokens=1000
-            )
-            reply = response.output_text.strip()
-            if not reply:
-                reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
-            return jsonify({"reply": reply})
-        except Exception as e:
-            # إذا فشل البحث بالويب، نستخدم الطريقة العادية
-            print(f"⚠️ خطأ في البحث بالويب: {e}")
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                max_tokens=1000,
-                temperature=0.8
-            )
-            reply = response.choices[0].message.content.strip()
-            if not reply:
-                reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-            return jsonify({"reply": reply})
+            try:
+                response = client.responses.create(
+                    model="gpt-4o-mini",
+                    instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
+                    input=user_message,
+                    tools=[{"type": "web_search"}],
+                    temperature=0.8,
+                    max_output_tokens=1000
+                )
+                reply = response.output_text.strip()
+                if not reply:
+                    reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
+                return jsonify({"reply": reply})
+            except Exception as e:
+                # إذا فشل البحث بالويب، نستخدم الطريقة العادية
+                print(f"⚠️ خطأ في البحث بالويب: {e}")
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    max_tokens=1000,
+                    temperature=0.8
+                )
+                reply = response.choices[0].message.content.strip()
+                if not reply:
+                    reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+                return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ خطأ: {e}")
