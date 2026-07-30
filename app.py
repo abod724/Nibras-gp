@@ -286,15 +286,19 @@ HTML_TEMPLATE = """
         const previewContent = document.getElementById('previewContent');
         const removePreviewBtn = document.getElementById('removePreviewBtn');
 
+        // ===== وظيفة مسح المعاينة (تستخدم عند الإرسال أو الضغط على ×) =====
         function clearPreview() {
             pendingFileData = null;
             imagePreview.classList.remove('show');
             previewContent.innerHTML = '';
+            // إعادة ضبط ارتفاع الـ textarea
             userInput.style.height = 'auto';
             userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
         }
+
         removePreviewBtn.addEventListener('click', clearPreview);
 
+        // ===== وظيفة عرض المعاينة =====
         function showFilePreview(fileData, fileName, fileType) {
             pendingFileData = { data: fileData, name: fileName, type: fileType };
             let html = '';
@@ -303,7 +307,6 @@ HTML_TEMPLATE = """
             } else if (fileType.startsWith('video/')) {
                 html = `<video src="${fileData}" style="max-height:80px;max-width:100%;border-radius:12px;border:1px solid #dce1e8;object-fit:cover;" controls></video>`;
             } else {
-                // ملف عام (مستند، PDF، إلخ)
                 let icon = 'fa-file';
                 if (fileType.includes('pdf')) icon = 'fa-file-pdf';
                 else if (fileType.includes('word') || fileType.includes('document')) icon = 'fa-file-word';
@@ -314,6 +317,7 @@ HTML_TEMPLATE = """
             }
             previewContent.innerHTML = html;
             imagePreview.classList.add('show');
+            // توسيع الـ textarea قليلاً
             setTimeout(() => {
                 userInput.style.height = 'auto';
                 userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
@@ -325,6 +329,7 @@ HTML_TEMPLATE = """
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
+        // ===== زر + =====
         let plusOpen = false;
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
@@ -339,7 +344,7 @@ HTML_TEMPLATE = """
             }
         });
 
-        // كاميرا
+        // ===== كاميرا =====
         cameraBtn.addEventListener('click', function() {
             cameraInput.click();
             plusOptions.classList.remove('show');
@@ -358,7 +363,7 @@ HTML_TEMPLATE = """
             }
         });
 
-        // معرض الصور (صور فقط)
+        // ===== معرض الصور (صور فقط) =====
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -377,7 +382,7 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ملفات عامة
+        // ===== ملفات عامة =====
         filesBtn.addEventListener('click', function() {
             fileInputGeneric.click();
             plusOptions.classList.remove('show');
@@ -395,15 +400,6 @@ HTML_TEMPLATE = """
                 reader.readAsDataURL(file);
             }
         });
-
-        function toBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-            });
-        }
 
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null, fileInfo = null) {
             const el = document.createElement('div');
@@ -614,13 +610,14 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
+        // ===== إرسال الرسالة =====
         async function sendMessage() {
             const text = userInput.value.trim();
             const fileData = pendingFileData;
 
             if (!text && !fileData) return;
 
-            // عرض ملف المستخدم في الشات
+            // إضافة رسالة المستخدم (مع الملف إن وجد)
             if (fileData) {
                 addMessage(fileData.name || 'ملف', 'user', false, fileData.data, { name: fileData.name, type: fileData.type });
                 // حفظ في المكتبة إذا كان صورة
@@ -639,9 +636,10 @@ HTML_TEMPLATE = """
             const fileName = fileData ? fileData.name : null;
             const fileType = fileData ? fileData.type : null;
 
+            // ===== مسح المعاينة والمربع =====
             userInput.value = '';
             userInput.style.height = '40px';
-            clearPreview();
+            clearPreview(); // <-- هذا هو المفتاح: يمسح المعاينة بعد الإرسال
             userInput.focus();
 
             try {
@@ -700,7 +698,6 @@ def chat():
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["content"]})
 
-        # نستخدم الصورة إن وجدت، وإلا نرسل الملف كنص (مع الإشارة إلى نوعه)
         if image_data:
             print(f"📷 صورة: {len(image_data)} حرف")
             messages.append({
@@ -711,7 +708,6 @@ def chat():
                 ]
             })
         elif file_data and file_type and not file_type.startswith('image/'):
-            # ملف ليس صورة: نرسل النص فقط مع وصف الملف
             reply_text = f"استلمت ملفك '{file_name}' (نوعه: {file_type}). حالياً لا أستطيع تحليل هذا النوع من الملفات، لكن يمكنني مساعدتك في أي سؤال نصي."
             return jsonify({"reply": reply_text})
         else:
