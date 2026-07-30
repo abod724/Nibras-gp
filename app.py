@@ -88,18 +88,20 @@ HTML_TEMPLATE = """
             background: #eef2f7;
             color: #1a2b3c;
             border-bottom-left-radius: 6px;
+            font-size: 17px;
         }
         .msg.bot {
             align-self: flex-start;
             background: #ffffff;
             color: #1a2b3c;
             border-bottom-right-radius: 6px;
+            font-size: 17px;
         }
 
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
-        .msg .file-label { font-size: 17px; color: #6a7b8c; margin-top: 2px; display: block; }
+        .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         .msg .file-icon { font-size: 30px; margin: 4px 0; display: block; text-align: center; }
         
         .input-area { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
@@ -218,7 +220,9 @@ HTML_TEMPLATE = """
             .dropdown { top: 58px; left: 10px; right: 10px; }
             .dropdown .item { padding: 12px 14px; font-size: 14px; }
             #chat { padding: 12px 14px; }
-            .msg { font-size: 14px; padding: 8px 12px; }
+            .msg { font-size: 15px; padding: 8px 12px; }
+            .msg.user { font-size: 15px; }
+            .msg.bot { font-size: 15px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
             .input-area textarea { font-size: 16px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
@@ -338,7 +342,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== الكاميرا =====
         cameraBtn.addEventListener('click', function() {
             cameraInput.value = '';
             cameraInput.click();
@@ -364,7 +367,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== معرض الصور =====
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -383,7 +385,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== ملفات عامة =====
         filesBtn.addEventListener('click', function() {
             fileInputGeneric.click();
             plusOptions.classList.remove('show');
