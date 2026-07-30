@@ -609,6 +609,8 @@ def chat():
 
         # ===== إضافة الصورة (إذا وجدت) =====
         if image_data:
+            # طباعة في السجلات للتأكد من استقبال الصورة
+            print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
             messages.append({
                 "role": "user",
                 "content": [
@@ -624,6 +626,7 @@ def chat():
         if image_data:
             # إذا كانت هناك صورة، نستخدم chat.completions مع gpt-4o (الذي يدعم الصور)
             try:
+                print("🖼️ تحليل الصورة باستخدام gpt-4o...")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -633,6 +636,7 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
+                print(f"✅ تم تحليل الصورة بنجاح")
                 return jsonify({"reply": reply})
             except Exception as e:
                 print(f"❌ خطأ في تحليل الصورة: {e}")
@@ -655,6 +659,7 @@ def chat():
                     full_context += "نبراس: " + msg["content"] + "\n"
 
             try:
+                print("🔍 البحث بالويب باستخدام responses.create...")
                 response = client.responses.create(
                     model="gpt-4o-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
