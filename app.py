@@ -103,7 +103,7 @@ HTML_TEMPLATE = """
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         
         /* ===== مربع الكتابة المتوسع ===== */
-        .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; }
+        .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
         .input-area textarea {
             flex: 1;
             border: none;
@@ -121,12 +121,53 @@ HTML_TEMPLATE = """
             line-height: 1.5;
         }
         .input-area textarea::placeholder { color: #9aabbc; }
+        
+        /* ===== أزرار الإدخال ===== */
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
         .input-area .mic-btn.listening { color: #c33; background: #fde8e8; }
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
+        
+        /* ===== زر + وخياراته ===== */
+        .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
+        .plus-btn:hover { background: #e8ecf0; }
+        .plus-btn.rotate { transform: rotate(45deg); }
+        
+        .plus-options {
+            display: none;
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            padding: 12px;
+            gap: 8px;
+            flex-direction: row;
+            border: 1px solid #eaeef2;
+            z-index: 50;
+        }
+        .plus-options.show { display: flex; }
+        .plus-options .option-btn {
+            background: #f5f7fa;
+            border: none;
+            border-radius: 50%;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #1a2b3c;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .plus-options .option-btn:hover { background: #e8ecf0; transform: scale(1.05); }
+        .plus-options .option-btn.camera { color: #e74c3c; }
+        .plus-options .option-btn.gallery { color: #2ecc71; }
+        .plus-options .option-btn.files { color: #3498db; }
         /* ============================= */
 
         @media (max-width: 420px) {
@@ -139,6 +180,9 @@ HTML_TEMPLATE = """
             .input-area textarea { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
             .input-area .btn-icon { width: 34px; height: 34px; font-size: 18px; }
+            .plus-btn { width: 34px; height: 34px; font-size: 20px; }
+            .plus-options { bottom: 60px; padding: 8px; gap: 6px; }
+            .plus-options .option-btn { width: 44px; height: 44px; font-size: 18px; }
             .msg .image-upload { max-height: 150px; }
         }
     </style>
@@ -156,11 +200,19 @@ HTML_TEMPLATE = """
     <div id="chat"></div>
     <div class="input-area">
         <button class="btn-icon mic-btn" id="micBtn" title="تسجيل صوت"><i class="fas fa-microphone"></i></button>
-        <button class="btn-icon" id="fileBtn" title="رفع صورة"><i class="fas fa-image"></i></button>
-        <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+        <button class="plus-btn" id="plusBtn" title="إضافة"><i class="fas fa-plus"></i></button>
+        <div class="plus-options" id="plusOptions">
+            <button class="option-btn camera" id="cameraBtn" title="كاميرا"><i class="fas fa-camera"></i></button>
+            <button class="option-btn gallery" id="galleryBtn" title="معرض الصور"><i class="fas fa-images"></i></button>
+            <button class="option-btn files" id="filesBtn" title="ملفات"><i class="fas fa-folder"></i></button>
+        </div>
         <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
+    <!-- عناصر مخفية لرفع الملفات -->
+    <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" />
+    <input type="file" id="fileInputGeneric" style="display: none;" />
 </div>
 <script>
     (function() {
@@ -171,13 +223,100 @@ HTML_TEMPLATE = """
         const micBtn = document.getElementById('micBtn');
         const fileBtn = document.getElementById('fileBtn');
         const fileInput = document.getElementById('fileInput');
+        const cameraInput = document.getElementById('cameraInput');
+        const fileInputGeneric = document.getElementById('fileInputGeneric');
         const menuToggle = document.getElementById('menuToggle');
         const dropdown = document.getElementById('dropdown');
+        const plusBtn = document.getElementById('plusBtn');
+        const plusOptions = document.getElementById('plusOptions');
+        const cameraBtn = document.getElementById('cameraBtn');
+        const galleryBtn = document.getElementById('galleryBtn');
+        const filesBtn = document.getElementById('filesBtn');
 
-        // ===== توسيع مربع الكتابة تلقائياً =====
+        // ===== توسيع مربع الكتابة =====
         userInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        // ===== زر + =====
+        let plusOpen = false;
+        plusBtn.addEventListener('click', function() {
+            plusOpen = !plusOpen;
+            plusOptions.classList.toggle('show', plusOpen);
+            this.classList.toggle('rotate', plusOpen);
+        });
+        // إغلاق الخيارات عند الضغط خارجها
+        document.addEventListener('click', function(e) {
+            if (!plusBtn.contains(e.target) && !plusOptions.contains(e.target)) {
+                plusOptions.classList.remove('show');
+                plusOpen = false;
+                plusBtn.classList.remove('rotate');
+            }
+        });
+
+        // ===== خيار الكاميرا =====
+        cameraBtn.addEventListener('click', function() {
+            cameraInput.click();
+            plusOptions.classList.remove('show');
+            plusOpen = false;
+            plusBtn.classList.remove('rotate');
+        });
+        cameraInput.addEventListener('change', function(e) {
+            if (this.files && this.files.length > 0) {
+                const file = this.files[0];
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    const imgData = ev.target.result;
+                    addMessage(file.name, 'user', false, imgData);
+                    let imgs = getImages();
+                    imgs.push(imgData);
+                    saveImages(imgs);
+                    sendMessageAfterMedia();
+                    cameraInput.value = '';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // ===== خيار معرض الصور =====
+        galleryBtn.addEventListener('click', function() {
+            fileInput.click();
+            plusOptions.classList.remove('show');
+            plusOpen = false;
+            plusBtn.classList.remove('rotate');
+        });
+        fileInput.addEventListener('change', function(e) {
+            if (this.files && this.files.length > 0) {
+                const file = this.files[0];
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    const imgData = ev.target.result;
+                    addMessage(file.name, 'user', false, imgData);
+                    let imgs = getImages();
+                    imgs.push(imgData);
+                    saveImages(imgs);
+                    sendMessageAfterMedia();
+                    fileInput.value = '';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // ===== خيار الملفات =====
+        filesBtn.addEventListener('click', function() {
+            fileInputGeneric.click();
+            plusOptions.classList.remove('show');
+            plusOpen = false;
+            plusBtn.classList.remove('rotate');
+        });
+        fileInputGeneric.addEventListener('change', function(e) {
+            if (this.files && this.files.length > 0) {
+                const file = this.files[0];
+                addMessage(`📎 تم رفع: ${file.name}`, 'user');
+                // هنا يمكنك إرسال الملف إلى الخادم لتحليله أو تخزينه
+                fileInputGeneric.value = '';
+            }
         });
 
         function toBase64(file) {
@@ -383,30 +522,46 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        async function sendMessage() {
+        // ===== دالة إرسال بعد رفع وسائط =====
+        function sendMessageAfterMedia() {
             const text = userInput.value.trim();
-            const file = fileInput.files[0];
-            if (!text && !file) return;
-            let imageData = null;
-            if (file) {
-                imageData = await toBase64(file);
-                addMessage(file.name, 'user', false, imageData);
-                let imgs = getImages();
-                imgs.push(imageData);
-                saveImages(imgs);
-                fileInput.value = '';
-            }
-            if (text) {
-                addMessage(text, 'user');
-            }
+            // نرسل رسالة فارغة أو النص الموجود
+            sendMessageInternal(text || "📎 ملف مرفق");
+        }
+
+        async function sendMessageInternal(text) {
             userInput.value = '';
-            userInput.style.height = '40px'; // إعادة الحجم الطبيعي
+            userInput.style.height = '40px';
             userInput.focus();
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, image: imageData, history: conversationHistory })
+                    body: JSON.stringify({ message: text, image: null, history: conversationHistory })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    addMessage(data.reply, 'bot');
+                } else {
+                    addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
+                }
+            } catch (e) {
+                addMessage('تعذر الاتصال بالسيرفر.', 'error');
+            }
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+            addMessage(text, 'user');
+            userInput.value = '';
+            userInput.style.height = '40px';
+            userInput.focus();
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, image: null, history: conversationHistory })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -421,7 +576,9 @@ HTML_TEMPLATE = """
 
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-        fileBtn.addEventListener('click', () => fileInput.click());
+        
+        // إزالة fileBtn القديم (لم نعد بحاجة له)
+        // نوفر زر رفع الصور القديم كخيار إضافي إن وجد
     })();
 </script>
 </body>
