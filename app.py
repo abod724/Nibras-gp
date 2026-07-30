@@ -267,7 +267,7 @@ HTML_TEMPLATE = """
 <script>
     (function() {
         let conversationHistory = [];
-        let pendingFileData = null; // { data: base64, name: string, type: string }
+        let pendingFileData = null;
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -286,7 +286,6 @@ HTML_TEMPLATE = """
         const previewContent = document.getElementById('previewContent');
         const removePreviewBtn = document.getElementById('removePreviewBtn');
 
-        // ===== مسح المعاينة =====
         function clearPreview() {
             pendingFileData = null;
             imagePreview.classList.remove('show');
@@ -296,7 +295,6 @@ HTML_TEMPLATE = """
         }
         removePreviewBtn.addEventListener('click', clearPreview);
 
-        // ===== عرض المعاينة =====
         function showFilePreview(fileData, fileName, fileType) {
             pendingFileData = { data: fileData, name: fileName, type: fileType };
             let html = '';
@@ -326,7 +324,6 @@ HTML_TEMPLATE = """
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
-        // ===== زر + =====
         let plusOpen = false;
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
@@ -341,36 +338,28 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== كاميرا =====
+        // ===== الكاميرا =====
         cameraBtn.addEventListener('click', function() {
             cameraInput.click();
             plusOptions.classList.remove('show');
             plusOpen = false;
             plusBtn.classList.remove('rotate');
         });
+
         cameraInput.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
                 const file = this.files[0];
-                // إذا كان فيديو، نعرضه
-                if (file.type && file.type.startsWith('video/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(ev) {
-                        showFilePreview(ev.target.result, file.name, file.type);
-                        cameraInput.value = '';
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = function(ev) {
-                        showFilePreview(ev.target.result, file.name, file.type);
-                        cameraInput.value = '';
-                    };
-                    reader.readAsDataURL(file);
-                }
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    showFilePreview(ev.target.result, file.name, file.type);
+                    // بعد تحميل الصورة في المعاينة، نقوم بمسح قيمة الـ input
+                    cameraInput.value = '';
+                };
+                reader.readAsDataURL(file);
             }
         });
 
-        // ===== معرض الصور (صور فقط) =====
+        // ===== معرض الصور =====
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -617,7 +606,6 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        // ===== إرسال =====
         async function sendMessage() {
             const text = userInput.value.trim();
             const fileData = pendingFileData;
@@ -643,7 +631,7 @@ HTML_TEMPLATE = """
 
             userInput.value = '';
             userInput.style.height = '40px';
-            clearPreview(); // 🔥 تختفي المعاينة فوراً بعد الإرسال
+            clearPreview();
             userInput.focus();
 
             try {
