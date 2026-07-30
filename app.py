@@ -8,17 +8,14 @@ import openai
 import os
 import json
 import random
-import re
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "default-secret-key-change-me")
 
-# ========== إعداد قاعدة البيانات ==========
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///nbras.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ========== نماذج قاعدة البيانات ==========
 class User(db.Model, object):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -34,7 +31,6 @@ class Chat(db.Model):
     bot_response = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# ========== نظام تسجيل الدخول ==========
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -44,7 +40,6 @@ login_manager.login_message = "يرجى تسجيل الدخول أولاً"
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ========== قوالب HTML لتسجيل الدخول ==========
 LOGIN_TEMPLATE = """
 <!DOCTYPE html>
 <html dir="rtl">
@@ -89,13 +84,11 @@ REGISTER_TEMPLATE = """
 </html>
 """
 
-# ========== مفتاح API ==========
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -103,36 +96,23 @@ for filename in possible_names:
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 knowledge_content = f.read()
-                print(f"✅ تم تحميل ملف المعرفة: {filename}")
                 break
         except:
             pass
 
-# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي طبيعي، تتحدث باللهجة العامية البيضاء.
-
-**تعليماتك العامة:**
-- خلك إنسان: لا ترد ردود جاهزة، تفاعل مع كلام المستخدم.
-- اسأل: إذا قال لك شي، اسأله عن تفاصيل، عن رأيه، عن وش يخطط له.
-- شارك: أعطه أفكار، اقتراحات، حلول، واطرح عليه أسئلة تحفزه يتكلم أكثر.
-- ناقش: إذا كان النقاش حلو، ادخل معاه فيه، وابدِ رأيك بكل احترام.
-
-**كيف تتعامل مع الأسئلة:**
-- إذا سألك المستخدم "من طورك؟" أو "من برمجك؟"، قول: "أنا من تطوير وبرمجة أفضل المطورين في العالم، فريق محترف ومبدع."
-- إذا سألك عن شيء موجود في ملف المعرفة، جاوبه من الملف بأسلوبك العامي.
-- إذا سألك عن حدث جديد أو خبر عاجل، استخدم البحث بالويب واجب عليه.
-- إذا سألك عن شيء عام، استخدم معرفتك العامة.
-- إذا ما لقيت المعلومة، قل بصراحة "ما عندي علم" ولا تختلق.
-- إذا أرسل لك المستخدم صورة، قم بتحليلها ووصفها بالتفصيل باللهجة العامية.
-
-**المبدأ**: خلك صديق يحب يسولف، مو مجرد روبوت يجاوب.
-
-**ملف المعرفة:**
+تعليماتك العامة:
+- خلك إنسان: تفاعل مع كلام المستخدم، اسأل، شارك، ناقش.
+- إذا سألك "من طورك؟" قل: "أنا من تطوير وبرمجة أفضل المطورين في العالم."
+- استخدم ملف المعرفة إذا وجدت المعلومة فيه.
+- للأحداث الجديدة، استخدم البحث بالويب.
+- إذا ما لقيت المعلومة، قل "ما عندي علم".
+- إذا أرسل لك صورة، حللها وصفها بالعامية.
+ملف المعرفة:
 {knowledge_content}
 """
 
-# ========== نظام الإعلانات ==========
 ADS_FILE = "ads.json"
 ads_config = {"enabled": False, "interval": 5, "ads": []}
 if os.path.exists(ADS_FILE):
@@ -142,7 +122,6 @@ if os.path.exists(ADS_FILE):
     except:
         pass
 
-# ========== دالة البحث بالويب ==========
 def search_web(query):
     try:
         with DDGS() as ddgs:
@@ -158,11 +137,9 @@ def search_web(query):
                     return "\n".join(snippets)
                 return results[0].get('body', 'لا توجد تفاصيل')
             return "لم يتم العثور على نتائج."
-    except Exception as e:
-        print(f"⚠️ خطأ في البحث: {e}")
-        return f"حدث خطأ أثناء البحث: {str(e)}"
+    except Exception:
+        return None
 
-# ========== الواجهة الرئيسية (نفس الكود السابق مع إضافة user-info) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -186,98 +163,32 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        
-        .msg {
-            max-width: 80%;
-            padding: 10px 16px;
-            border-radius: 20px;
-            font-size: 15px;
-            line-height: 1.6;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-        .msg.user {
-            align-self: flex-end;
-            background: #eef2f7;
-            color: #1a2b3c;
-            border-bottom-left-radius: 6px;
-        }
-        .msg.bot {
-            align-self: flex-start;
-            background: #ffffff;
-            color: #1a2b3c;
-            border-bottom-right-radius: 6px;
-        }
-
+        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
+        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
-        
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
-        .input-area textarea {
-            flex: 1;
-            border: none;
-            background: transparent;
-            padding: 12px 4px;
-            font-size: 15px;
-            outline: none;
-            color: #1a2b3c;
-            direction: rtl;
-            resize: none;
-            overflow: hidden;
-            min-height: 40px;
-            max-height: 120px;
-            font-family: 'Segoe UI', Arial, sans-serif;
-            line-height: 1.5;
-        }
+        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
         .input-area textarea::placeholder { color: #9aabbc; }
-        
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
         .input-area .mic-btn.listening { color: #c33; background: #fde8e8; }
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
-        
         .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
         .plus-btn:hover { background: #e8ecf0; }
         .plus-btn.rotate { transform: rotate(45deg); }
-        
-        .plus-options {
-            display: none;
-            position: absolute;
-            bottom: 70px;
-            right: 0;
-            background: #ffffff;
-            border-radius: 20px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-            padding: 12px;
-            gap: 8px;
-            flex-direction: row;
-            border: 1px solid #eaeef2;
-            z-index: 50;
-        }
+        .plus-options { display: none; position: absolute; bottom: 70px; right: 0; background: #ffffff; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 12px; gap: 8px; flex-direction: row; border: 1px solid #eaeef2; z-index: 50; }
         .plus-options.show { display: flex; }
-        .plus-options .option-btn {
-            background: #f5f7fa;
-            border: none;
-            border-radius: 50%;
-            width: 52px;
-            height: 52px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            color: #1a2b3c;
-            cursor: pointer;
-            transition: 0.2s;
-        }
+        .plus-options .option-btn { background: #f5f7fa; border: none; border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #1a2b3c; cursor: pointer; transition: 0.2s; }
         .plus-options .option-btn:hover { background: #e8ecf0; transform: scale(1.05); }
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
-
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
@@ -428,15 +339,6 @@ HTML_TEMPLATE = """
                 fileInputGeneric.value = '';
             }
         });
-
-        function toBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-            });
-        }
 
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
@@ -693,7 +595,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ========== مسارات المصادقة ==========
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -724,12 +625,10 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# ========== الصفحة الرئيسية ==========
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -778,6 +677,9 @@ def chat():
 
         if needs_search:
             search_result = search_web(user_message)
+            if search_result is None:
+                current_date = datetime.now().strftime("%Y-%m-%d")
+                search_result = f"التاريخ اليوم هو {current_date}."
             search_prompt = f"\n\nنتيجة البحث عن '{user_message}':\n{search_result}\n\nبناءً على هذه المعلومات، أجب المستخدم باللهجة العامية."
             messages.append({"role": "user", "content": user_message + search_prompt})
         else:
@@ -812,7 +714,6 @@ def chat():
         print(f"❌ خطأ: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
