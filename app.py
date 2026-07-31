@@ -566,11 +566,11 @@ def chat():
         except Exception as e:
             print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
+        # ===== الرد النهائي (مع نموذج gpt-5.6-terra) =====
         try:
-            # 🔥 التغيير هنا: استخدام GPT-5.6 Sol
+            # 🔥 التغيير الوحيد: استخدام gpt-5.6-terra
             response = client.chat.completions.create(
-                model="gpt-5.6-sol",  # <--- تم التغيير من gpt-4o إلى gpt-5.6-sol
+                model="gpt-5.6-terra",  # <--- تم التغيير هنا
                 messages=messages,
                 max_tokens=1000,
                 temperature=0.8
