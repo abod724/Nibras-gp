@@ -48,7 +48,7 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 """
 
-# ========== الواجهة (بدون تغيير) ==========
+# ========== الواجهة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -70,15 +70,15 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 18px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
-        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; font-size: 18px; }
-        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; font-size: 18px; }
+        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
+        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
-        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 17px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
+        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
         .input-area textarea::placeholder { color: #9aabbc; }
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
@@ -101,11 +101,9 @@ HTML_TEMPLATE = """
             .dropdown { top: 58px; left: 10px; right: 10px; }
             .dropdown .item { padding: 12px 14px; font-size: 14px; }
             #chat { padding: 12px 14px; }
-            .msg { font-size: 16px; padding: 8px 12px; }
-            .msg.user { font-size: 16px; }
-            .msg.bot { font-size: 16px; }
+            .msg { font-size: 14px; padding: 8px 12px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
-            .input-area textarea { font-size: 15px; padding: 10px 2px; }
+            .input-area textarea { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
             .input-area .btn-icon { width: 34px; height: 34px; font-size: 18px; }
             .plus-btn { width: 34px; height: 34px; font-size: 20px; }
@@ -134,7 +132,7 @@ HTML_TEMPLATE = """
             <button class="option-btn gallery" id="galleryBtn" title="معرض الصور"><i class="fas fa-images"></i></button>
             <button class="option-btn files" id="filesBtn" title="ملفات"><i class="fas fa-folder"></i></button>
         </div>
-        <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 17px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
+        <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
@@ -531,7 +529,8 @@ def chat():
                 ]
             })
 
-        # ===== البحث بالويب =====
+        # ===== البحث بالويب (دون تقييد) =====
+        # نرسل السياق كاملاً إلى responses.create مع أداة web_search
         full_context = ""
         for msg in messages:
             if msg["role"] == "system":
@@ -547,6 +546,7 @@ def chat():
                 full_context += "نبراس: " + msg["content"] + "\n"
 
         try:
+            # ===== محاولة البحث بالويب (في كل سؤال) =====
             print(f"🔍 محاولة البحث بالويب عن: {user_message}")
             search_response = client.responses.create(
                 model="gpt-4o-mini",
@@ -558,6 +558,7 @@ def chat():
             )
             search_result = search_response.output_text.strip()
             if search_result:
+                # نضيف نتيجة البحث إلى السياق
                 messages.append({
                     "role": "user",
                     "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
@@ -566,11 +567,10 @@ def chat():
         except Exception as e:
             print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي (مع نموذج gpt-5.6-terra) =====
+        # ===== الرد النهائي (باستخدام gpt-4o) =====
         try:
-            # 🔥 التغيير الوحيد: استخدام gpt-5.6-terra
             response = client.chat.completions.create(
-                model="gpt-5.6-terra",  # <--- تم التغيير هنا
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=1000,
                 temperature=0.8
