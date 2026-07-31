@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
+import json
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -9,6 +11,22 @@ API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
+
+# ========== دوال الذاكرة ==========
+MEMORY_FILE = "memory.json"
+
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_memory(memory):
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(memory, f, ensure_ascii=False, indent=2)
 
 # ========== البحث عن ملف المعرفة ==========
 knowledge_content = ""
@@ -588,7 +606,7 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع البحث بالويب وتحليل الصور ==========
+# ========== نقطة الدردشة مع البحث بالويب وتحليل الصور (مع الذاكرة) ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -597,19 +615,21 @@ def chat():
         image_data = data.get("image", None)
         history = data.get("history", [])
 
-        # ===== التحقق من وجود رسالة أو صورة =====
         if not user_message and not image_data:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
-        # ===== بناء السياق للمحادثة =====
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for msg in history:
-            role = "user" if msg["role"] == "user" else "assistant"
-            messages.append({"role": role, "content": msg["content"]})
+        user_id = request.remote_addr
+        memory = load_memory()
+        if user_id not in memory:
+            memory[user_id] = []
+        chat_history = memory[user_id][-10:]
 
-        # ===== إضافة الصورة (إذا وجدت) =====
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for entry in chat_history:
+            messages.append({"role": "user", "content": entry["user"]})
+            messages.append({"role": "assistant", "content": entry["bot"]})
+
         if image_data:
-            # طباعة في السجلات للتأكد من استقبال الصورة
             print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
             messages.append({
                 "role": "user",
@@ -622,9 +642,7 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
-        # ===== اختيار الطريقة المناسبة =====
         if image_data:
-            # إذا كانت هناك صورة، نستخدم chat.completions مع gpt-4o (الذي يدعم الصور)
             try:
                 print("🖼️ تحليل الصورة باستخدام gpt-4o...")
                 response = client.chat.completions.create(
@@ -637,13 +655,10 @@ def chat():
                 if not reply:
                     reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
                 print(f"✅ تم تحليل الصورة بنجاح")
-                return jsonify({"reply": reply})
             except Exception as e:
                 print(f"❌ خطأ في تحليل الصورة: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
-            # إذا لم تكن هناك صورة، نستخدم responses.create للبحث بالويب
-            # تحويل الرسائل إلى نص واحد للإدخال (لأن Responses API تختلف)
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system":
@@ -671,9 +686,7 @@ def chat():
                 reply = response.output_text.strip()
                 if not reply:
                     reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
-                return jsonify({"reply": reply})
             except Exception as e:
-                # إذا فشل البحث بالويب، نستخدم الطريقة العادية
                 print(f"⚠️ خطأ في البحث بالويب: {e}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
@@ -684,7 +697,18 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-                return jsonify({"reply": reply})
+
+        if user_message:
+            memory[user_id].append({
+                "user": user_message,
+                "bot": reply,
+                "time": datetime.now().isoformat()
+            })
+            if len(memory[user_id]) > 50:
+                memory[user_id] = memory[user_id][-50:]
+            save_memory(memory)
+
+        return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ خطأ: {e}")
