@@ -48,7 +48,7 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 """
 
-# ========== الواجهة (مع رسالة "جاري التفكير...") ==========
+# ========== الواجهة (مع "جاري التفكير..." والذاكرة المؤقتة) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -464,7 +464,7 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== الدالة الرئيسية (مع رسالة "جاري التفكير...") =====
+        // ===== الدالة الرئيسية (مع "جاري التفكير..." والذاكرة المؤقتة) =====
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
@@ -483,10 +483,15 @@ HTML_TEMPLATE = """
             chatBox.scrollTop = chatBox.scrollHeight;
 
             try {
+                // ===== إرسال الطلب مع الحفاظ على conversationHistory =====
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, image: null, history: conversationHistory })
+                    body: JSON.stringify({
+                        message: text,
+                        image: null,
+                        history: conversationHistory  // <--- الحفاظ على الذاكرة المؤقتة
+                    })
                 });
                 const data = await res.json();
 
@@ -501,7 +506,6 @@ HTML_TEMPLATE = """
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
             } catch (e) {
-                // إزالة رسالة "جاري التفكير..." في حالة الخطأ
                 if (thinkingMsg.parentNode) {
                     thinkingMsg.remove();
                 }
