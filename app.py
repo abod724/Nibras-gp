@@ -30,7 +30,7 @@ if not knowledge_content:
 
 # ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
+أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة السعودية العامية البيضاء.
 
 **مصادر معرفتك:**
 1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
@@ -44,11 +44,11 @@ SYSTEM_PROMPT = f"""
 - إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
 - إذا لم تجد المعلومة في ملف المعرفة، استخدم معرفتك العامة.
 - إذا كان السؤال يتطلب معلومات حديثة (أخبار، طقس، أحداث، نتائج، أسعار)، استخدم البحث بالويب.
-- دائماً حافظ على لهجتك العامية البيضاء.
+- دائماً حافظ على لهجتك السعودية العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 """
 
-# ========== الواجهة ==========
+# ========== الواجهة (مع رسالة "جاري التفكير...") ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -464,13 +464,24 @@ HTML_TEMPLATE = """
             }
         }
 
+        // ===== الدالة الرئيسية (مع رسالة "جاري التفكير...") =====
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
+
+            // إضافة رسالة المستخدم
             addMessage(text, 'user');
             userInput.value = '';
             userInput.style.height = '40px';
             userInput.focus();
+
+            // ===== إضافة رسالة "جاري التفكير..." =====
+            const thinkingMsg = document.createElement('div');
+            thinkingMsg.className = 'msg bot';
+            thinkingMsg.innerHTML = 'جاري التفكير... <span class="time">' + new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + '</span>';
+            chatBox.appendChild(thinkingMsg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -478,12 +489,22 @@ HTML_TEMPLATE = """
                     body: JSON.stringify({ message: text, image: null, history: conversationHistory })
                 });
                 const data = await res.json();
+
+                // إزالة رسالة "جاري التفكير..."
+                if (thinkingMsg.parentNode) {
+                    thinkingMsg.remove();
+                }
+
                 if (res.ok) {
                     addMessage(data.reply, 'bot');
                 } else {
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
             } catch (e) {
+                // إزالة رسالة "جاري التفكير..." في حالة الخطأ
+                if (thinkingMsg.parentNode) {
+                    thinkingMsg.remove();
+                }
                 addMessage('تعذر الاتصال بالسيرفر.', 'error');
             }
         }
@@ -526,7 +547,7 @@ def chat():
             messages.append({
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"},
+                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة السعودية العامية"},
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
@@ -575,10 +596,10 @@ def chat():
         else:
             print(f"ℹ️ سؤال عادي (لا يحتاج بحث): {user_message}")
 
-        # ===== الرد النهائي (العودة إلى gpt-4o) =====
+        # ===== الرد النهائي =====
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",  # <--- التغيير الوحيد: العودة إلى gpt-4o
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=1000,
                 temperature=0.8
