@@ -48,7 +48,7 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 """
 
-# ========== الواجهة (مع تكبير الخطوط) ==========
+# ========== الواجهة (بدون تغيير) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -70,52 +70,15 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        /* ===== تكبير الخطوط ===== */
-        .msg {
-            max-width: 80%;
-            padding: 10px 16px;
-            border-radius: 20px;
-            font-size: 18px;
-            line-height: 1.6;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-        .msg.user {
-            align-self: flex-end;
-            background: #eef2f7;
-            color: #1a2b3c;
-            border-bottom-left-radius: 6px;
-            font-size: 18px;
-        }
-        .msg.bot {
-            align-self: flex-start;
-            background: #ffffff;
-            color: #1a2b3c;
-            border-bottom-right-radius: 6px;
-            font-size: 18px;
-        }
-        /* ========================== */
+        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 18px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; font-size: 18px; }
+        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; font-size: 18px; }
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
-        .input-area textarea {
-            flex: 1;
-            border: none;
-            background: transparent;
-            padding: 12px 4px;
-            font-size: 17px;
-            outline: none;
-            color: #1a2b3c;
-            direction: rtl;
-            resize: none;
-            overflow: hidden;
-            min-height: 40px;
-            max-height: 120px;
-            font-family: 'Segoe UI', Arial, sans-serif;
-            line-height: 1.5;
-        }
+        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 17px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
         .input-area textarea::placeholder { color: #9aabbc; }
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
@@ -133,7 +96,6 @@ HTML_TEMPLATE = """
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
-        /* ===== تكبير الخطوط في الجوال ===== */
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
@@ -606,8 +568,9 @@ def chat():
 
         # ===== الرد النهائي =====
         try:
+            # 🔥 التغيير هنا: استخدام GPT-5.6 Sol
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-5.6-sol",  # <--- تم التغيير من gpt-4o إلى gpt-5.6-sol
                 messages=messages,
                 max_tokens=1000,
                 temperature=0.8
