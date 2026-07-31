@@ -28,14 +28,14 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
-# ========== نظام التعليمات (مع اللهجة السعودية العامية البيضاء) ==========
+# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة السعودية العامية البيضاء.
+أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
 **مصادر معرفتك:**
-1. ملف المعرفة (أدناه) هو مرجعك الأساسي.
-2. معرفتك العامة.
-3. البحث بالويب عندما يسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.
+1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
+2. **معرفتك العامة**.
+3. **البحث بالويب** تستخدمه عندما يسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.
 
 **ملف المعرفة الخاص بك:**
 {knowledge_content}
@@ -43,12 +43,12 @@ SYSTEM_PROMPT = f"""
 **تعليمات مهمة:**
 - إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
 - إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
-- دائماً حافظ على لهجتك السعودية العامية البيضاء.
+- إذا كان السؤال يتطلب معلومات حديثة (أخبار، طقس، أحداث)، استخدم البحث بالويب.
+- دائماً حافظ على لهجتك العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
-- خاطب المستخدم بأسلوب ودود وقريب، وكأنك تتحدث مع صديق.
 """
 
-# ========== الواجهة (مع حجم خط 17px) ==========
+# ========== الواجهة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -70,29 +70,9 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        .msg {
-            max-width: 80%;
-            padding: 10px 16px;
-            border-radius: 20px;
-            font-size: 17px;
-            line-height: 1.6;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-        .msg.user {
-            align-self: flex-end;
-            background: #eef2f7;
-            color: #1a2b3c;
-            border-bottom-left-radius: 6px;
-            font-size: 17px;
-        }
-        .msg.bot {
-            align-self: flex-start;
-            background: #ffffff;
-            color: #1a2b3c;
-            border-bottom-right-radius: 6px;
-            font-size: 17px;
-        }
+        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
+        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
@@ -121,9 +101,7 @@ HTML_TEMPLATE = """
             .dropdown { top: 58px; left: 10px; right: 10px; }
             .dropdown .item { padding: 12px 14px; font-size: 14px; }
             #chat { padding: 12px 14px; }
-            .msg { font-size: 15px; padding: 8px 12px; }
-            .msg.user { font-size: 15px; }
-            .msg.bot { font-size: 15px; }
+            .msg { font-size: 14px; padding: 8px 12px; }
             .input-area { margin: 6px 10px 12px 10px; padding: 4px 10px; }
             .input-area textarea { font-size: 14px; padding: 10px 2px; }
             .input-area .send { width: 40px; height: 40px; font-size: 16px; }
@@ -546,12 +524,13 @@ def chat():
             messages.append({
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة السعودية العامية"},
+                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"},
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
 
         # ===== البحث بالويب (دون تقييد) =====
+        # نرسل السياق كاملاً إلى responses.create مع أداة web_search
         full_context = ""
         for msg in messages:
             if msg["role"] == "system":
@@ -567,6 +546,7 @@ def chat():
                 full_context += "نبراس: " + msg["content"] + "\n"
 
         try:
+            # ===== محاولة البحث بالويب (في كل سؤال) =====
             print(f"🔍 محاولة البحث بالويب عن: {user_message}")
             search_response = client.responses.create(
                 model="gpt-4o-mini",
@@ -578,15 +558,16 @@ def chat():
             )
             search_result = search_response.output_text.strip()
             if search_result:
+                # نضيف نتيجة البحث إلى السياق
                 messages.append({
                     "role": "user",
-                    "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك باللهجة السعودية العامية."
+                    "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
                 })
                 print("✅ تم الحصول على نتائج البحث.")
         except Exception as e:
             print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
+        # ===== الرد النهائي (باستخدام gpt-4o) =====
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
