@@ -6,13 +6,11 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ========== مفتاح API ==========
 API_KEY = os.environ.get("OPENAI_API_KEY")
 if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# ========== دوال الذاكرة ==========
 MEMORY_FILE = "memory.json"
 
 def load_memory():
@@ -28,48 +26,29 @@ def save_memory(memory):
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(memory, f, ensure_ascii=False, indent=2)
 
-# ========== البحث عن ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
-
 for filename in possible_names:
     if os.path.exists(filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 knowledge_content = f.read()
-                print(f"✅ تم تحميل ملف المعرفة: {filename}")
                 break
         except:
             pass
 
-if not knowledge_content:
-    print("⚠️ لم يتم العثور على ملف المعرفة")
-
-# ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي طبيعي، تتحدث باللهجة العامية البيضاء.
-
-**تعليماتك العامة:**
-- خلك إنسان: لا ترد ردود جاهزة، تفاعل مع كلام المستخدم.
-- اسأل: إذا قال لك شي، اسأله عن تفاصيل، عن رأيه، عن وش يخطط له.
-- شارك: أعطه أفكار، اقتراحات، حلول، واطرح عليه أسئلة تحفزه يتكلم أكثر.
-- ناقش: إذا كان النقاش حلو، ادخل معاه فيه، وابدِ رأيك بكل احترام.
-
-**كيف تتعامل مع الأسئلة:**
-- إذا سألك المستخدم "من طورك؟" أو "من برمجك؟"، قول: "أنا من تطوير وبرمجة أفضل المطورين في العالم، فريق محترف ومبدع."
-- إذا سألك عن شيء موجود في ملف المعرفة، جاوبه من الملف بأسلوبك العامي.
-- إذا سألك عن حدث جديد أو خبر عاجل، استخدم البحث بالويب واجب عليه.
-- إذا سألك عن شيء عام، استخدم معرفتك العامة.
-- إذا ما لقيت المعلومة، قل بصراحة "ما عندي علم" ولا تختلق.
-- إذا أرسل لك المستخدم صورة، قم بتحليلها ووصفها بالتفصيل باللهجة العامية.
-
-**المبدأ**: خلك صديق يحب يسولف، مو مجرد روبوت يجاوب.
-
-**ملف المعرفة:**
+تعليماتك:
+- خلك إنسان، تفاعل، اسأل، شارك، ناقش.
+- استخدم ملف المعرفة إذا وجدت المعلومة.
+- إذا سألك عن حدث جديد، استخدم البحث بالويب.
+- إذا ما لقيت المعلومة، قل "ما عندي علم".
+- إذا أرسل لك صورة، حللها وصفها بالعامية.
+ملف المعرفة:
 {knowledge_content}
 """
 
-# ========== الواجهة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -91,104 +70,32 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        
-        /* ===== خلفية بيضاء وتنظيم الكتابة ===== */
-        .msg {
-            max-width: 80%;
-            padding: 10px 16px;
-            border-radius: 20px;
-            font-size: 15px;
-            line-height: 1.6;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-        .msg.user {
-            align-self: flex-end;
-            background: #eef2f7;
-            color: #1a2b3c;
-            border-bottom-left-radius: 6px;
-        }
-        .msg.bot {
-            align-self: flex-start;
-            background: #ffffff;
-            color: #1a2b3c;
-            border-bottom-right-radius: 6px;
-        }
-        /* ============================= */
-
+        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 15px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; }
+        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
-        
-        /* ===== مربع الكتابة المتوسع ===== */
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
-        .input-area textarea {
-            flex: 1;
-            border: none;
-            background: transparent;
-            padding: 12px 4px;
-            font-size: 15px;
-            outline: none;
-            color: #1a2b3c;
-            direction: rtl;
-            resize: none;
-            overflow: hidden;
-            min-height: 40px;
-            max-height: 120px;
-            font-family: 'Segoe UI', Arial, sans-serif;
-            line-height: 1.5;
-        }
+        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
         .input-area textarea::placeholder { color: #9aabbc; }
-        
-        /* ===== أزرار الإدخال ===== */
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
         .input-area .mic-btn.listening { color: #c33; background: #fde8e8; }
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
-        
-        /* ===== زر + وخياراته ===== */
         .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
         .plus-btn:hover { background: #e8ecf0; }
         .plus-btn.rotate { transform: rotate(45deg); }
-        
-        .plus-options {
-            display: none;
-            position: absolute;
-            bottom: 70px;
-            right: 0;
-            background: #ffffff;
-            border-radius: 20px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-            padding: 12px;
-            gap: 8px;
-            flex-direction: row;
-            border: 1px solid #eaeef2;
-            z-index: 50;
-        }
+        .plus-options { display: none; position: absolute; bottom: 70px; right: 0; background: #ffffff; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 12px; gap: 8px; flex-direction: row; border: 1px solid #eaeef2; z-index: 50; }
         .plus-options.show { display: flex; }
-        .plus-options .option-btn {
-            background: #f5f7fa;
-            border: none;
-            border-radius: 50%;
-            width: 52px;
-            height: 52px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            color: #1a2b3c;
-            cursor: pointer;
-            transition: 0.2s;
-        }
+        .plus-options .option-btn { background: #f5f7fa; border: none; border-radius: 50%; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #1a2b3c; cursor: pointer; transition: 0.2s; }
         .plus-options .option-btn:hover { background: #e8ecf0; transform: scale(1.05); }
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
-        /* ============================= */
-
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
@@ -228,7 +135,6 @@ HTML_TEMPLATE = """
         <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
-    <!-- عناصر مخفية لرفع الملفات -->
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
     <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" />
     <input type="file" id="fileInputGeneric" style="display: none;" />
@@ -252,13 +158,11 @@ HTML_TEMPLATE = """
         const galleryBtn = document.getElementById('galleryBtn');
         const filesBtn = document.getElementById('filesBtn');
 
-        // ===== توسيع مربع الكتابة =====
         userInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
-        // ===== زر + =====
         let plusOpen = false;
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
@@ -273,7 +177,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== خيار الكاميرا =====
         cameraBtn.addEventListener('click', function() {
             cameraInput.click();
             plusOptions.classList.remove('show');
@@ -298,7 +201,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== خيار معرض الصور =====
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -323,7 +225,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== خيار الملفات =====
         filesBtn.addEventListener('click', function() {
             fileInputGeneric.click();
             plusOptions.classList.remove('show');
@@ -337,15 +238,6 @@ HTML_TEMPLATE = """
                 fileInputGeneric.value = '';
             }
         });
-
-        function toBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-            });
-        }
 
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
@@ -606,7 +498,6 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة (مع الذاكرة والبحث التلقائي) ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -618,24 +509,18 @@ def chat():
         if not user_message and not image_data:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
-        # ===== تحديد المستخدم (عنوان IP) =====
         user_id = request.remote_addr
-
-        # ===== تحميل الذاكرة =====
         memory = load_memory()
         if user_id not in memory:
             memory[user_id] = []
         chat_history = memory[user_id][-10:]
 
-        # ===== بناء السياق (مع الذاكرة) =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
             messages.append({"role": "user", "content": entry["user"]})
             messages.append({"role": "assistant", "content": entry["bot"]})
 
-        # ===== إضافة الرسالة الحالية =====
         if image_data:
-            print(f"📷 تم استقبال صورة")
             messages.append({
                 "role": "user",
                 "content": [
@@ -647,23 +532,17 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
-        # ===== اختيار الطريقة (صورة أو بحث) =====
         if image_data:
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=messages,
-                    max_tokens=1000,
-                    temperature=0.8
-                )
-                reply = response.choices[0].message.content.strip()
-                if not reply:
-                    reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
-            except Exception as e:
-                print(f"❌ خطأ في تحليل الصورة: {e}")
-                return jsonify({"error": str(e)}), 500
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.8
+            )
+            reply = response.choices[0].message.content.strip()
+            if not reply:
+                reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
         else:
-            # ===== البحث التلقائي (يحاول دائماً) =====
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system":
@@ -702,7 +581,6 @@ def chat():
                 if not reply:
                     reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
-        # ===== حفظ المحادثة في الذاكرة =====
         if user_message:
             memory[user_id].append({
                 "user": user_message,
