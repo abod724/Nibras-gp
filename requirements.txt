@@ -5,6 +5,3 @@ pytz
 duckduckgo-search
 Pillow
 requests
-Flask-SQLAlchemy
-Flask-Login
-bcrypt
