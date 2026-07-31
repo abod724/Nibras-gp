@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
 from datetime import datetime
-from duckduckgo_search import DDGS
 
 app = Flask(__name__)
 
@@ -11,7 +10,7 @@ if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# ========== نظام الذاكرة المؤقتة (لكل مستخدم) ==========
+# ========== نظام الذاكرة ==========
 session_memory = {}
 
 # ========== تحميل ملف المعرفة ==========
@@ -27,47 +26,27 @@ for filename in possible_names:
             pass
 
 if not knowledge_content:
-    print("⚠️ لم يتم العثور على ملف المعرفة، سيتم استخدام الإعدادات الافتراضية.")
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
 # ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
-**مصادر معرفتك (بالترتيب):**
-1. **ملف المعرفة** (الموجود أدناه) هو مرجعك الأساسي والأهم. استخدمه في أي سؤال يتعلق بالمعلومات الثابتة والشخصية.
-2. **معرفتك العامة** (التي تدربت عليها) تستخدمها للإجابة عن الأسئلة العامة التي ليست في ملف المعرفة.
-3. **البحث بالويب** تستخدمه فقط عندما يسألك المستخدم عن حدث جديد، أخبار، طقس، أو معلومات حديثة لا توجد في ملف المعرفة.
+**مصادر معرفتك:**
+1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
+2. **معرفتك العامة**.
+3. **البحث بالويب** تستخدمه عندما يسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.
 
 **ملف المعرفة الخاص بك:**
 {knowledge_content}
 
-**تعليمات إضافية:**
-- إذا سألك المستخدم عن شيء موجود في ملف المعرفة، أجب منه مباشرة ولا تبحث.
-- إذا سألك عن شيء حديث (مثل الأخبار أو الطقس)، استخدم البحث بالويب واجمع المعلومات ثم أجب بأسلوبك.
+**تعليمات مهمة:**
+- إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
+- إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
+- إذا كان السؤال يتطلب معلومات حديثة (أخبار، طقس، أحداث)، استخدم البحث بالويب.
+- دائماً حافظ على لهجتك العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
-- دائماً حافظ على لهجتك العامية البيضاء، وتفاعل مع المستخدم كأنك صديقه.
 """
-
-# ========== دالة البحث بالويب ==========
-def search_web(query):
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=2))
-            if results:
-                snippets = []
-                for r in results[:2]:
-                    title = r.get('title', '')
-                    body = r.get('body', '')
-                    if title and body:
-                        snippets.append(f"{title}: {body}")
-                if snippets:
-                    return "\n".join(snippets)
-                return results[0].get('body', 'لا توجد تفاصيل')
-            return "لم يتم العثور على نتائج."
-    except Exception as e:
-        print(f"⚠️ خطأ في البحث: {e}")
-        return None
 
 # ========== الواجهة ==========
 HTML_TEMPLATE = """
@@ -534,16 +513,13 @@ def chat():
         if user_id not in session_memory:
             session_memory[user_id] = []
 
-        # ===== إضافة رسالة المستخدم إلى الذاكرة =====
         session_memory[user_id].append({"role": "user", "content": user_message})
         chat_history = session_memory[user_id][-10:]
 
-        # ===== بناء السياق =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
             messages.append({"role": entry["role"], "content": entry["content"]})
 
-        # ===== إضافة الصورة =====
         if image_data:
             messages.append({
                 "role": "user",
@@ -553,12 +529,46 @@ def chat():
                 ]
             })
 
-        # ===== تحديد إذا كان السؤال يحتاج بحث =====
-        keywords = ["أخبار", "طقس", "حدث", "جديد", "اليوم", "الساعة", "وقت", "مباراة", "نتيجة", "سعر", "عملة", "سوق", "تحديث", "آخر", "الآن", "2026", "2025"]
-        needs_search = any(k in user_message for k in keywords)
+        # ===== البحث بالويب (دون تقييد) =====
+        # نرسل السياق كاملاً إلى responses.create مع أداة web_search
+        full_context = ""
+        for msg in messages:
+            if msg["role"] == "system":
+                continue
+            if msg["role"] == "user":
+                if isinstance(msg["content"], list):
+                    for part in msg["content"]:
+                        if part["type"] == "text":
+                            full_context += part["text"] + "\n"
+                else:
+                    full_context += msg["content"] + "\n"
+            elif msg["role"] == "assistant":
+                full_context += "نبراس: " + msg["content"] + "\n"
 
-        # ===== معالجة الصورة =====
-        if image_data:
+        try:
+            # ===== محاولة البحث بالويب (في كل سؤال) =====
+            print(f"🔍 محاولة البحث بالويب عن: {user_message}")
+            search_response = client.responses.create(
+                model="gpt-4o-mini",
+                instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
+                input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
+                tools=[{"type": "web_search"}],
+                temperature=0.7,
+                max_output_tokens=800
+            )
+            search_result = search_response.output_text.strip()
+            if search_result:
+                # نضيف نتيجة البحث إلى السياق
+                messages.append({
+                    "role": "user",
+                    "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
+                })
+                print("✅ تم الحصول على نتائج البحث.")
+        except Exception as e:
+            print(f"⚠️ فشل البحث بالويب: {e}")
+
+        # ===== الرد النهائي (باستخدام gpt-4o) =====
+        try:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
@@ -567,34 +577,11 @@ def chat():
             )
             reply = response.choices[0].message.content.strip()
             if not reply:
-                reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
-        else:
-            # ===== البحث إذا لزم الأمر =====
-            if needs_search:
-                search_result = search_web(user_message)
-                if search_result:
-                    # نضيف نتيجة البحث إلى السياق
-                    messages.append({
-                        "role": "user",
-                        "content": f"معلومات من البحث عن '{user_message}':\n{search_result}"
-                    })
+                reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+        except Exception as e:
+            print(f"❌ خطأ في الرد: {e}")
+            reply = "حدث خطأ، حاول مرة أخرى."
 
-            # ===== استدعاء النموذج =====
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=messages,
-                    max_tokens=1000,
-                    temperature=0.8
-                )
-                reply = response.choices[0].message.content.strip()
-                if not reply:
-                    reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-            except Exception as e:
-                print(f"❌ خطأ: {e}")
-                reply = "حدث خطأ، حاول مرة أخرى."
-
-        # ===== حفظ رد البوت في الذاكرة =====
         session_memory[user_id].append({"role": "assistant", "content": reply})
 
         return jsonify({"reply": reply})
