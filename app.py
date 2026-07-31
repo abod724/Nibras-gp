@@ -679,7 +679,6 @@ def chat():
                     full_context += "نبراس: " + msg["content"] + "\n"
 
             try:
-                # محاولة البحث بالويب
                 response = client.responses.create(
                     model="gpt-4o-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
@@ -692,7 +691,6 @@ def chat():
                 if not reply:
                     reply = "آسف، ما قدرت أجيب لك معلومة."
             except Exception as e:
-                # إذا فشل البحث، يستخدم الطريقة العادية
                 print(f"⚠️ فشل البحث: {e}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
