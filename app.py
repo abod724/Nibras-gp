@@ -1,93 +1,10 @@
-from flask import Flask, request, jsonify, render_template_string, redirect, url_for, flash
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
 import json
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "default-secret-key-change-me")
-
-# ========== نظام تسجيل الدخول (بدون قاعدة بيانات) ==========
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = "يرجى تسجيل الدخول أولاً"
-
-# ========== تحميل وحفظ المستخدمين من/إلى ملف JSON ==========
-USERS_FILE = "users.json"
-
-def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-def save_users(users):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
-
-class User:
-    def __init__(self, username):
-        self.id = username
-        self.username = username
-        self.is_authenticated = True
-        self.is_active = True
-        self.is_anonymous = False
-
-    def get_id(self):
-        return self.username
-
-@login_manager.user_loader
-def load_user(username):
-    users = load_users()
-    if username in users:
-        return User(username)
-    return None
-
-# ========== قوالب HTML لتسجيل الدخول ==========
-LOGIN_TEMPLATE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تسجيل الدخول - نبراس</title>
-<style>body{font-family:Arial;background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:white;padding:40px;border-radius:30px;box-shadow:0 10px 30px rgba(0,0,0,0.05);width:100%;max-width:350px;text-align:center}h2{color:#1a2b3c;margin-bottom:20px}input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:30px;font-size:15px;outline:none}button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:30px;font-size:16px;cursor:pointer;margin-top:10px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none}.flash{color:#c33;margin:10px 0}</style>
-</head>
-<body>
-<div class="box">
-<h2>🔐 تسجيل الدخول</h2>
-{% with messages = get_flashed_messages() %}
-  {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
-{% endwith %}
-<form method="post">
-<input type="text" name="username" placeholder="اسم المستخدم" required>
-<input type="password" name="password" placeholder="كلمة المرور" required>
-<button type="submit">دخول</button>
-</form>
-<p>ليس لديك حساب؟ <a href="/register">سجل الآن</a></p>
-</div>
-</body>
-</html>
-"""
-
-REGISTER_TEMPLATE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تسجيل جديد - نبراس</title>
-<style>body{font-family:Arial;background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}.box{background:white;padding:40px;border-radius:30px;box-shadow:0 10px 30px rgba(0,0,0,0.05);width:100%;max-width:350px;text-align:center}h2{color:#1a2b3c;margin-bottom:20px}input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:30px;font-size:15px;outline:none}button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:30px;font-size:16px;cursor:pointer;margin-top:10px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none}</style>
-</head>
-<body>
-<div class="box">
-<h2>📝 إنشاء حساب</h2>
-<form method="post">
-<input type="text" name="username" placeholder="اسم المستخدم" required>
-<input type="password" name="password" placeholder="كلمة المرور" required>
-<button type="submit">تسجيل</button>
-</form>
-<p>لديك حساب؟ <a href="/login">سجل دخول</a></p>
-</div>
-</body>
-</html>
-"""
 
 # ========== مفتاح API ==========
 API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -95,17 +12,38 @@ if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
+# ========== دوال الذاكرة ==========
+MEMORY_FILE = "memory.json"
+
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_memory(memory):
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(memory, f, ensure_ascii=False, indent=2)
+
 # ========== البحث عن ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
+
 for filename in possible_names:
     if os.path.exists(filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 knowledge_content = f.read()
+                print(f"✅ تم تحميل ملف المعرفة: {filename}")
                 break
         except:
             pass
+
+if not knowledge_content:
+    print("⚠️ لم يتم العثور على ملف المعرفة")
 
 # ========== نظام التعليمات ==========
 SYSTEM_PROMPT = f"""
@@ -131,9 +69,8 @@ SYSTEM_PROMPT = f"""
 {knowledge_content}
 """
 
-# ========== الواجهة (مع إضافة معلومات المستخدم) ==========
-HTML_TEMPLATE = """
-<!DOCTYPE html>
+# ========== الواجهة (نفس الكود الذي أرسلته، بدون تغيير) ==========
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8" />
@@ -144,9 +81,7 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
-        .header .user-info { font-size: 14px; color: #1a2b3c; display: flex; align-items: center; gap: 8px; }
-        .header .user-info i { color: #4a6a8a; }
+        .header { display: flex; justify-content: flex-end; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
         .header .menu-btn { background: none; border: none; font-size: 22px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .dropdown { position: absolute; top: 64px; left: 14px; right: 14px; background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); display: none; flex-direction: column; z-index: 100; border: 1px solid #eaedf2; }
         .dropdown.show { display: flex; }
@@ -156,6 +91,7 @@ HTML_TEMPLATE = """
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
         
+        /* ===== خلفية بيضاء وتنظيم الكتابة ===== */
         .msg {
             max-width: 80%;
             padding: 10px 16px;
@@ -177,12 +113,14 @@ HTML_TEMPLATE = """
             color: #1a2b3c;
             border-bottom-right-radius: 6px;
         }
+        /* ============================= */
 
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         
+        /* ===== مربع الكتابة المتوسع ===== */
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
         .input-area textarea {
             flex: 1;
@@ -202,6 +140,7 @@ HTML_TEMPLATE = """
         }
         .input-area textarea::placeholder { color: #9aabbc; }
         
+        /* ===== أزرار الإدخال ===== */
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
         .input-area .mic-btn { color: #4a6a8a; }
@@ -209,6 +148,7 @@ HTML_TEMPLATE = """
         .input-area .send { background: #4a6a8a; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(74,106,138,0.2); }
         .input-area .send:hover { background: #3a5a7a; }
         
+        /* ===== زر + وخياراته ===== */
         .plus-btn { background: none; border: none; color: #4a6a8a; font-size: 24px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.3s; }
         .plus-btn:hover { background: #e8ecf0; }
         .plus-btn.rotate { transform: rotate(45deg); }
@@ -246,6 +186,7 @@ HTML_TEMPLATE = """
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
+        /* ============================= */
 
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
@@ -267,14 +208,6 @@ HTML_TEMPLATE = """
 <body>
 <div class="app">
     <div class="header">
-        <div class="user-info">
-            {% if current_user.is_authenticated %}
-                <i class="fas fa-user-circle"></i> {{ current_user.username }}
-                <a href="/logout" style="color:#c33; font-size:13px; margin-right:8px;">خروج</a>
-            {% else %}
-                <a href="/login" style="color:#4a6a8a; font-size:14px;">دخول</a>
-            {% endif %}
-        </div>
         <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
     </div>
     <div class="dropdown" id="dropdown">
@@ -294,6 +227,7 @@ HTML_TEMPLATE = """
         <textarea id="userInput" placeholder="اكتب رسالة..." autofocus rows="1" style="resize: none; overflow: hidden; min-height: 40px; max-height: 120px; flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 15px; outline: none; color: #1a2b3c; direction: rtl; line-height: 1.5;"></textarea>
         <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
     </div>
+    <!-- عناصر مخفية لرفع الملفات -->
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
     <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" />
     <input type="file" id="fileInputGeneric" style="display: none;" />
@@ -317,11 +251,13 @@ HTML_TEMPLATE = """
         const galleryBtn = document.getElementById('galleryBtn');
         const filesBtn = document.getElementById('filesBtn');
 
+        // ===== توسيع مربع الكتابة =====
         userInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
+        // ===== زر + =====
         let plusOpen = false;
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
@@ -336,6 +272,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== خيار الكاميرا =====
         cameraBtn.addEventListener('click', function() {
             cameraInput.click();
             plusOptions.classList.remove('show');
@@ -360,6 +297,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== خيار معرض الصور =====
         galleryBtn.addEventListener('click', function() {
             fileInput.click();
             plusOptions.classList.remove('show');
@@ -384,6 +322,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== خيار الملفات =====
         filesBtn.addEventListener('click', function() {
             fileInputGeneric.click();
             plusOptions.classList.remove('show');
@@ -666,60 +605,37 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== مسارات تسجيل الدخول ==========
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        users = load_users()
-        if username in users and check_password_hash(users[username]['password'], password):
-            user = User(username)
-            login_user(user)
-            return redirect(url_for('index'))
-        flash('اسم المستخدم أو كلمة المرور غير صحيحة')
-    return render_template_string(LOGIN_TEMPLATE)
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        users = load_users()
-        if username in users:
-            flash('اسم المستخدم موجود مسبقاً')
-        else:
-            users[username] = {'password': generate_password_hash(password)}
-            save_users(users)
-            flash('تم التسجيل بنجاح، يمكنك الدخول الآن')
-            return redirect(url_for('login'))
-    return render_template_string(REGISTER_TEMPLATE)
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
-
-# ========== نقطة الدردشة (مع البحث وتحليل الصور) ==========
+# ========== نقطة الدردشة (مع الذاكرة) ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
         data = request.get_json()
         user_message = data.get("message", "").strip()
         image_data = data.get("image", None)
-        history = data.get("history", [])
+        history = data.get("history", [])  # تاريخ الجلسة الحالية (اختياري)
 
-        if not user_message and not image_data:
-            return jsonify({"reply": "اكتب شيء أساعدك فيه"})
+        # ===== تحديد المستخدم (عنوان IP) =====
+        user_id = request.remote_addr
 
+        # ===== تحميل الذاكرة الدائمة =====
+        memory = load_memory()
+        if user_id not in memory:
+            memory[user_id] = []
+        # نأخذ آخر 10 محادثات
+        chat_history = memory[user_id][-10:]
+
+        # ===== بناء السياق =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for msg in history:
-            role = "user" if msg["role"] == "user" else "assistant"
-            messages.append({"role": role, "content": msg["content"]})
 
+        # إضافة المحادثات السابقة من الذاكرة
+        for entry in chat_history:
+            messages.append({"role": "user", "content": entry["user"]})
+            messages.append({"role": "assistant", "content": entry["bot"]})
+
+        # ===== إضافة الرسالة الحالية (نص أو صورة) =====
         if image_data:
             print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
+            # نضيف رسالة المستخدم مع الصورة
             messages.append({
                 "role": "user",
                 "content": [
@@ -727,7 +643,14 @@ def chat():
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
+        else:
+            if user_message:
+                messages.append({"role": "user", "content": user_message})
+
+        # ===== اختيار الطريقة المناسبة (صورة أو بحث) =====
+        if image_data:
             try:
+                print("🖼️ تحليل الصورة باستخدام gpt-4o...")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -737,11 +660,12 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
-                return jsonify({"reply": reply})
+                print(f"✅ تم تحليل الصورة بنجاح")
             except Exception as e:
                 print(f"❌ خطأ في تحليل الصورة: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
+            # البحث بالويب
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system":
@@ -769,7 +693,6 @@ def chat():
                 reply = response.output_text.strip()
                 if not reply:
                     reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
-                return jsonify({"reply": reply})
             except Exception as e:
                 print(f"⚠️ خطأ في البحث بالويب: {e}")
                 response = client.chat.completions.create(
@@ -781,7 +704,20 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-                return jsonify({"reply": reply})
+
+        # ===== حفظ المحادثة في الذاكرة =====
+        if user_message:  # نحفظ فقط إذا كانت هناك رسالة نصية (نحتفظ بالسياق)
+            memory[user_id].append({
+                "user": user_message,
+                "bot": reply,
+                "time": datetime.now().isoformat()
+            })
+            # نحتفظ بآخر 50 محادثة
+            if len(memory[user_id]) > 50:
+                memory[user_id] = memory[user_id][-50:]
+            save_memory(memory)
+
+        return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ خطأ: {e}")
