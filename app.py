@@ -10,10 +10,8 @@ if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
-# ========== نظام الذاكرة ==========
 session_memory = {}
 
-# ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -28,19 +26,18 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
-# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة السعودية العامية البيضاء.
 
-**مصادر معرفتك:**
-1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
-2. **معرفتك العامة**.
-3. **البحث بالويب** تستخدمه فقط عندما يسألك عن شيء حديث (أخبار، طقس، أحداث، نتائج، أسعار، إلخ).
+مصادر معرفتك:
+1. ملف المعرفة (أدناه) هو مرجعك الأساسي.
+2. معرفتك العامة.
+3. البحث بالويب تستخدمه فقط عندما يسألك عن شيء حديث (أخبار، طقس، أحداث، نتائج، أسعار، إلخ).
 
-**ملف المعرفة الخاص بك:**
+ملف المعرفة الخاص بك:
 {knowledge_content}
 
-**تعليمات مهمة:**
+تعليمات مهمة:
 - إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
 - إذا لم تجد المعلومة في ملف المعرفة، استخدم معرفتك العامة.
 - إذا كان السؤال يتطلب معلومات حديثة (أخبار، طقس، أحداث، نتائج، أسعار)، استخدم البحث بالويب.
@@ -48,7 +45,6 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 """
 
-# ========== الواجهة (مع "جاري التفكير..." والذاكرة المؤقتة) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -241,12 +237,14 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== دالة addMessage (تُضيف الرسالة للشات وللـ conversationHistory) =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
             if (imageData) {
                 pendingImageData = imageData;
                 el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
@@ -259,6 +257,8 @@ HTML_TEMPLATE = """
                 }
                 return;
             }
+
+            // ===== إضافة الرسالة إلى الشات =====
             if (sender === 'bot' && !isSystem) {
                 el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
@@ -274,19 +274,22 @@ HTML_TEMPLATE = """
                     }
                 }
                 typeChar();
-                if (!isSystem && sender !== 'error') {
-                    conversationHistory.push({ role: sender, content: text });
-                    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
-                    saveHistory(sender, text);
-                }
-                return;
+            } else {
+                el.innerHTML = `${text} <span class="time">${time}</span>`;
+                chatBox.appendChild(el);
+                chatBox.scrollTop = chatBox.scrollHeight;
             }
-            el.innerHTML = `${text} <span class="time">${time}</span>`;
-            chatBox.appendChild(el);
-            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // ===== تحديث conversationHistory =====
             if (!isSystem && sender !== 'error') {
-                conversationHistory.push({ role: sender, content: text });
-                if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
+                if (imageData) {
+                    conversationHistory.push({ role: sender, content: '📷 رفع صورة' });
+                } else {
+                    conversationHistory.push({ role: sender, content: text });
+                }
+                if (conversationHistory.length > 20) {
+                    conversationHistory = conversationHistory.slice(-20);
+                }
                 saveHistory(sender, text);
             }
         }
@@ -464,18 +467,16 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== الدالة الرئيسية (مع "جاري التفكير..." والذاكرة المؤقتة) =====
+        // ===== الدالة الرئيسية =====
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
 
-            // إضافة رسالة المستخدم
             addMessage(text, 'user');
             userInput.value = '';
             userInput.style.height = '40px';
             userInput.focus();
 
-            // ===== إضافة رسالة "جاري التفكير..." =====
             const thinkingMsg = document.createElement('div');
             thinkingMsg.className = 'msg bot';
             thinkingMsg.innerHTML = 'جاري التفكير... <span class="time">' + new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + '</span>';
@@ -483,19 +484,17 @@ HTML_TEMPLATE = """
             chatBox.scrollTop = chatBox.scrollHeight;
 
             try {
-                // ===== إرسال الطلب مع الحفاظ على conversationHistory =====
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         message: text,
                         image: null,
-                        history: conversationHistory  // <--- الحفاظ على الذاكرة المؤقتة
+                        history: conversationHistory
                     })
                 });
                 const data = await res.json();
 
-                // إزالة رسالة "جاري التفكير..."
                 if (thinkingMsg.parentNode) {
                     thinkingMsg.remove();
                 }
@@ -556,11 +555,9 @@ def chat():
                 ]
             })
 
-        # ===== تحديد إذا كان السؤال يحتاج بحث =====
         keywords = ["أخبار", "طقس", "حدث", "جديد", "اليوم", "الساعة", "وقت", "مباراة", "نتيجة", "سعر", "عملة", "سوق", "تحديث", "آخر", "الآن", "2026", "2025", "غداً", "أمس", "هذا الأسبوع", "هذا الشهر"]
         needs_search = any(k in user_message for k in keywords)
 
-        # ===== إذا كان السؤال يحتاج بحث =====
         if needs_search and not image_data:
             full_context = ""
             for msg in messages:
@@ -600,7 +597,6 @@ def chat():
         else:
             print(f"ℹ️ سؤال عادي (لا يحتاج بحث): {user_message}")
 
-        # ===== الرد النهائي =====
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
