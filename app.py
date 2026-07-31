@@ -606,7 +606,7 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ========== نقطة الدردشة مع البحث بالويب وتحليل الصور (مع الذاكرة) ==========
+# ========== نقطة الدردشة (مع الذاكرة والبحث التلقائي) ==========
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -618,19 +618,24 @@ def chat():
         if not user_message and not image_data:
             return jsonify({"reply": "اكتب شيء أساعدك فيه"})
 
+        # ===== تحديد المستخدم (عنوان IP) =====
         user_id = request.remote_addr
+
+        # ===== تحميل الذاكرة =====
         memory = load_memory()
         if user_id not in memory:
             memory[user_id] = []
         chat_history = memory[user_id][-10:]
 
+        # ===== بناء السياق (مع الذاكرة) =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
             messages.append({"role": "user", "content": entry["user"]})
             messages.append({"role": "assistant", "content": entry["bot"]})
 
+        # ===== إضافة الرسالة الحالية =====
         if image_data:
-            print(f"📷 تم استقبال صورة بطول: {len(image_data)} حرف")
+            print(f"📷 تم استقبال صورة")
             messages.append({
                 "role": "user",
                 "content": [
@@ -642,9 +647,9 @@ def chat():
             if user_message:
                 messages.append({"role": "user", "content": user_message})
 
+        # ===== اختيار الطريقة (صورة أو بحث) =====
         if image_data:
             try:
-                print("🖼️ تحليل الصورة باستخدام gpt-4o...")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -654,11 +659,11 @@ def chat():
                 reply = response.choices[0].message.content.strip()
                 if not reply:
                     reply = "ما قدرت أحلل الصورة، حاول مرة أخرى."
-                print(f"✅ تم تحليل الصورة بنجاح")
             except Exception as e:
                 print(f"❌ خطأ في تحليل الصورة: {e}")
                 return jsonify({"error": str(e)}), 500
         else:
+            # ===== البحث التلقائي (يحاول دائماً) =====
             full_context = ""
             for msg in messages:
                 if msg["role"] == "system":
@@ -674,7 +679,7 @@ def chat():
                     full_context += "نبراس: " + msg["content"] + "\n"
 
             try:
-                print("🔍 البحث بالويب باستخدام responses.create...")
+                # محاولة البحث بالويب
                 response = client.responses.create(
                     model="gpt-4o-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
@@ -685,9 +690,10 @@ def chat():
                 )
                 reply = response.output_text.strip()
                 if not reply:
-                    reply = "آسف، ما قدرت أجيب لك معلومة. حاول تسأل بشكل أوضح."
+                    reply = "آسف، ما قدرت أجيب لك معلومة."
             except Exception as e:
-                print(f"⚠️ خطأ في البحث بالويب: {e}")
+                # إذا فشل البحث، يستخدم الطريقة العادية
+                print(f"⚠️ فشل البحث: {e}")
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages,
@@ -698,6 +704,7 @@ def chat():
                 if not reply:
                     reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
+        # ===== حفظ المحادثة في الذاكرة =====
         if user_message:
             memory[user_id].append({
                 "user": user_message,
