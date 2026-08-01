@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
-import requests  # <--- أضفت هذا السطر
+import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -14,11 +14,12 @@ client = openai.OpenAI(api_key=API_KEY)
 # ========== دالة البحث في جوجل (مضافة جديدة) ==========
 def search_google(query):
     """البحث عبر Google Custom Search API"""
-    # تم تعديل اسم المتغير ليقرأ من KEY_API_KEY بدلاً من GOOGLE_API_KEY
-    api_key = os.environ.get("KEY_API_KEY")  # <--- التغيير الوحيد هنا
+    # تم تغيير اسم المتغير إلى GOOGLE_API_KEY
+    api_key = os.environ.get("GOOGLE_API_KEY")
     search_engine_id = os.environ.get("CUSTOM_SEARCH_ENGINE_ID")
     
     if not api_key or not search_engine_id:
+        print("⚠️ مفقود: GOOGLE_API_KEY أو CUSTOM_SEARCH_ENGINE_ID")
         return None
     
     try:
@@ -31,7 +32,9 @@ def search_google(query):
             for item in data["items"][:3]:  # أول 3 نتائج
                 results.append(f"• {item['title']}: {item['link']}")
             return "\n".join(results) if results else None
-        return None
+        else:
+            print(f"⚠️ استجابة غير متوقعة من Google: {data}")
+            return None
     except Exception as e:
         print(f"⚠️ خطأ في بحث جوجل: {e}")
         return None
