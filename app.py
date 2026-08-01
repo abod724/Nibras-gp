@@ -14,7 +14,8 @@ client = openai.OpenAI(api_key=API_KEY)
 # ========== دالة البحث في جوجل (مضافة جديدة) ==========
 def search_google(query):
     """البحث عبر Google Custom Search API"""
-    api_key = os.environ.get("GOOGLE_API_KEY")
+    # تم تعديل اسم المتغير ليقرأ من KEY_API_KEY بدلاً من GOOGLE_API_KEY
+    api_key = os.environ.get("KEY_API_KEY")  # <--- التغيير الوحيد هنا
     search_engine_id = os.environ.get("CUSTOM_SEARCH_ENGINE_ID")
     
     if not api_key or not search_engine_id:
