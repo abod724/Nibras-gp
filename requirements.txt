@@ -5,3 +5,4 @@ pytz
 duckduckgo-search
 Pillow
 requests
+requests>=2.31.0
