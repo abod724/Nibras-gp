@@ -595,7 +595,7 @@ def chat():
                 ]
             })
 
-        # ===== البحث بالويب =====
+        # ===== البحث في قوقل (الخيار الأساسي) =====
         full_context = ""
         for msg in messages:
             if msg["role"] == "system":
@@ -610,38 +610,37 @@ def chat():
             elif msg["role"] == "assistant":
                 full_context += "نبراس: " + msg["content"] + "\n"
 
-        search_result = None  # <--- أضفت هذا السطر
-        try:
-            print(f"🔍 محاولة البحث بالويب عن: {user_message}")
-            search_response = client.responses.create(
-                model="gpt-4o-mini",
-                instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
-                input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
-                tools=[{"type": "web_search"}],
-                temperature=0.7,
-                max_output_tokens=800
-            )
-            search_result = search_response.output_text.strip()
-            if search_result:
-                messages.append({
-                    "role": "user",
-                    "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
-                })
-                print("✅ تم الحصول على نتائج البحث.")
-        except Exception as e:
-            print(f"⚠️ فشل البحث بالويب: {e}")
-
-        # ===== إذا فشل البحث من OpenAI، جرب البحث من Google =====
-        if not search_result:
-            print("🔍 محاولة البحث عبر Google...")
-            google_result = search_google(user_message)
-            if google_result:
-                messages.append({
-                    "role": "user",
-                    "content": f"نتيجة البحث عن '{user_message}':\n{google_result}\n\nاستخدم هذه المعلومات في ردك."
-                })
-                print("✅ تم الحصول على نتائج من Google.")
-        # ===========================================================
+        # 1. حاول البحث في Google أولاً
+        print(f"🔍 محاولة البحث عبر Google عن: {user_message}")
+        google_result = search_google(user_message)
+        if google_result:
+            messages.append({
+                "role": "user",
+                "content": f"نتيجة البحث من Google عن '{user_message}':\n{google_result}\n\nاستخدم هذه المعلومات في ردك."
+            })
+            print("✅ تم الحصول على نتائج من Google.")
+        else:
+            print("⚠️ فشل البحث في Google، جرب البحث عبر OpenAI كخيار احتياطي.")
+            # 2. إذا فشل Google، استخدم OpenAI (خيار احتياطي)
+            try:
+                search_response = client.responses.create(
+                    model="gpt-4o-mini",
+                    instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
+                    input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
+                    tools=[{"type": "web_search"}],
+                    temperature=0.7,
+                    max_output_tokens=800
+                )
+                search_result = search_response.output_text.strip()
+                if search_result:
+                    messages.append({
+                        "role": "user",
+                        "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
+                    })
+                    print("✅ تم الحصول على نتائج من OpenAI.")
+            except Exception as e:
+                print(f"⚠️ فشل البحث من OpenAI أيضاً: {e}")
+        # =================================================
 
         # ===== الرد النهائي =====
         try:
