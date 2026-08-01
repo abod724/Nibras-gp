@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 import openai
 import os
+import requests  # <--- أضفت هذا السطر
 from datetime import datetime
 
 app = Flask(__name__)
@@ -10,8 +11,35 @@ if not API_KEY:
     raise Exception("المفتاح غير موجود")
 client = openai.OpenAI(api_key=API_KEY)
 
+# ========== دالة البحث في جوجل (مضافة جديدة) ==========
+def search_google(query):
+    """البحث عبر Google Custom Search API"""
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    search_engine_id = os.environ.get("CUSTOM_SEARCH_ENGINE_ID")
+    
+    if not api_key or not search_engine_id:
+        return None
+    
+    try:
+        url = f"https://www.googleapis.com/customsearch/v1?key={api_key}&cx={search_engine_id}&q={query}"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        
+        if "items" in data:
+            results = []
+            for item in data["items"][:3]:  # أول 3 نتائج
+                results.append(f"• {item['title']}: {item['link']}")
+            return "\n".join(results) if results else None
+        return None
+    except Exception as e:
+        print(f"⚠️ خطأ في بحث جوجل: {e}")
+        return None
+# =====================================================
+
+# ========== نظام الذاكرة ==========
 session_memory = {}
 
+# ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -26,25 +54,27 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
+# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة السعودية العامية البيضاء.
+أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
-مصادر معرفتك:
-1. ملف المعرفة (أدناه) هو مرجعك الأساسي.
-2. معرفتك العامة.
-3. البحث بالويب تستخدمه فقط عندما يسألك عن شيء حديث (أخبار، طقس، أحداث، نتائج، أسعار، إلخ).
+**مصادر معرفتك:**
+1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
+2. **معرفتك العامة**.
+3. **البحث بالويب** تستخدمه عندما يسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.
 
-ملف المعرفة الخاص بك:
+**ملف المعرفة الخاص بك:**
 {knowledge_content}
 
-تعليمات مهمة:
+**تعليمات مهمة:**
 - إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
-- إذا لم تجد المعلومة في ملف المعرفة، استخدم معرفتك العامة.
-- إذا كان السؤال يتطلب معلومات حديثة (أخبار، طقس، أحداث، نتائج، أسعار)، استخدم البحث بالويب.
-- دائماً حافظ على لهجتك السعودية العامية البيضاء.
+- إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
+- إذا كان السؤال يتطلب معلومات حديثة (أخبار، طقس، أحداث)، استخدم البحث بالويب.
+- دائماً حافظ على لهجتك العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 """
 
+# ========== الواجهة (مع تكبير الخطوط) ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -66,15 +96,52 @@ HTML_TEMPLATE = """
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
         #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #ffffff; }
-        .msg { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 18px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
-        .msg.user { align-self: flex-end; background: #eef2f7; color: #1a2b3c; border-bottom-left-radius: 6px; font-size: 18px; }
-        .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; font-size: 18px; }
+        /* ===== تكبير الخطوط ===== */
+        .msg {
+            max-width: 80%;
+            padding: 10px 16px;
+            border-radius: 20px;
+            font-size: 18px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .msg.user {
+            align-self: flex-end;
+            background: #eef2f7;
+            color: #1a2b3c;
+            border-bottom-left-radius: 6px;
+            font-size: 18px;
+        }
+        .msg.bot {
+            align-self: flex-start;
+            background: #ffffff;
+            color: #1a2b3c;
+            border-bottom-right-radius: 6px;
+            font-size: 18px;
+        }
+        /* ========================== */
         .msg .time { font-size: 9px; opacity: 0.35; display: block; margin-top: 4px; }
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .file-label { font-size: 12px; color: #6a7b8c; margin-top: 2px; display: block; }
         .input-area { display: flex; align-items: flex-end; gap: 6px; padding: 6px 12px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; position: relative; }
-        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 4px; font-size: 17px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 40px; max-height: 120px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; }
+        .input-area textarea {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 4px;
+            font-size: 17px;
+            outline: none;
+            color: #1a2b3c;
+            direction: rtl;
+            resize: none;
+            overflow: hidden;
+            min-height: 40px;
+            max-height: 120px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.5;
+        }
         .input-area textarea::placeholder { color: #9aabbc; }
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
@@ -92,6 +159,7 @@ HTML_TEMPLATE = """
         .plus-options .option-btn.camera { color: #e74c3c; }
         .plus-options .option-btn.gallery { color: #2ecc71; }
         .plus-options .option-btn.files { color: #3498db; }
+        /* ===== تكبير الخطوط في الجوال ===== */
         @media (max-width: 420px) {
             .header { padding: 12px 14px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
@@ -237,14 +305,12 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== دالة addMessage (تُضيف الرسالة للشات وللـ conversationHistory) =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
             if (sender === 'error') el.classList.add('error');
             const now = new Date();
             const time = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-
             if (imageData) {
                 pendingImageData = imageData;
                 el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span><span class="time"> ${time}</span>`;
@@ -257,8 +323,6 @@ HTML_TEMPLATE = """
                 }
                 return;
             }
-
-            // ===== إضافة الرسالة إلى الشات =====
             if (sender === 'bot' && !isSystem) {
                 el.innerHTML = `<span class="typing-text"></span><span class="time"> ${time}</span>`;
                 chatBox.appendChild(el);
@@ -274,22 +338,19 @@ HTML_TEMPLATE = """
                     }
                 }
                 typeChar();
-            } else {
-                el.innerHTML = `${text} <span class="time">${time}</span>`;
-                chatBox.appendChild(el);
-                chatBox.scrollTop = chatBox.scrollHeight;
-            }
-
-            // ===== تحديث conversationHistory =====
-            if (!isSystem && sender !== 'error') {
-                if (imageData) {
-                    conversationHistory.push({ role: sender, content: '📷 رفع صورة' });
-                } else {
+                if (!isSystem && sender !== 'error') {
                     conversationHistory.push({ role: sender, content: text });
+                    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
+                    saveHistory(sender, text);
                 }
-                if (conversationHistory.length > 20) {
-                    conversationHistory = conversationHistory.slice(-20);
-                }
+                return;
+            }
+            el.innerHTML = `${text} <span class="time">${time}</span>`;
+            chatBox.appendChild(el);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            if (!isSystem && sender !== 'error') {
+                conversationHistory.push({ role: sender, content: text });
+                if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
                 saveHistory(sender, text);
             }
         }
@@ -467,47 +528,26 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== الدالة الرئيسية =====
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
-
             addMessage(text, 'user');
             userInput.value = '';
             userInput.style.height = '40px';
             userInput.focus();
-
-            const thinkingMsg = document.createElement('div');
-            thinkingMsg.className = 'msg bot';
-            thinkingMsg.innerHTML = 'جاري التفكير... <span class="time">' + new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + '</span>';
-            chatBox.appendChild(thinkingMsg);
-            chatBox.scrollTop = chatBox.scrollHeight;
-
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: text,
-                        image: null,
-                        history: conversationHistory
-                    })
+                    body: JSON.stringify({ message: text, image: null, history: conversationHistory })
                 });
                 const data = await res.json();
-
-                if (thinkingMsg.parentNode) {
-                    thinkingMsg.remove();
-                }
-
                 if (res.ok) {
                     addMessage(data.reply, 'bot');
                 } else {
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
             } catch (e) {
-                if (thinkingMsg.parentNode) {
-                    thinkingMsg.remove();
-                }
                 addMessage('تعذر الاتصال بالسيرفر.', 'error');
             }
         }
@@ -550,53 +590,60 @@ def chat():
             messages.append({
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة السعودية العامية"},
+                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"},
                     {"type": "image_url", "image_url": {"url": image_data}}
                 ]
             })
 
-        keywords = ["أخبار", "طقس", "حدث", "جديد", "اليوم", "الساعة", "وقت", "مباراة", "نتيجة", "سعر", "عملة", "سوق", "تحديث", "آخر", "الآن", "2026", "2025", "غداً", "أمس", "هذا الأسبوع", "هذا الشهر"]
-        needs_search = any(k in user_message for k in keywords)
-
-        if needs_search and not image_data:
-            full_context = ""
-            for msg in messages:
-                if msg["role"] == "system":
-                    continue
-                if msg["role"] == "user":
-                    if isinstance(msg["content"], list):
-                        for part in msg["content"]:
-                            if part["type"] == "text":
-                                full_context += part["text"] + "\n"
-                    else:
-                        full_context += msg["content"] + "\n"
-                elif msg["role"] == "assistant":
-                    full_context += "نبراس: " + msg["content"] + "\n"
-
-            try:
-                print(f"🔍 البحث بالويب عن: {user_message}")
-                search_response = client.responses.create(
-                    model="gpt-4o-mini",
-                    instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
-                    input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
-                    tools=[{"type": "web_search"}],
-                    temperature=0.7,
-                    max_output_tokens=800
-                )
-                search_result = search_response.output_text.strip()
-                if search_result:
-                    messages.append({
-                        "role": "user",
-                        "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
-                    })
-                    print("✅ تم الحصول على نتائج البحث.")
+        # ===== البحث بالويب =====
+        full_context = ""
+        for msg in messages:
+            if msg["role"] == "system":
+                continue
+            if msg["role"] == "user":
+                if isinstance(msg["content"], list):
+                    for part in msg["content"]:
+                        if part["type"] == "text":
+                            full_context += part["text"] + "\n"
                 else:
-                    print("ℹ️ لم يتم العثور على نتائج بحث.")
-            except Exception as e:
-                print(f"⚠️ فشل البحث بالويب: {e}")
-        else:
-            print(f"ℹ️ سؤال عادي (لا يحتاج بحث): {user_message}")
+                    full_context += msg["content"] + "\n"
+            elif msg["role"] == "assistant":
+                full_context += "نبراس: " + msg["content"] + "\n"
 
+        search_result = None  # <--- أضفت هذا السطر
+        try:
+            print(f"🔍 محاولة البحث بالويب عن: {user_message}")
+            search_response = client.responses.create(
+                model="gpt-4o-mini",
+                instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
+                input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
+                tools=[{"type": "web_search"}],
+                temperature=0.7,
+                max_output_tokens=800
+            )
+            search_result = search_response.output_text.strip()
+            if search_result:
+                messages.append({
+                    "role": "user",
+                    "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
+                })
+                print("✅ تم الحصول على نتائج البحث.")
+        except Exception as e:
+            print(f"⚠️ فشل البحث بالويب: {e}")
+
+        # ===== إذا فشل البحث من OpenAI، جرب البحث من Google =====
+        if not search_result:
+            print("🔍 محاولة البحث عبر Google...")
+            google_result = search_google(user_message)
+            if google_result:
+                messages.append({
+                    "role": "user",
+                    "content": f"نتيجة البحث عن '{user_message}':\n{google_result}\n\nاستخدم هذه المعلومات في ردك."
+                })
+                print("✅ تم الحصول على نتائج من Google.")
+        # ===========================================================
+
+        # ===== الرد النهائي =====
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
