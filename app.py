@@ -9,6 +9,8 @@ import os
 import json
 from flask import Response
 from datetime import datetime, timedelta
+import secrets
+import bcrypt
 
 app = Flask(__name__)
 
@@ -53,6 +55,9 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return get_user_by_id(user_id)
 
+# =====================================================================
+# 📂 ربط ملف المعرفة (Knowledge.md)
+# =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -70,19 +75,27 @@ if not knowledge_content:
     print("⚠️ لم يتم العثور على ملف معرفة، سيتم استخدام القيمة الافتراضية.")
 
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية السعودية البيضاء.
+أنت "نبراس"، مساعد شخصي ذكي. **قاعدتك الأهم**: تتحدث باللهجة السعودية البيضاء فقط.
+
 **مصادر معرفتك:**
 1. **معرفتك العامة**.
-2. **البحث بالويب** للمعلومات الحديثة (إذا كان السؤال يتطلب ذلك).
+2. **البحث بالويب** للمعلومات الحديثة (للمستخدمين المدفوعين فقط).
+
 **ملف المعرفة الخاص بك (مرجع أساسي):**
 {knowledge_content}
-**تعليمات مهمة:**
-- إذا سألك المستخدم عن أي شيء، حاول الإجابة من معرفتك العامة أولاً، ثم من ملف المعرفة.
-- إذا كان السؤال يتطلب معلومات حديثة (أخبار، أحداث، طقس)، استخدم البحث بالويب.
-- دائماً حافظ على لهجتك العامية السعودية البيضاء.
-- لا تذكر أبداً أي مصدر محدد لمعلوماتك.
+
+**تعليمات حديدية (التزم بها ١٠٠٪):**
+- **لا تستخدم اللغة العربية الفصحى أبداً** (مثل: كيف يمكنني مساعدتك؟، مستعد لسماعك، أعتذر عن اللبس).
+- **استخدم اللهجة السعودية البيضاء فقط** (مثل: "وش"، "إيش"، "كيفك"، "يا هلا"، "تمام"، "أنا بخير الحمد لله"، "وش صار عندك؟"، "تبي تسولف؟").
+- كن عفويًا وودودًا، واستخدم تعابير بسيطة ومباشرة.
+- إذا سألك المستخدم عن لهجتك، أكد أنك تتحدث سعودي.
+- لا تذكر أبداً أن لديك ملف معرفة أو مصدر محدد.
 - إذا لم تجد المعلومة، قل بصراحة "ما عندي علم".
 """
+
+# =====================================================================
+# واجهات HTML
+# =====================================================================
 
 LOGIN_HTML = """
 <!DOCTYPE html>
@@ -100,6 +113,7 @@ LOGIN_HTML = """
         button:hover{background:#3a5a7a}
         .error{color:#c33;margin:8px 0}
         a{color:#4a6a8a;text-decoration:none;display:block;margin-top:10px}
+        a.forgot{font-size:14px;color:#6a7b8c;margin-top:5px}
     </style>
 </head>
 <body>
@@ -111,6 +125,7 @@ LOGIN_HTML = """
         <input type="password" name="password" placeholder="كلمة المرور" required>
         <button type="submit">دخول</button>
     </form>
+    <a href="{{ url_for('forgot_password') }}" class="forgot">نسيت كلمة المرور؟</a>
     <a href="{{ url_for('register') }}">ليس لديك حساب؟ سجل الآن</a>
 </div>
 </body>
@@ -146,6 +161,73 @@ REGISTER_HTML = """
         <button type="submit">تسجيل</button>
     </form>
     <a href="{{ url_for('login') }}">لديك حساب؟ سجل دخول</a>
+</div>
+</body>
+</html>
+"""
+
+FORGOT_PASSWORD_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نسيت كلمة المرور - نبراس</title>
+    <style>
+        body{background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
+        .box{background:white;padding:40px;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:340px;text-align:center}
+        h2{color:#1a2b3c}
+        input{width:100%;padding:12px;border:1px solid #dce1e8;border-radius:10px;font-size:16px;margin:8px 0;text-align:center;box-sizing:border-box}
+        button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:10px;font-size:18px;cursor:pointer}
+        button:hover{background:#3a5a7a}
+        .error{color:#c33;margin:8px 0}
+        .success{color:#2d7d46;margin:8px 0}
+        a{color:#4a6a8a;text-decoration:none;display:block;margin-top:10px}
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>🔐 نسيت كلمة المرور</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="success">{{ success }}</div>{% endif %}
+    <form method="POST">
+        <input type="email" name="email" placeholder="البريد الإلكتروني" required>
+        <button type="submit">إرسال رابط إعادة التعيين</button>
+    </form>
+    <a href="{{ url_for('login') }}">تذكرت كلمة المرور؟ سجل دخول</a>
+</div>
+</body>
+</html>
+"""
+
+RESET_PASSWORD_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعادة تعيين كلمة المرور - نبراس</title>
+    <style>
+        body{background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
+        .box{background:white;padding:40px;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:340px;text-align:center}
+        h2{color:#1a2b3c}
+        input{width:100%;padding:12px;border:1px solid #dce1e8;border-radius:10px;font-size:16px;margin:8px 0;text-align:center;box-sizing:border-box}
+        button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:10px;font-size:18px;cursor:pointer}
+        button:hover{background:#3a5a7a}
+        .error{color:#c33;margin:8px 0}
+        a{color:#4a6a8a;text-decoration:none;display:block;margin-top:10px}
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>🔑 إعادة تعيين كلمة المرور</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST">
+        <input type="password" name="password" placeholder="كلمة المرور الجديدة" required>
+        <input type="password" name="confirm_password" placeholder="تأكيد كلمة المرور" required>
+        <button type="submit">تحديث كلمة المرور</button>
+    </form>
+    <a href="{{ url_for('login') }}">سجل دخول</a>
 </div>
 </body>
 </html>
@@ -326,6 +408,10 @@ if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
 </html>
 """
 
+# =====================================================================
+# المسارات
+# =====================================================================
+
 @app.route('/')
 def index():
     resume_id = request.args.get('resume')
@@ -367,6 +453,59 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    from database import execute_query
+    if request.method == 'POST':
+        email = request.form.get('email')
+        user = get_user_by_email(email)
+        if not user:
+            return render_template_string(FORGOT_PASSWORD_HTML, error="❌ هذا البريد غير مسجل")
+        
+        token = secrets.token_urlsafe(32)
+        expiry = datetime.now() + timedelta(hours=1)
+        
+        execute_query(
+            "UPDATE users SET reset_token = %s, reset_token_expiry = %s WHERE id = %s",
+            (token, expiry, user.id)
+        )
+        
+        reset_link = url_for('reset_password', token=token, _external=True)
+        return render_template_string(FORGOT_PASSWORD_HTML, 
+            success=f"✅ تم إرسال رابط إعادة التعيين: {reset_link}")
+    
+    return render_template_string(FORGOT_PASSWORD_HTML, error="")
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    from database import execute_query, fetch_one
+    user = fetch_one(
+        "SELECT id, email, reset_token_expiry FROM users WHERE reset_token = %s",
+        (token,)
+    )
+    if not user:
+        return "❌ الرابط غير صالح أو منتهي الصلاحية", 400
+    
+    user_id = user[0]
+    expiry = user[2]
+    if datetime.now() > expiry:
+        return "❌ انتهت صلاحية الرابط، يرجى طلب رابط جديد", 400
+    
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        if new_password != confirm_password:
+            return render_template_string(RESET_PASSWORD_HTML, token=token, error="❌ كلمة المرور غير متطابقة")
+        
+        hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        execute_query(
+            "UPDATE users SET password_hash = %s, reset_token = NULL, reset_token_expiry = NULL WHERE id = %s",
+            (hashed, user_id)
+        )
+        return redirect(url_for('login'))
+    
+    return render_template_string(RESET_PASSWORD_HTML, token=token, error="")
+
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -387,14 +526,9 @@ def chat():
         else:
             user_id = request.remote_addr
             is_guest = True
-            if 'guest_chat_count' not in session:
-                session['guest_chat_count'] = 0
-            if session['guest_chat_count'] >= 5:
-                return jsonify({"reply": "⚠️ لقد استخدمت جميع المحادثات المجانية (5). سجل دخولك للاستمرار والحصول على ذاكرة دائمة.", "limit_reached": True})
 
         # ===== التحقق من صلاحيات المسؤول والمستخدمين =====
         if current_user.is_authenticated:
-            # ===== استثناء المسؤول: يعامل كمدفوع دائماً =====
             if current_user.email == "abdullaha0569361@gmail.com":
                 is_admin = True
                 user_plan = {'name': 'premium', 'daily_limit': 9999}
@@ -404,40 +538,44 @@ def chat():
                 user_plan = get_user_plan(current_user.id)
                 if not user_plan:
                     user_plan = {'name': 'free', 'daily_limit': 5}
-                # التحقق من الحد اليومي للمستخدمين العاديين
-                if current_user.email == "abdullaha0569361@gmail.com":
-                    can_chat = True
-                else:
-                    can_chat, message = check_daily_limit(current_user.id)
+                can_chat, message = check_daily_limit(current_user.id)
                 if not can_chat:
                     return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
         else:
             is_admin = False
-            user_plan = {'name': 'free', 'daily_limit': 5}
+            user_plan = {'name': 'free', 'daily_limit': 9999}
             can_chat = True
 
-        # ===== تحديد النموذج ومصادر المعرفة بناءً على خطة المستخدم =====
-        if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium'):
+        # ===== تحديد النموذج ومصادر المعرفة =====
+        # المستخدم المسجل يحصل على محادثتين تجريبيتين بالنموذج المتقدم
+        premium_trial = False
+        if current_user.is_authenticated and user_plan.get('name') == 'free':
+            # احسب عدد المحادثات التي استخدمها المستخدم اليوم
+            from subscription import get_daily_usage
+            daily_usage = get_daily_usage(current_user.id)
+            if daily_usage <= 2:
+                premium_trial = True
+
+        if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
             model = "gpt-4o"
             use_web_search = True
         else:
             model = "gpt-3.5-turbo"
             use_web_search = False
 
-        # ===== إضافة رسالة المستخدم إلى الذاكرة =====
+        # ===== إضافة رسالة المستخدم =====
         add_message(str(user_id), "user", user_message)
         chat_history = get_history(str(user_id), limit=10)
 
-        # ===== بناء الرسائل لـ ChatGPT =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
             messages.append({"role": entry["role"], "content": entry["content"]})
 
         if image_data:
-            messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"}, {"type": "image_url", "image_url": {"url": image_data}}]})
+            messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
-        # ===== البحث بالويب (للمستخدمين المدفوعين والمسؤول فقط) =====
-        if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث", "آخر", "حدث", "وقت", "الساعة"]):
+        # ===== البحث بالويب (للمدفوعين والمسؤول والمستخدم في التجربة) =====
+        if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
                 search_response = client.responses.create(model="gpt-4o-mini", instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة: {chat_history}", input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.", tools=[{"type": "web_search"}], temperature=0.7, max_output_tokens=800)
@@ -459,16 +597,17 @@ def chat():
         if not reply:
             reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
-        # ===== حفظ رد المساعد في الذاكرة =====
         add_message(str(user_id), "assistant", reply)
 
         # ===== زيادة العداد (للمستخدمين المسجلين فقط) =====
         if current_user.is_authenticated and not is_admin:
             increment_daily_usage(current_user.id)
-        elif current_user.is_authenticated and is_admin:
-            pass  # المسؤول لا يخضع للحدود
-        else:
-            session['guest_chat_count'] += 1
+
+        # ===== إذا كان المستخدم في التجربة واستخدم محادثتين، أضف تذكيراً =====
+        if premium_trial and current_user.is_authenticated:
+            remaining = 2 - get_daily_usage(current_user.id)
+            if remaining == 0:
+                reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام النموذج المتقدم والبحث بالويب."
 
         return jsonify({"reply": reply})
 
