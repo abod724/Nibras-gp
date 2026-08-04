@@ -455,137 +455,147 @@ def chat():
 @app.route('/account')
 @login_required
 def account():
-    plan = get_user_plan(current_user.id)
-    daily_usage = get_daily_usage(current_user.id)
-    daily_limit = plan.get('daily_limit', 5)
-    remaining = daily_limit - daily_usage
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>حسابي - نبراس</title>
-        <style>
-            body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}
-            .box{{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);max-width:400px;margin:0 auto}}
-            h2{{color:#1a2b3c}}
-            .info{{margin:10px 0;padding:8px 0;border-bottom:1px solid #eaeef2}}
-            .label{{color:#6a7b8c;font-size:14px}}
-            .value{{font-size:18px;font-weight:bold;color:#1a2b3c}}
-            .badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px}}
-            .badge-free{{background:#eef2f7;color:#1a2b3c}}
-            .badge-premium{{background:#2d7d46;color:white}}
-            .back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}
-            .back:hover{{background:#3a5a7a}}
-            .upgrade-btn{{display:block;margin-top:20px;padding:12px;background:#2d7d46;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px}}
-            .upgrade-btn:hover{{background:#236b3a}}
-        </style>
-    </head>
-    <body>
-        <a href="/" class="back">⬅ العودة للرئيسية</a>
-        <div class="box">
-            <h2>👤 حسابي</h2>
-            <div class="info">
-                <div class="label">الاسم</div>
-                <div class="value">{current_user.name}</div>
-            </div>
-            <div class="info">
-                <div class="label">البريد الإلكتروني</div>
-                <div class="value">{current_user.email}</div>
-            </div>
-            <div class="info">
-                <div class="label">الخطة الحالية</div>
-                <div class="value">
-                    <span class="badge badge-{plan.get('name', 'free')}">
-                        {plan.get('name', 'مجاني').upper()}
-                    </span>
+    try:
+        plan = get_user_plan(current_user.id)
+        daily_usage = get_daily_usage(current_user.id)
+        daily_limit = plan.get('daily_limit', 5) if plan else 5
+        remaining = daily_limit - daily_usage
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>حسابي - نبراس</title>
+            <style>
+                body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}
+                .box{{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);max-width:400px;margin:0 auto}}
+                h2{{color:#1a2b3c}}
+                .info{{margin:10px 0;padding:8px 0;border-bottom:1px solid #eaeef2}}
+                .label{{color:#6a7b8c;font-size:14px}}
+                .value{{font-size:18px;font-weight:bold;color:#1a2b3c}}
+                .badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px}}
+                .badge-free{{background:#eef2f7;color:#1a2b3c}}
+                .badge-premium{{background:#2d7d46;color:white}}
+                .back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}
+                .back:hover{{background:#3a5a7a}}
+                .upgrade-btn{{display:block;margin-top:20px;padding:12px;background:#2d7d46;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px}}
+                .upgrade-btn:hover{{background:#236b3a}}
+            </style>
+        </head>
+        <body>
+            <a href="/" class="back">⬅ العودة للرئيسية</a>
+            <div class="box">
+                <h2>👤 حسابي</h2>
+                <div class="info">
+                    <div class="label">الاسم</div>
+                    <div class="value">{current_user.name}</div>
                 </div>
+                <div class="info">
+                    <div class="label">البريد الإلكتروني</div>
+                    <div class="value">{current_user.email}</div>
+                </div>
+                <div class="info">
+                    <div class="label">الخطة الحالية</div>
+                    <div class="value">
+                        <span class="badge badge-{plan.get('name', 'free') if plan else 'free'}">
+                            {plan.get('name', 'مجاني').upper() if plan else 'مجاني'}
+                        </span>
+                    </div>
+                </div>
+                <div class="info">
+                    <div class="label">المحادثات اليومية</div>
+                    <div class="value">{daily_usage} / {daily_limit}</div>
+                </div>
+                <div class="info">
+                    <div class="label">المحادثات المتبقية اليوم</div>
+                    <div class="value" style="color:{'#2d7d46' if remaining > 0 else '#c33'}">{remaining if remaining > 0 else 0}</div>
+                </div>
+                <a href="/plans" class="upgrade-btn">💎 عرض الخطط</a>
             </div>
-            <div class="info">
-                <div class="label">المحادثات اليومية</div>
-                <div class="value">{daily_usage} / {daily_limit}</div>
-            </div>
-            <div class="info">
-                <div class="label">المحادثات المتبقية اليوم</div>
-                <div class="value" style="color:{'#2d7d46' if remaining > 0 else '#c33'}">{remaining if remaining > 0 else 0}</div>
-            </div>
-            <a href="/plans" class="upgrade-btn">💎 عرض الخطط</a>
-        </div>
-    </body>
-    </html>
-    """
-    return html
+        </body>
+        </html>
+        """
+        return html
+    except Exception as e:
+        print(f"❌ خطأ في /account: {e}")
+        return f"حدث خطأ: {str(e)}", 500
 
 @app.route('/plans')
 @login_required
 def plans():
-    current_plan = get_user_plan(current_user.id)
-    html = """
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>خطط نبراس</title>
-        <style>
-            body{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}
-            .container{max-width:500px;margin:0 auto}
-            .back{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}
-            .back:hover{background:#3a5a7a}
-            .plan{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}
-            .plan.premium{border-right-color:#f1c40f}
-            .plan h3{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}
-            .plan .price{font-size:28px;font-weight:bold;color:#2d7d46}
-            .plan .price span{font-size:16px;color:#6a7b8c}
-            .plan ul{margin:15px 0;padding:0;list-style:none}
-            .plan ul li{padding:6px 0;border-bottom:1px solid #f0f2f5}
-            .plan ul li:last-child{border-bottom:none}
-            .btn{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}
-            .btn:hover{background:#3a5a7a}
-            .btn.gold{background:#f1c40f;color:#1a2b3c}
-            .btn.gold:hover{background:#e1b50f}
-            .badge{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}
-            .badge.free{background:#eef2f7;color:#1a2b3c}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <a href="/" class="back">⬅ العودة للرئيسية</a>
-            <h1 style="color:#1a2b3c;">💎 خطط نبراس</h1>
-            <p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p>
-            
-            <div class="plan">
-                <span class="badge free">مجاني</span>
-                <h3>الخطة المجانية</h3>
-                <div class="price">0 <span>ر.س / شهرياً</span></div>
-                <ul>
-                    <li>✅ 5 محادثات يومياً</li>
-                    <li>✅ نموذج أساسي</li>
-                    <li>✅ دعم محدود</li>
-                </ul>
-                <span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span>
-            </div>
+    try:
+        plan = get_user_plan(current_user.id)
+        if not plan:
+            plan = {'name': 'free', 'daily_limit': 5}
+        html = f"""
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>خطط نبراس</title>
+            <style>
+                body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}
+                .container{{max-width:500px;margin:0 auto}}
+                .back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}
+                .back:hover{{background:#3a5a7a}}
+                .plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}
+                .plan.premium{{border-right-color:#f1c40f}}
+                .plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}
+                .plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}
+                .plan .price span{{font-size:16px;color:#6a7b8c}}
+                .plan ul{{margin:15px 0;padding:0;list-style:none}}
+                .plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}
+                .plan ul li:last-child{{border-bottom:none}}
+                .btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}
+                .btn:hover{{background:#3a5a7a}}
+                .btn.gold{{background:#f1c40f;color:#1a2b3c}}
+                .btn.gold:hover{{background:#e1b50f}}
+                .badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}
+                .badge.free{{background:#eef2f7;color:#1a2b3c}}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <a href="/" class="back">⬅ العودة للرئيسية</a>
+                <h1 style="color:#1a2b3c;">💎 خطط نبراس</h1>
+                <p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p>
+                
+                <div class="plan">
+                    <span class="badge free">مجاني</span>
+                    <h3>الخطة المجانية</h3>
+                    <div class="price">0 <span>ر.س / شهرياً</span></div>
+                    <ul>
+                        <li>✅ 5 محادثات يومياً</li>
+                        <li>✅ نموذج أساسي</li>
+                        <li>✅ دعم محدود</li>
+                    </ul>
+                    <span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span>
+                </div>
 
-            <div class="plan premium">
-                <span class="badge">مميز</span>
-                <h3>الخطة المدفوعة</h3>
-                <div class="price">5 <span>ر.س / شهرياً</span></div>
-                <ul>
-                    <li>✅ محادثات غير محدودة</li>
-                    <li>✅ نموذج متقدم (GPT-4o)</li>
-                    <li>✅ تحليل الصور</li>
-                    <li>✅ تصدير المحادثات</li>
-                    <li>✅ دعم أولوية</li>
-                </ul>
-                <a href="#" class="btn gold">🚀 اشترك الآن</a>
+                <div class="plan premium">
+                    <span class="badge">مميز</span>
+                    <h3>الخطة المدفوعة</h3>
+                    <div class="price">5 <span>ر.س / شهرياً</span></div>
+                    <ul>
+                        <li>✅ محادثات غير محدودة</li>
+                        <li>✅ نموذج متقدم (GPT-4o)</li>
+                        <li>✅ تحليل الصور</li>
+                        <li>✅ تصدير المحادثات</li>
+                        <li>✅ دعم أولوية</li>
+                    </ul>
+                    <a href="#" class="btn gold">🚀 اشترك الآن</a>
+                </div>
             </div>
-        </div>
-    </body>
-    </html>
-    """
-    return html
+        </body>
+        </html>
+        """
+        return html
+    except Exception as e:
+        print(f"❌ خطأ في /plans: {e}")
+        return f"حدث خطأ: {str(e)}", 500
 
 @app.route('/conversations')
 @login_required
