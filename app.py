@@ -109,12 +109,12 @@ LOGIN_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>دخول - نبراس</title>
     <style>
-        body{background: transparent; display:flex; justify-content:center; align-items:center; height:100vh; font-family:'Segoe UI', Arial, sans-serif; margin:0}
-        .box{background:white; padding:40px; border-radius:20px; box-shadow:0 8px 30px rgba(0,0,0,0.08); width:340px; text-align:center}
+        body{background: #ffffff; display:flex; justify-content:center; align-items:center; height:100vh; font-family:'Segoe UI', Arial, sans-serif; margin:0}
+        .box{background: transparent; padding:40px; border-radius:20px; box-shadow:0 8px 30px rgba(0,0,0,0.08); width:340px; text-align:center}
         h2{color:#1a2b3c}
         input{width:100%; padding:12px; border:1px solid #dce1e8; border-radius:10px; font-size:16px; margin:8px 0; text-align:center; box-sizing:border-box}
-        button{width:100%; padding:12px; background:#4a6a8a; color:white; border:none; border-radius:10px; font-size:18px; cursor:pointer}
-        button:hover{background:#3a5a7a}
+        button{width:100%; padding:12px; background: transparent; color: #4a6a8a; border: 2px solid #4a6a8a; border-radius:10px; font-size:18px; cursor:pointer}
+        button:hover{background: #4a6a8a; color:white}
         .error{color:#c33; margin:8px 0}
         a{color:#4a6a8a; text-decoration:none; display:block; margin-top:10px}
         a.forgot{font-size:14px; color:#6a7b8c; margin-top:5px}
