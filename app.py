@@ -53,9 +53,6 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return get_user_by_id(user_id)
 
-# =====================================================================
-# 📂 ربط ملف المعرفة (Knowledge.md)
-# =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -201,7 +198,7 @@ HTML_TEMPLATE = """
         {% if current_user.is_authenticated %}
             <a href="/logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> خروج</a>
         {% else %}
-            <a href="/login" class="logout-btn" style="background:#4a6a8a;"><i class="fas fa-sign-in-alt"></i> دخول</a>
+            <a href="/login" class="logout-btn" style="background:#2d7d46; font-weight:bold; padding:6px 18px; border-radius:30px;">دخول</a>
         {% endif %}
     </div>
     <div class="dropdown" id="dropdown">
@@ -383,24 +380,17 @@ def chat():
         if not SYSTEM_ENABLED:
             return jsonify({"reply": "⚠️ نظام المحادثات معطل حالياً. يرجى المحاولة لاحقاً."})
 
-        # ===== تحديد معرف المستخدم =====
         if current_user.is_authenticated:
             user_id = current_user.id
             is_guest = False
         else:
-            # مستخدم ضيف: نستخدم عنوان IP أو جلسة المتصفح
             user_id = request.remote_addr
             is_guest = True
-            # التحقق من عدد المحادثات المجانية للضيف
             if 'guest_chat_count' not in session:
                 session['guest_chat_count'] = 0
             if session['guest_chat_count'] >= 5:
-                return jsonify({
-                    "reply": "⚠️ لقد استخدمت جميع المحادثات المجانية (5). سجل دخولك للاستمرار والحصول على ذاكرة دائمة.",
-                    "limit_reached": True
-                })
+                return jsonify({"reply": "⚠️ لقد استخدمت جميع المحادثات المجانية (5). سجل دخولك للاستمرار والحصول على ذاكرة دائمة.", "limit_reached": True})
 
-        # ===== التحقق من الحد اليومي (للمستخدمين المسجلين فقط) =====
         if current_user.is_authenticated:
             if current_user.email == "abdullaha0569361@gmail.com":
                 can_chat = True
@@ -409,11 +399,9 @@ def chat():
             if not can_chat:
                 return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
 
-        # ===== إضافة رسالة المستخدم إلى الذاكرة =====
         add_message(str(user_id), "user", user_message)
         chat_history = get_history(str(user_id), limit=10)
 
-        # ===== بناء الرسائل لـ ChatGPT =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
             messages.append({"role": entry["role"], "content": entry["content"]})
@@ -421,7 +409,6 @@ def chat():
         if image_data:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
-        # ===== البحث بالويب =====
         if any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث", "آخر", "حدث", "وقت", "الساعة"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
@@ -433,16 +420,13 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
         response = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=1000, temperature=0.8)
         reply = response.choices[0].message.content.strip()
         if not reply:
             reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
-        # ===== حفظ رد المساعد في الذاكرة =====
         add_message(str(user_id), "assistant", reply)
 
-        # ===== زيادة العداد (للمستخدمين المسجلين فقط) =====
         if current_user.is_authenticated:
             increment_daily_usage(current_user.id)
         else:
@@ -475,10 +459,9 @@ def plans():
             plan = get_user_plan(current_user.id)
             if not plan:
                 plan = {'name': 'free', 'daily_limit': 5}
-            html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>خطط نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.container{{max-width:500px;margin:0 auto}}.back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}.plan.premium{{border-right-color:#f1c40f}}.plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}.plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}.plan .price span{{font-size:16px;color:#6a7b8c}}.plan ul{{margin:15px 0;padding:0;list-style:none}}.plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}.plan ul li:last-child{{border-bottom:none}}.btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}.btn:hover{{background:#3a5a7a}}.btn.gold{{background:#f1c40f;color:#1a2b3c}}.btn.gold:hover{{background:#e1b50f}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}.badge.free{{background:#eef2f7;color:#1a2b3c}}</style></head><body><div class="container"><a href="/" class="back">⬅ العودة للرئيسية</a><h1 style="color:#1a2b3c;">💎 خطط نبراس</h1><p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p><div class="plan"><span class="badge free">مجاني</span><h3>الخطة المجانية</h3><div class="price">0 <span>ر.س / شهرياً</span></div><ul><li>✅ 5 محادثات يومياً</li><li>✅ نموذج أساسي</li><li>✅ دعم محدود</li></ul><span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span></div><div class="plan premium"><span class="badge">مميز</span><h3>الخطة المدفوعة</h3><div class="price">5 <span>ر.س / شهرياً</span></div><ul><li>✅ محادثات غير محدودة</li><li>✅ نموذج متقدم (GPT-4o)</li><li>✅ تحليل الصور</li><li>✅ تصدير المحادثات</li><li>✅ دعم أولوية</li></ul><a href="#" class="btn gold">⬆️ ترقية</a></div></div></body></html>"""
+            html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>خطط نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.container{{max-width:500px;margin:0 auto}}.back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}.plan.premium{{border-right-color:#f1c40f}}.plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}.plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}.plan .price span{{font-size:16px;color:#6a7b8c}}.plan ul{{margin:15px 0;padding:0;list-style:none}}.plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}.plan ul li:last-child{{border-bottom:none}}.btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}.btn:hover{{background:#3a5a7a}}.btn.gold{{background:#f1c40f;color:#1a2b3c}}.btn.gold:hover{{background:#e1b50f}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}.badge.free{{background:#eef2f7;color:#1a2b3c}}</style></head><body><div class="container"><a href="/" class="back">⬅ العودة للرئيسية</a><h1 style="color:#1a2b3c;">💎 خطط نبراس</h1><p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p><div class="plan"><span class="badge free">مجاني</span><h3>الخطة المجانية</h3><div class="price">0 <span>ر.س / شهرياً</span></div><ul><li>✅ 5 محادثات يومياً</li><li>✅ نموذج أساسي</li><li>✅ دعم محدود</li></ul><span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span></div><div class="plan premium"><span class="badge">مميز</span><h3>الخطة المدفوعة</h3><div class="price">5 <span>ر.س / شهرياً</span></div><ul><li>✅ محادثات غير محدودة</li><li>✅ نموذج متقدم (GPT-4o)</li><li>✅ تحليل الصور</li><li>✅ تصدير المحادثات</li><li>✅ دعم أولوية</li></ul><a href="#" class="btn gold">💎 ترقية</a></div></div></body></html>"""
             return html
         else:
-            # صفحة الخطط للمستخدمين الضيوف
             html = """
             <!DOCTYPE html>
             <html dir="rtl" lang="ar">
