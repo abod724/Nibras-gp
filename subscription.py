@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from database import fetch_one, fetch_all, execute_query
 
 def get_user_plan(user_id):
