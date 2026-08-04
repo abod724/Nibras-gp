@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
-# ===== نظام التحكم بالمحادثات =====
 SYSTEM_ENABLED = True
 
 print("🔍 جارٍ قراءة المتغيرات...")
@@ -54,9 +53,6 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return get_user_by_id(user_id)
 
-# =====================================================================
-# 📂 ربط ملف المعرفة (Knowledge.md)
-# =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -72,23 +68,19 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
     print("⚠️ لم يتم العثور على ملف معرفة، سيتم استخدام القيمة الافتراضية.")
-# =====================================================================
 
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية السعودية البيضاء.
-
 **مصادر معرفتك:**
 1. **معرفتك العامة**.
 2. **البحث بالويب** للمعلومات الحديثة (إذا كان السؤال يتطلب ذلك).
-
 **ملف المعرفة الخاص بك (مرجع أساسي):**
 {knowledge_content}
-
 **تعليمات مهمة:**
 - إذا سألك المستخدم عن أي شيء، حاول الإجابة من معرفتك العامة أولاً، ثم من ملف المعرفة.
 - إذا كان السؤال يتطلب معلومات حديثة (أخبار، أحداث، طقس)، استخدم البحث بالويب.
 - دائماً حافظ على لهجتك العامية السعودية البيضاء.
-- لا تذكر أبداً أي مصدر محدد لمعلوماتك (لا تقل "في ملف المعرفة" أو "في معرفتي العامة").
+- لا تذكر أبداً أي مصدر محدد لمعلوماتك.
 - إذا لم تجد المعلومة، قل بصراحة "ما عندي علم".
 """
 
@@ -391,10 +383,7 @@ def chat():
             can_chat, message = check_daily_limit(current_user.id)
 
         if not can_chat:
-            return jsonify({
-                "reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.",
-                "limit_reached": True
-            })
+            return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
 
         add_message(current_user.id, "user", user_message)
         chat_history = get_history(current_user.id, limit=10)
@@ -404,41 +393,20 @@ def chat():
             messages.append({"role": entry["role"], "content": entry["content"]})
 
         if image_data:
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"},
-                    {"type": "image_url", "image_url": {"url": image_data}}
-                ]
-            })
+            messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
         if any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث", "آخر", "حدث", "وقت", "الساعة"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
-                search_response = client.responses.create(
-                    model="gpt-4o-mini",
-                    instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة: {chat_history}",
-                    input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
-                    tools=[{"type": "web_search"}],
-                    temperature=0.7,
-                    max_output_tokens=800
-                )
+                search_response = client.responses.create(model="gpt-4o-mini", instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة: {chat_history}", input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.", tools=[{"type": "web_search"}], temperature=0.7, max_output_tokens=800)
                 search_result = search_response.output_text.strip()
                 if search_result:
-                    messages.append({
-                        "role": "user",
-                        "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."
-                    })
+                    messages.append({"role": "user", "content": f"نتيجة البحث عن '{user_message}':\n{search_result}\n\nاستخدم هذه المعلومات في ردك."})
                     print("✅ تم الحصول على نتائج البحث.")
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=1000,
-            temperature=0.8
-        )
+        response = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=1000, temperature=0.8)
         reply = response.choices[0].message.content.strip()
         if not reply:
             reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
@@ -460,63 +428,7 @@ def account():
         daily_usage = get_daily_usage(current_user.id)
         daily_limit = plan.get('daily_limit', 5) if plan else 5
         remaining = daily_limit - daily_usage
-        
-        html = f"""
-        <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>حسابي - نبراس</title>
-            <style>
-                body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}
-                .box{{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);max-width:400px;margin:0 auto}}
-                h2{{color:#1a2b3c}}
-                .info{{margin:10px 0;padding:8px 0;border-bottom:1px solid #eaeef2}}
-                .label{{color:#6a7b8c;font-size:14px}}
-                .value{{font-size:18px;font-weight:bold;color:#1a2b3c}}
-                .badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px}}
-                .badge-free{{background:#eef2f7;color:#1a2b3c}}
-                .badge-premium{{background:#2d7d46;color:white}}
-                .back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}
-                .back:hover{{background:#3a5a7a}}
-                .upgrade-btn{{display:block;margin-top:20px;padding:12px;background:#2d7d46;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px}}
-                .upgrade-btn:hover{{background:#236b3a}}
-            </style>
-        </head>
-        <body>
-            <a href="/" class="back">⬅ العودة للرئيسية</a>
-            <div class="box">
-                <h2>👤 حسابي</h2>
-                <div class="info">
-                    <div class="label">الاسم</div>
-                    <div class="value">{current_user.name}</div>
-                </div>
-                <div class="info">
-                    <div class="label">البريد الإلكتروني</div>
-                    <div class="value">{current_user.email}</div>
-                </div>
-                <div class="info">
-                    <div class="label">الخطة الحالية</div>
-                    <div class="value">
-                        <span class="badge badge-{plan.get('name', 'free') if plan else 'free'}">
-                            {plan.get('name', 'مجاني').upper() if plan else 'مجاني'}
-                        </span>
-                    </div>
-                </div>
-                <div class="info">
-                    <div class="label">المحادثات اليومية</div>
-                    <div class="value">{daily_usage} / {daily_limit}</div>
-                </div>
-                <div class="info">
-                    <div class="label">المحادثات المتبقية اليوم</div>
-                    <div class="value" style="color:{'#2d7d46' if remaining > 0 else '#c33'}">{remaining if remaining > 0 else 0}</div>
-                </div>
-                <a href="/plans" class="upgrade-btn">💎 عرض الخطط</a>
-            </div>
-        </body>
-        </html>
-        """
+        html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>حسابي - نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.box{{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);max-width:400px;margin:0 auto}}h2{{color:#1a2b3c}}.info{{margin:10px 0;padding:8px 0;border-bottom:1px solid #eaeef2}}.label{{color:#6a7b8c;font-size:14px}}.value{{font-size:18px;font-weight:bold;color:#1a2b3c}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px}}.badge-free{{background:#eef2f7;color:#1a2b3c}}.badge-premium{{background:#2d7d46;color:white}}.back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.upgrade-btn{{display:block;margin-top:20px;padding:12px;background:#2d7d46;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px}}.upgrade-btn:hover{{background:#236b3a}}</style></head><body><a href="/" class="back">⬅ العودة للرئيسية</a><div class="box"><h2>👤 حسابي</h2><div class="info"><div class="label">الاسم</div><div class="value">{current_user.name}</div></div><div class="info"><div class="label">البريد الإلكتروني</div><div class="value">{current_user.email}</div></div><div class="info"><div class="label">الخطة الحالية</div><div class="value"><span class="badge badge-{plan.get('name', 'free') if plan else 'free'}">{plan.get('name', 'مجاني').upper() if plan else 'مجاني'}</span></div></div><div class="info"><div class="label">المحادثات اليومية</div><div class="value">{daily_usage} / {daily_limit}</div></div><div class="info"><div class="label">المحادثات المتبقية اليوم</div><div class="value" style="color:{'#2d7d46' if remaining > 0 else '#c33'}">{remaining if remaining > 0 else 0}</div></div><a href="/plans" class="upgrade-btn">💎 عرض الخطط</a></div></body></html>"""
         return html
     except Exception as e:
         print(f"❌ خطأ في /account: {e}")
@@ -529,69 +441,7 @@ def plans():
         plan = get_user_plan(current_user.id)
         if not plan:
             plan = {'name': 'free', 'daily_limit': 5}
-        html = f"""
-        <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>خطط نبراس</title>
-            <style>
-                body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}
-                .container{{max-width:500px;margin:0 auto}}
-                .back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}
-                .back:hover{{background:#3a5a7a}}
-                .plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}
-                .plan.premium{{border-right-color:#f1c40f}}
-                .plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}
-                .plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}
-                .plan .price span{{font-size:16px;color:#6a7b8c}}
-                .plan ul{{margin:15px 0;padding:0;list-style:none}}
-                .plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}
-                .plan ul li:last-child{{border-bottom:none}}
-                .btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}
-                .btn:hover{{background:#3a5a7a}}
-                .btn.gold{{background:#f1c40f;color:#1a2b3c}}
-                .btn.gold:hover{{background:#e1b50f}}
-                .badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}
-                .badge.free{{background:#eef2f7;color:#1a2b3c}}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <a href="/" class="back">⬅ العودة للرئيسية</a>
-                <h1 style="color:#1a2b3c;">💎 خطط نبراس</h1>
-                <p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p>
-                
-                <div class="plan">
-                    <span class="badge free">مجاني</span>
-                    <h3>الخطة المجانية</h3>
-                    <div class="price">0 <span>ر.س / شهرياً</span></div>
-                    <ul>
-                        <li>✅ 5 محادثات يومياً</li>
-                        <li>✅ نموذج أساسي</li>
-                        <li>✅ دعم محدود</li>
-                    </ul>
-                    <span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span>
-                </div>
-
-                <div class="plan premium">
-                    <span class="badge">مميز</span>
-                    <h3>الخطة المدفوعة</h3>
-                    <div class="price">5 <span>ر.س / شهرياً</span></div>
-                    <ul>
-                        <li>✅ محادثات غير محدودة</li>
-                        <li>✅ نموذج متقدم (GPT-4o)</li>
-                        <li>✅ تحليل الصور</li>
-                        <li>✅ تصدير المحادثات</li>
-                        <li>✅ دعم أولوية</li>
-                    </ul>
-                    <a href="#" class="btn gold">🚀 اشترك الآن</a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>خطط نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.container{{max-width:500px;margin:0 auto}}.back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}.plan.premium{{border-right-color:#f1c40f}}.plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}.plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}.plan .price span{{font-size:16px;color:#6a7b8c}}.plan ul{{margin:15px 0;padding:0;list-style:none}}.plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}.plan ul li:last-child{{border-bottom:none}}.btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}.btn:hover{{background:#3a5a7a}}.btn.gold{{background:#f1c40f;color:#1a2b3c}}.btn.gold:hover{{background:#e1b50f}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}.badge.free{{background:#eef2f7;color:#1a2b3c}}</style></head><body><div class="container"><a href="/" class="back">⬅ العودة للرئيسية</a><h1 style="color:#1a2b3c;">💎 خطط نبراس</h1><p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p><div class="plan"><span class="badge free">مجاني</span><h3>الخطة المجانية</h3><div class="price">0 <span>ر.س / شهرياً</span></div><ul><li>✅ 5 محادثات يومياً</li><li>✅ نموذج أساسي</li><li>✅ دعم محدود</li></ul><span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span></div><div class="plan premium"><span class="badge">مميز</span><h3>الخطة المدفوعة</h3><div class="price">5 <span>ر.س / شهرياً</span></div><ul><li>✅ محادثات غير محدودة</li><li>✅ نموذج متقدم (GPT-4o)</li><li>✅ تحليل الصور</li><li>✅ تصدير المحادثات</li><li>✅ دعم أولوية</li></ul><a href="#" class="btn gold">🚀 اشترك الآن</a></div></div></body></html>"""
         return html
     except Exception as e:
         print(f"❌ خطأ في /plans: {e}")
@@ -602,14 +452,9 @@ def plans():
 def view_conversations():
     try:
         user_id = str(current_user.id)
-        rows = fetch_all(
-            "SELECT id, role, content, created_at FROM conversations WHERE user_id = %s ORDER BY created_at ASC",
-            (user_id,)
-        )
-
+        rows = fetch_all("SELECT id, role, content, created_at FROM conversations WHERE user_id = %s ORDER BY created_at ASC", (user_id,))
         if not rows:
             return "<h2 style='text-align:center;margin-top:50px;'>📭 لا توجد محادثات حتى الآن.</h2>"
-
         chapters = []
         current_chapter = []
         for row in rows:
@@ -620,75 +465,7 @@ def view_conversations():
                 current_chapter.append(row)
         if current_chapter:
             chapters.append(current_chapter)
-
-        html = """
-        <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>محادثاتي - نبراس</title>
-            <style>
-                body{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}
-                .back{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}
-                .back:hover{background:#3a5a7a}
-                .chapter{background:white;border-radius:12px;margin-bottom:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);overflow:hidden}
-                .chapter-header{
-                    padding:14px 20px;
-                    background:#f8f9fa;
-                    cursor:pointer;
-                    display:flex;
-                    justify-content:space-between;
-                    align-items:center;
-                    border-bottom:1px solid #eaeef2;
-                    transition:background 0.2s;
-                }
-                .chapter-header:hover{background:#eef2f7}
-                .chapter-header h3{
-                    margin:0;
-                    font-size:18px;
-                    color:#1a2b3c;
-                }
-                .chapter-header .arrow{
-                    transition:transform 0.3s;
-                    font-size:20px;
-                }
-                .chapter-body{
-                    padding:0 20px;
-                    max-height:0;
-                    overflow:hidden;
-                    transition:max-height 0.4s ease, padding 0.3s ease;
-                }
-                .chapter-body.open{
-                    max-height:2000px;
-                    padding:15px 20px;
-                }
-                .msg-item{
-                    display:flex;
-                    gap:10px;
-                    padding:6px 0;
-                    border-bottom:1px solid #f0f2f5;
-                }
-                .msg-item:last-child{border-bottom:none}
-                .msg-role{font-weight:bold;min-width:60px}
-                .msg-role.user{color:#2d7d46}
-                .msg-role.bot{color:#4a6a8a}
-                .msg-content{flex:1;word-break:break-word}
-                .msg-time{font-size:12px;color:#999;min-width:80px;text-align:left}
-                .actions{margin-top:10px;display:flex;gap:10px}
-                .actions a{
-                    background:#4a6a8a;color:white;padding:5px 14px;
-                    border-radius:20px;text-decoration:none;font-size:14px;
-                }
-                .actions a:hover{background:#3a5a7a}
-            </style>
-        </head>
-        <body>
-            <a href="/" class="back">⬅ العودة للرئيسية</a>
-            <h1>📋 محادثاتي</h1>
-            <div id="chapters-container">
-        """
-
+        html = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>محادثاتي - نبراس</title><style>body{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}.back{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}.back:hover{background:#3a5a7a}.chapter{background:white;border-radius:12px;margin-bottom:12px;box-shadow:0 2px 10px rgba(0,0,0,0.05);overflow:hidden}.chapter-header{padding:14px 20px;background:#f8f9fa;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eaeef2;transition:background 0.2s}.chapter-header:hover{background:#eef2f7}.chapter-header h3{margin:0;font-size:18px;color:#1a2b3c}.chapter-header .arrow{transition:transform 0.3s;font-size:20px}.chapter-body{padding:0 20px;max-height:0;overflow:hidden;transition:max-height 0.4s ease, padding 0.3s ease}.chapter-body.open{max-height:2000px;padding:15px 20px}.msg-item{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #f0f2f5}.msg-item:last-child{border-bottom:none}.msg-role{font-weight:bold;min-width:60px}.msg-role.user{color:#2d7d46}.msg-role.bot{color:#4a6a8a}.msg-content{flex:1;word-break:break-word}.msg-time{font-size:12px;color:#999;min-width:80px;text-align:left}.actions{margin-top:10px;display:flex;gap:10px}.actions a{background:#4a6a8a;color:white;padding:5px 14px;border-radius:20px;text-decoration:none;font-size:14px}.actions a:hover{background:#3a5a7a}</style></head><body><a href="/" class="back">⬅ العودة للرئيسية</a><h1>📋 محادثاتي</h1><div id="chapters-container">"""
         for idx, chapter in enumerate(chapters, 1):
             title = f"المبحث {idx}"
             for row in chapter:
@@ -696,62 +473,15 @@ def view_conversations():
                     first_msg = row[2][:40]
                     title = f"المبحث {idx}: {first_msg}"
                     break
-
             msgs_html = ""
             for row in chapter:
                 role_display = '👤 مستخدم' if row[1] == 'user' else '🤖 نبراس'
                 role_class = 'user' if row[1] == 'user' else 'bot'
-                msgs_html += f"""
-                <div class="msg-item">
-                    <span class="msg-role {role_class}">{role_display}</span>
-                    <span class="msg-content">{row[2][:300]}</span>
-                    <span class="msg-time">{row[3]}</span>
-                </div>
-                """
-
+                msgs_html += f"""<div class="msg-item"><span class="msg-role {role_class}">{role_display}</span><span class="msg-content">{row[2][:300]}</span><span class="msg-time">{row[3]}</span></div>"""
             first_id = chapter[0][0]
-            html += f"""
-            <div class="chapter">
-                <div class="chapter-header" onclick="toggleChapter(this)">
-                    <h3>{title}</h3>
-                    <span class="arrow">▼</span>
-                </div>
-                <div class="chapter-body">
-                    {msgs_html}
-                    <div class="actions">
-                        <a href="/?resume={first_id}">▶️ مواصلة المحادثة</a>
-                        <a href="/export" style="background:#2d7d46;">📥 تصدير المحادثات</a>
-                    </div>
-                </div>
-            </div>
-            """
-
-        html += """
-            </div>
-            <script>
-                function toggleChapter(header) {
-                    var body = header.nextElementSibling;
-                    var arrow = header.querySelector('.arrow');
-                    if (body.classList.contains('open')) {
-                        body.classList.remove('open');
-                        arrow.textContent = '▼';
-                    } else {
-                        body.classList.add('open');
-                        arrow.textContent = '▲';
-                    }
-                }
-                document.addEventListener('DOMContentLoaded', function() {
-                    var firstChapter = document.querySelector('.chapter-header');
-                    if (firstChapter) {
-                        toggleChapter(firstChapter);
-                    }
-                });
-            </script>
-        </body>
-        </html>
-        """
+            html += f"""<div class="chapter"><div class="chapter-header" onclick="toggleChapter(this)"><h3>{title}</h3><span class="arrow">▼</span></div><div class="chapter-body">{msgs_html}<div class="actions"><a href="/?resume={first_id}">▶️ مواصلة المحادثة</a><a href="/export" style="background:#2d7d46;">📥 تصدير المحادثات</a></div></div></div>"""
+        html += """</div><script>function toggleChapter(header) { var body = header.nextElementSibling; var arrow = header.querySelector('.arrow'); if (body.classList.contains('open')) { body.classList.remove('open'); arrow.textContent = '▼'; } else { body.classList.add('open'); arrow.textContent = '▲'; } } document.addEventListener('DOMContentLoaded', function() { var firstChapter = document.querySelector('.chapter-header'); if (firstChapter) { toggleChapter(firstChapter); } });</script></body></html>"""
         return html
-
     except Exception as e:
         print(f"❌ خطأ في /conversations: {e}")
         return f"<h2 style='text-align:center;margin-top:50px;color:#c33;'>⚠️ حدث خطأ: {str(e)}</h2>", 500
@@ -760,117 +490,37 @@ def view_conversations():
 @login_required
 def export_conversations():
     user_id = str(current_user.id)
-    rows = fetch_all(
-        "SELECT role, content, created_at FROM conversations WHERE user_id = %s ORDER BY created_at ASC",
-        (user_id,)
-    )
-
-    data = []
-    for row in rows:
-        data.append({
-            "role": row[0],
-            "content": row[1],
-            "time": row[2].isoformat() if row[2] else None
-        })
-
+    rows = fetch_all("SELECT role, content, created_at FROM conversations WHERE user_id = %s ORDER BY created_at ASC", (user_id,))
+    data = [{"role": row[0], "content": row[1], "time": row[2].isoformat() if row[2] else None} for row in rows]
     json_data = json.dumps(data, ensure_ascii=False, indent=2)
-
-    return Response(
-        json_data,
-        mimetype='application/json',
-        headers={'Content-Disposition': f'attachment; filename=memory_{current_user.id}.json'}
-    )
+    return Response(json_data, mimetype='application/json', headers={'Content-Disposition': f'attachment; filename=memory_{current_user.id}.json'})
 
 @app.route('/admin/settings', methods=['GET', 'POST'])
 @login_required
 def admin_settings():
     if current_user.email != "abdullaha0569361@gmail.com":
         return "غير مصرح", 403
-
     from database import execute_query, fetch_one
-
     if request.method == 'POST':
         free_limit = int(request.form.get('free_limit', 5))
         premium_limit = int(request.form.get('premium_limit', 9999))
         system_enabled = request.form.get('system_enabled', 'on') == 'on'
-
         execute_query("UPDATE plans SET daily_limit = %s WHERE name = 'free'", (free_limit,))
         execute_query("UPDATE plans SET daily_limit = %s WHERE name = 'premium'", (premium_limit,))
-        
         global SYSTEM_ENABLED
         SYSTEM_ENABLED = system_enabled
-
         return redirect(url_for('admin_settings'))
-
     free_plan = fetch_one("SELECT daily_limit FROM plans WHERE name = 'free'")
     premium_plan = fetch_one("SELECT daily_limit FROM plans WHERE name = 'premium'")
-    
     free_limit = free_plan[0] if free_plan else 5
     premium_limit = premium_plan[0] if premium_plan else 9999
-    
     total_users = fetch_one("SELECT COUNT(*) FROM users")[0]
     today = datetime.now().date()
     today_chats = fetch_one("SELECT COUNT(*) FROM conversations WHERE DATE(created_at) = %s", (today,))
     today_chats = today_chats[0] if today_chats else 0
-
     system_status_class = "on" if SYSTEM_ENABLED else "off"
     system_status_text = "مفعل" if SYSTEM_ENABLED else "معطل"
-
-    html = f"""
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعدادات نظام المحادثات - نبراس</title>
-        <style>
-            body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}
-            .container{{max-width:600px;margin:0 auto}}
-            .box{{background:white;border-radius:12px;padding:25px;box-shadow:0 2px 10px rgba(0,0,0,0.05)}}
-            h2{{color:#1a2b3c}}
-            label{{display:block;margin:15px 0 5px 0;color:#1a2b3c;font-weight:bold}}
-            input[type="number"]{{width:100%;padding:10px;border:1px solid #dce1e8;border-radius:8px;font-size:16px}}
-            input[type="checkbox"]{{width:20px;height:20px;margin-right:10px}}
-            button{{background:#4a6a8a;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:18px;cursor:pointer;margin-top:20px}}
-            button:hover{{background:#3a5a7a}}
-            .stat{{display:inline-block;margin:10px 15px 10px 0;padding:10px 15px;background:#f0f2f5;border-radius:8px}}
-            .stat span{{font-weight:bold;color:#1a2b3c}}
-            .back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}
-            .back:hover{{background:#3a5a7a}}
-            .system-status{{padding:10px;border-radius:8px;margin:10px 0}}
-            .system-status.on{{background:#d4edda;color:#155724}}
-            .system-status.off{{background:#f8d7da;color:#721c24}}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <a href="/" class="back">⬅ العودة للرئيسية</a>
-            <div class="box">
-                <h2>⚙️ إعدادات نظام المحادثات</h2>
-                
-                <div class="stat">👥 <span>{total_users}</span> مستخدم</div>
-                <div class="stat">💬 <span>{today_chats}</span> محادثة اليوم</div>
-                
-                <div class="system-status {system_status_class}">✅ النظام {system_status_text}</div>
-
-                <form method="POST">
-                    <label for="free_limit">حد الخطة المجانية (عدد المحادثات اليومية)</label>
-                    <input type="number" name="free_limit" value="{free_limit}" min="1" max="9999">
-                    
-                    <label for="premium_limit">حد الخطة المدفوعة (عدد المحادثات اليومية)</label>
-                    <input type="number" name="premium_limit" value="{premium_limit}" min="1" max="9999">
-                    
-                    <label>
-                        <input type="checkbox" name="system_enabled" {'checked' if SYSTEM_ENABLED else ''}> تفعيل نظام الحدود
-                    </label>
-
-                    <button type="submit">💾 حفظ الإعدادات</button>
-                </form>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>إعدادات نظام المحادثات - نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.container{{max-width:600px;margin:0 auto}}.box{{background:white;border-radius:12px;padding:25px;box-shadow:0 2px 10px rgba(0,0,0,0.05)}}h2{{color:#1a2b3c}}label{{display:block;margin:15px 0 5px 0;color:#1a2b3c;font-weight:bold}}input[type="number"]{{width:100%;padding:10px;border:1px solid #dce1e8;border-radius:8px;font-size:16px}}input[type="checkbox"]{{width:20px;height:20px;margin-right:10px}}button{{background:#4a6a8a;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:18px;cursor:pointer;margin-top:20px}}button:hover{{background:#3a5a7a}}.stat{{display:inline-block;margin:10px 15px 10px 0;padding:10px 15px;background:#f0f2f5;border-radius:8px}}.stat span{{font-weight:bold;color:#1a2b3c}}.back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.system-status{{padding:10px;border-radius:8px;margin:10px 0}}.system-status.on{{background:#d4edda;color:#155724}}.system-status.off{{background:#f8d7da;color:#721c24}}</style></head><body><div class="container"><a href="/" class="back">⬅ العودة للرئيسية</a><div class="box"><h2>⚙️ إعدادات نظام المحادثات</h2><div class="stat">👥 <span>{total_users}</span> مستخدم</div><div class="stat">💬 <span>{today_chats}</span> محادثة اليوم</div><div class="system-status {system_status_class}">✅ النظام {system_status_text}</div><form method="POST"><label for="free_limit">حد الخطة المجانية (عدد المحادثات اليومية)</label><input type="number" name="free_limit" value="{free_limit}" min="1" max="9999"><label for="premium_limit">حد الخطة المدفوعة (عدد المحادثات اليومية)</label><input type="number" name="premium_limit" value="{premium_limit}" min="1" max="9999"><label><input type="checkbox" name="system_enabled" {'checked' if SYSTEM_ENABLED else ''}> تفعيل نظام الحدود</label><button type="submit">💾 حفظ الإعدادات</button></form></div></div></body></html>"""
     return html
 
 if __name__ == '__main__':
