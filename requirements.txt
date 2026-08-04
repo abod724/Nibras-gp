@@ -1,8 +1,6 @@
 flask
+flask-login
+bcrypt
+psycopg2-binary
 openai
 gunicorn
-pytz
-duckduckgo-search
-Pillow
-requests
-requests>=2.31.0
