@@ -109,7 +109,7 @@ LOGIN_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>دخول - نبراس</title>
     <style>
-        body{background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
+        body{background:#ffffff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
         .box{background:white;padding:40px;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:340px;text-align:center}
         h2{color:#1a2b3c}
         input{width:100%;padding:12px;border:1px solid #dce1e8;border-radius:10px;font-size:16px;margin:8px 0;text-align:center;box-sizing:border-box}
@@ -280,7 +280,7 @@ HTML_TEMPLATE = """
 <div class="app">
     <div class="header">
         <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
-        <span style="font-size:16px;color:#1a2b3c;font-weight:bold">نبراس</span>
+        <span style="font-size:16px;color:#1a2b3c;font-weight:bold">Nabras</span>
         {% if current_user.is_authenticated %}
             <a href="/logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> خروج</a>
         {% else %}
