@@ -380,6 +380,7 @@ def chat():
         if not SYSTEM_ENABLED:
             return jsonify({"reply": "⚠️ نظام المحادثات معطل حالياً. يرجى المحاولة لاحقاً."})
 
+        # ===== تحديد معرف المستخدم =====
         if current_user.is_authenticated:
             user_id = current_user.id
             is_guest = False
@@ -391,17 +392,43 @@ def chat():
             if session['guest_chat_count'] >= 5:
                 return jsonify({"reply": "⚠️ لقد استخدمت جميع المحادثات المجانية (5). سجل دخولك للاستمرار والحصول على ذاكرة دائمة.", "limit_reached": True})
 
+        # ===== التحقق من صلاحيات المسؤول والمستخدمين =====
         if current_user.is_authenticated:
+            # ===== استثناء المسؤول: يعامل كمدفوع دائماً =====
             if current_user.email == "abdullaha0569361@gmail.com":
+                is_admin = True
+                user_plan = {'name': 'premium', 'daily_limit': 9999}
                 can_chat = True
             else:
-                can_chat, message = check_daily_limit(current_user.id)
-            if not can_chat:
-                return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
+                is_admin = False
+                user_plan = get_user_plan(current_user.id)
+                if not user_plan:
+                    user_plan = {'name': 'free', 'daily_limit': 5}
+                # التحقق من الحد اليومي للمستخدمين العاديين
+                if current_user.email == "abdullaha0569361@gmail.com":
+                    can_chat = True
+                else:
+                    can_chat, message = check_daily_limit(current_user.id)
+                if not can_chat:
+                    return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
+        else:
+            is_admin = False
+            user_plan = {'name': 'free', 'daily_limit': 5}
+            can_chat = True
 
+        # ===== تحديد النموذج ومصادر المعرفة بناءً على خطة المستخدم =====
+        if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium'):
+            model = "gpt-4o"
+            use_web_search = True
+        else:
+            model = "gpt-3.5-turbo"
+            use_web_search = False
+
+        # ===== إضافة رسالة المستخدم إلى الذاكرة =====
         add_message(str(user_id), "user", user_message)
         chat_history = get_history(str(user_id), limit=10)
 
+        # ===== بناء الرسائل لـ ChatGPT =====
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
             messages.append({"role": entry["role"], "content": entry["content"]})
@@ -409,7 +436,8 @@ def chat():
         if image_data:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة باللهجة العامية"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
-        if any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث", "آخر", "حدث", "وقت", "الساعة"]):
+        # ===== البحث بالويب (للمستخدمين المدفوعين والمسؤول فقط) =====
+        if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث", "آخر", "حدث", "وقت", "الساعة"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
                 search_response = client.responses.create(model="gpt-4o-mini", instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة: {chat_history}", input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.", tools=[{"type": "web_search"}], temperature=0.7, max_output_tokens=800)
@@ -420,15 +448,25 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        response = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=1000, temperature=0.8)
+        # ===== الرد النهائي =====
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=1000 if model == "gpt-4o" else 800,
+            temperature=0.8
+        )
         reply = response.choices[0].message.content.strip()
         if not reply:
             reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
+        # ===== حفظ رد المساعد في الذاكرة =====
         add_message(str(user_id), "assistant", reply)
 
-        if current_user.is_authenticated:
+        # ===== زيادة العداد (للمستخدمين المسجلين فقط) =====
+        if current_user.is_authenticated and not is_admin:
             increment_daily_usage(current_user.id)
+        elif current_user.is_authenticated and is_admin:
+            pass  # المسؤول لا يخضع للحدود
         else:
             session['guest_chat_count'] += 1
 
@@ -442,10 +480,17 @@ def chat():
 @login_required
 def account():
     try:
-        plan = get_user_plan(current_user.id)
-        daily_usage = get_daily_usage(current_user.id)
-        daily_limit = plan.get('daily_limit', 5) if plan else 5
-        remaining = daily_limit - daily_usage
+        if current_user.email == "abdullaha0569361@gmail.com":
+            plan = {'name': 'premium', 'daily_limit': 9999}
+            daily_usage = 0
+            daily_limit = 9999
+            remaining = 9999
+        else:
+            plan = get_user_plan(current_user.id)
+            daily_usage = get_daily_usage(current_user.id)
+            daily_limit = plan.get('daily_limit', 5) if plan else 5
+            remaining = daily_limit - daily_usage
+
         html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>حسابي - نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.box{{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.05);max-width:400px;margin:0 auto}}h2{{color:#1a2b3c}}.info{{margin:10px 0;padding:8px 0;border-bottom:1px solid #eaeef2}}.label{{color:#6a7b8c;font-size:14px}}.value{{font-size:18px;font-weight:bold;color:#1a2b3c}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px}}.badge-free{{background:#eef2f7;color:#1a2b3c}}.badge-premium{{background:#2d7d46;color:white}}.back{{display:inline-block;margin-bottom:15px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.upgrade-btn{{display:block;margin-top:20px;padding:12px;background:#2d7d46;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px}}.upgrade-btn:hover{{background:#236b3a}}</style></head><body><a href="/" class="back">⬅ العودة للرئيسية</a><div class="box"><h2>👤 حسابي</h2><div class="info"><div class="label">الاسم</div><div class="value">{current_user.name}</div></div><div class="info"><div class="label">البريد الإلكتروني</div><div class="value">{current_user.email}</div></div><div class="info"><div class="label">الخطة الحالية</div><div class="value"><span class="badge badge-{plan.get('name', 'free') if plan else 'free'}">{plan.get('name', 'مجاني').upper() if plan else 'مجاني'}</span></div></div><div class="info"><div class="label">المحادثات اليومية</div><div class="value">{daily_usage} / {daily_limit}</div></div><div class="info"><div class="label">المحادثات المتبقية اليوم</div><div class="value" style="color:{'#2d7d46' if remaining > 0 else '#c33'}">{remaining if remaining > 0 else 0}</div></div><a href="/plans" class="upgrade-btn">💎 عرض الخطط</a></div></body></html>"""
         return html
     except Exception as e:
@@ -456,41 +501,44 @@ def account():
 def plans():
     try:
         if current_user.is_authenticated:
-            plan = get_user_plan(current_user.id)
-            if not plan:
-                plan = {'name': 'free', 'daily_limit': 5}
-            html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>خطط نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.container{{max-width:500px;margin:0 auto}}.back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}.plan.premium{{border-right-color:#f1c40f}}.plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}.plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}.plan .price span{{font-size:16px;color:#6a7b8c}}.plan ul{{margin:15px 0;padding:0;list-style:none}}.plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}.plan ul li:last-child{{border-bottom:none}}.btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}.btn:hover{{background:#3a5a7a}}.btn.gold{{background:#f1c40f;color:#1a2b3c}}.btn.gold:hover{{background:#e1b50f}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}.badge.free{{background:#eef2f7;color:#1a2b3c}}</style></head><body><div class="container"><a href="/" class="back">⬅ العودة للرئيسية</a><h1 style="color:#1a2b3c;">💎 خطط نبراس</h1><p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p><div class="plan"><span class="badge free">مجاني</span><h3>الخطة المجانية</h3><div class="price">0 <span>ر.س / شهرياً</span></div><ul><li>✅ 5 محادثات يومياً</li><li>✅ نموذج أساسي</li><li>✅ دعم محدود</li></ul><span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span></div><div class="plan premium"><span class="badge">مميز</span><h3>الخطة المدفوعة</h3><div class="price">5 <span>ر.س / شهرياً</span></div><ul><li>✅ محادثات غير محدودة</li><li>✅ نموذج متقدم (GPT-4o)</li><li>✅ تحليل الصور</li><li>✅ تصدير المحادثات</li><li>✅ دعم أولوية</li></ul><a href="#" class="btn gold">💎 ترقية</a></div></div></body></html>"""
+            if current_user.email == "abdullaha0569361@gmail.com":
+                plan = {'name': 'premium', 'daily_limit': 9999}
+            else:
+                plan = get_user_plan(current_user.id)
+                if not plan:
+                    plan = {'name': 'free', 'daily_limit': 5}
+            html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>خطط نبراس</title><style>body{{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}}.container{{max-width:500px;margin:0 auto}}.back{{display:inline-block;margin-bottom:20px;padding:8px 16px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px}}.back:hover{{background:#3a5a7a}}.plan{{background:white;border-radius:12px;padding:20px;margin-bottom:15px;box-shadow:0 2px 10px rgba(0,0,0,0.05);border-right:4px solid #4a6a8a}}.plan.premium{{border-right-color:#f1c40f}}.plan h3{{font-size:22px;margin:0 0 5px 0;color:#1a2b3c}}.plan .price{{font-size:28px;font-weight:bold;color:#2d7d46}}.plan .price span{{font-size:16px;color:#6a7b8c}}.plan ul{{margin:15px 0;padding:0;list-style:none}}.plan ul li{{padding:6px 0;border-bottom:1px solid #f0f2f5}}.plan ul li:last-child{{border-bottom:none}}.btn{{display:block;padding:12px;background:#4a6a8a;color:white;text-align:center;text-decoration:none;border-radius:8px;font-size:18px;margin-top:10px}}.btn:hover{{background:#3a5a7a}}.btn.gold{{background:#f1c40f;color:#1a2b3c}}.btn.gold:hover{{background:#e1b50f}}.badge{{display:inline-block;padding:4px 12px;border-radius:30px;font-size:14px;background:#2d7d46;color:white;margin-bottom:10px}}.badge.free{{background:#eef2f7;color:#1a2b3c}}</style></head><body><div class="container"><a href="/" class="back">⬅ العودة للرئيسية</a><h1 style="color:#1a2b3c;">💎 خطط نبراس</h1><p style="color:#6a7b8c;">اختر الخطة التي تناسبك</p><div class="plan"><span class="badge free">مجاني</span><h3>الخطة المجانية</h3><div class="price">0 <span>ر.س / شهرياً</span></div><ul><li>✅ محادثات غير محدودة</li><li>✅ إجابات سريعة وذكية</li><li>✅ مساعدة في المهام اليومية</li><li>✅ تجربة نظيفة وسلسة</li></ul><span style="display:block;text-align:center;color:#6a7b8c;padding:8px;">خطتك الحالية</span></div><div class="plan premium"><span class="badge">مميز</span><h3>الخطة المدفوعة</h3><div class="price">7 <span>ر.س / شهرياً</span></div><ul><li>✅ ذكاء متقدم (إجابات أعمق وأدق)</li><li>✅ معلومات حديثة (أخبار، مستجدات)</li><li>✅ أولوية في المعالجة (ردود أسرع)</li><li>✅ ميزات حصرية (تحليل الصور، تصدير المحادثات)</li><li>✅ دعم أقوى</li></ul><a href="#" class="btn gold">💎 ترقية</a></div></div></body></html>"""
             return html
         else:
             html = """
-            <!DOCTYPE html>
-            <html dir="rtl" lang="ar">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>خطط نبراس</title>
-                <style>
-                    body{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}
-                    .container{max-width:500px;margin:0 auto}
-                    .box{background:white;border-radius:12px;padding:30px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
-                    .btn{display:inline-block;padding:12px 24px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px;font-size:18px;margin-top:15px}
-                    .btn:hover{background:#3a5a7a}
-                    .btn.green{background:#2d7d46}
-                    .btn.green:hover{background:#236b3a}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="box">
-                        <h1>💎 خطط نبراس</h1>
-                        <p style="color:#6a7b8c;">للوصول إلى الخطط المدفوعة والميزات المتقدمة، يرجى تسجيل الدخول أو إنشاء حساب.</p>
-                        <a href="/login" class="btn">🔐 تسجيل الدخول</a>
-                        <a href="/register" class="btn green">📝 إنشاء حساب</a>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>خطط نبراس</title>
+    <style>
+        body{background:#f5f7fa;padding:20px;font-family:'Segoe UI',Arial,sans-serif}
+        .container{max-width:500px;margin:0 auto}
+        .box{background:white;border-radius:12px;padding:30px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
+        .btn{display:inline-block;padding:12px 24px;background:#4a6a8a;color:white;text-decoration:none;border-radius:8px;font-size:18px;margin-top:15px}
+        .btn:hover{background:#3a5a7a}
+        .btn.green{background:#2d7d46}
+        .btn.green:hover{background:#236b3a}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="box">
+            <h1>💎 خطط نبراس</h1>
+            <p style="color:#6a7b8c;">للوصول إلى الخطط المدفوعة والميزات المتقدمة، يرجى تسجيل الدخول أو إنشاء حساب.</p>
+            <a href="/login" class="btn">🔐 تسجيل الدخول</a>
+            <a href="/register" class="btn green">📝 إنشاء حساب</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
             return html
     except Exception as e:
         print(f"❌ خطأ في /plans: {e}")
