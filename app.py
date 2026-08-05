@@ -40,6 +40,7 @@ else:
     print(f"✅ SECRET_KEY: موجود")
 
 app.secret_key = SECRET_KEY
+app.permanent_session_lifetime = timedelta(days=7)  # الجلسة تبقى 7 أيام
 
 init_db()
 print("✅ قاعدة البيانات جاهزة")
@@ -590,12 +591,16 @@ def chat():
         if not SYSTEM_ENABLED:
             return jsonify({"reply": "⚠️ نظام المحادثات معطل حالياً. يرجى المحاولة لاحقاً."})
 
-        # ===== تحديد معرف المستخدم =====
+        # ===== تحديد معرف المستخدم (معدل للضيوف) =====
         if current_user.is_authenticated:
             user_id = current_user.id
             is_guest = False
         else:
-            user_id = request.remote_addr
+            # إنشاء معرف ضيف ثابت في الجلسة
+            if 'guest_id' not in session:
+                session.permanent = True
+                session['guest_id'] = f"guest_{secrets.token_hex(8)}"
+            user_id = session['guest_id']
             is_guest = True
 
         # ===== التحقق من صلاحيات المسؤول والمستخدمين =====
