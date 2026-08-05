@@ -5,7 +5,7 @@
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
-from flask_session import Session as FlaskSession  # ✅ تم تعديل الاستيراد هنا
+from flask_session import Session as FlaskSession  # ✅ تصحيح تعارض الأسماء هنا
 
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
@@ -50,7 +50,7 @@ app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
 # =============================================================
-# 🚀 إعداد SQLAlchemy والجلسات (تم تصحيح تعارض الأسماء)
+# 🚀 إعداد SQLAlchemy والجلسات
 # =============================================================
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -58,9 +58,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ✅ تم تغيير الاسم لئلا يتعارض مع FlaskSession
+# ✅ أضفنا 'extend_existing=True' لحل مشكلة الجدول المكرر
 class SessionModel(db.Model):
     __tablename__ = 'sessions'
+    __table_args__ = {'extend_existing': True}  # 🔥 هذا هو حل الخطأ الثاني في الصورة
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(255), unique=True, nullable=False)
     data = db.Column(db.LargeBinary)
@@ -72,7 +73,8 @@ app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
-sess = FlaskSession()  # ✅ تم استخدام الاسم الجديد هنا
+# ✅ استخدام FlaskSession بدلاً من Session
+sess = FlaskSession()
 sess.init_app(app)
 
 with app.app_context():
@@ -96,6 +98,7 @@ def load_user(user_id):
     return get_user_by_id(user_id)
 
 knowledge_content = ""
+# تأكد أن ملف المعرفة اسمه knowledge.md (أحرف صغيرة) في نفس مجلد app.py
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
     if os.path.exists(filename):
@@ -288,7 +291,7 @@ def chat():
             if daily_usage <= 6:
                 premium_trial = True
 
-        # ✅ تحديد نموذج الذكاء الاصطناعي (gpt-5.2 للمدفوع، مخفي عن المستخدم)
+        # ✅ تحديد النموذج (gpt-5.2 للمدفوع و gpt-4o-mini للمجاني)
         if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
             model = "gpt-5.2"
             use_web_search = True
