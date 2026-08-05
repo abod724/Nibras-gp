@@ -40,7 +40,7 @@ else:
     print(f"✅ SECRET_KEY: موجود")
 
 app.secret_key = SECRET_KEY
-app.permanent_session_lifetime = timedelta(days=7)  # الجلسة تبقى 7 أيام
+app.permanent_session_lifetime = timedelta(days=7)
 
 init_db()
 print("✅ قاعدة البيانات جاهزة")
@@ -57,7 +57,7 @@ def load_user(user_id):
     return get_user_by_id(user_id)
 
 # =====================================================================
-# 📂 ربط ملف المعرفة (Knowledge.md)
+# 📂 ربط ملف المعرفة (Knowledge.md) - مع طباعة تأكيد في Logs
 # =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
@@ -67,6 +67,7 @@ for filename in possible_names:
             with open(filename, "r", encoding="utf-8") as f:
                 knowledge_content = f.read()
                 print(f"✅ تم تحميل ملف المعرفة: {filename}")
+                print(f"📄 أول 200 حرف من الملف: {knowledge_content[:200]}...")
                 break
         except Exception as e:
             print(f"⚠️ خطأ في قراءة {filename}: {e}")
@@ -74,9 +75,13 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
     print("⚠️ لم يتم العثور على ملف معرفة، سيتم استخدام القيمة الافتراضية.")
+# =====================================================================
 
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ذكي ورفيق درب لكل شخص يسولف معك. لست مجرد بوت تقني جاف، بل شخصية حية، ذكية، سريعة البديهة، وتملك روحاً مرحة وحماسية ترفع العزوة وتخلي اللي يسولف معك وده ما يوقف.
+
+**ملف المعرفة الخاص بك (مرجع أساسي):**
+{knowledge_content}
 
 اعتمادك الأساسي في المعلومات والعمق هو ما تجده داخل ملف (knowledge.md)، فاستغله أحسن استغلال بناءً على النموذج الذي تعمل عليه.
 
@@ -591,12 +596,11 @@ def chat():
         if not SYSTEM_ENABLED:
             return jsonify({"reply": "⚠️ نظام المحادثات معطل حالياً. يرجى المحاولة لاحقاً."})
 
-        # ===== تحديد معرف المستخدم (معدل للضيوف) =====
+        # ===== تحديد معرف المستخدم =====
         if current_user.is_authenticated:
             user_id = current_user.id
             is_guest = False
         else:
-            # إنشاء معرف ضيف ثابت في الجلسة
             if 'guest_id' not in session:
                 session.permanent = True
                 session['guest_id'] = f"guest_{secrets.token_hex(8)}"
@@ -637,8 +641,14 @@ def chat():
             use_web_search = False
 
         # ===== إضافة رسالة المستخدم =====
-        add_message(str(user_id), "user", user_message)
-        chat_history = get_history(str(user_id), limit=10)
+        if current_user.is_authenticated:
+            add_message(str(user_id), "user", user_message)
+            chat_history = get_history(str(user_id), limit=10)
+        else:
+            if 'guest_history' not in session:
+                session['guest_history'] = []
+            session['guest_history'].append({"role": "user", "content": user_message})
+            chat_history = session['guest_history'][-10:]
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
@@ -670,7 +680,12 @@ def chat():
         if not reply:
             reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
-        add_message(str(user_id), "assistant", reply)
+        # ===== حفظ رد المساعد =====
+        if current_user.is_authenticated:
+            add_message(str(user_id), "assistant", reply)
+        else:
+            if 'guest_history' in session:
+                session['guest_history'].append({"role": "assistant", "content": reply})
 
         # ===== زيادة العداد =====
         if current_user.is_authenticated and not is_admin:
