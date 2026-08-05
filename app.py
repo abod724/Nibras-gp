@@ -645,10 +645,14 @@ def chat():
             add_message(str(user_id), "user", user_message)
             chat_history = get_history(str(user_id), limit=10)
         else:
+            # الضيف: نستخدم الجلسة مع تحديد عدد محدود من الرسائل
             if 'guest_history' not in session:
                 session['guest_history'] = []
             session['guest_history'].append({"role": "user", "content": user_message})
-            chat_history = session['guest_history'][-10:]
+            # نحتفظ بآخر 6 رسائل فقط (3 مستخدم + 3 مساعد) عشان الجلسة ما تكبر
+            if len(session['guest_history']) > 6:
+                session['guest_history'] = session['guest_history'][-6:]
+            chat_history = session['guest_history']
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         for entry in chat_history:
@@ -686,6 +690,8 @@ def chat():
         else:
             if 'guest_history' in session:
                 session['guest_history'].append({"role": "assistant", "content": reply})
+                if len(session['guest_history']) > 6:
+                    session['guest_history'] = session['guest_history'][-6:]
 
         # ===== زيادة العداد =====
         if current_user.is_authenticated and not is_admin:
