@@ -72,15 +72,8 @@ def init_db():
         )
     """)
 
-    # ===== جدول الجلسات (لـ Flask-Session) =====
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id SERIAL PRIMARY KEY,
-            session_id TEXT UNIQUE NOT NULL,
-            data TEXT,
-            expiry TIMESTAMP
-        )
-    """)
+    # ===== 🔥 تم حذف جدول sessions من هنا =====
+    # سيتم إنشاؤه تلقائياً بواسطة flask_sqlalchemy
 
     # ===== إدخال الخطط الافتراضية =====
     cur.execute("""
