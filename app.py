@@ -5,7 +5,7 @@
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
-from flask_session import Session
+from flask_session import Session as FlaskSession  # ✅ تم تعديل الاستيراد هنا
 
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
@@ -50,7 +50,7 @@ app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
 # =============================================================
-# 🚀 إعداد SQLAlchemy والجلسات (تم التصحيح)
+# 🚀 إعداد SQLAlchemy والجلسات (تم تصحيح تعارض الأسماء)
 # =============================================================
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -58,7 +58,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-class Session(db.Model):
+# ✅ تم تغيير الاسم لئلا يتعارض مع FlaskSession
+class SessionModel(db.Model):
     __tablename__ = 'sessions'
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(255), unique=True, nullable=False)
@@ -71,7 +72,7 @@ app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
-sess = Session()
+sess = FlaskSession()  # ✅ تم استخدام الاسم الجديد هنا
 sess.init_app(app)
 
 with app.app_context():
@@ -287,7 +288,7 @@ def chat():
             if daily_usage <= 6:
                 premium_trial = True
 
-        # ✅ تحديد نموذج الذكاء الاصطناعي وخصائصه (تم التعديل إلى gpt-5.2 للمدفوع، مع إخفاء الأسماء عن المستخدم)
+        # ✅ تحديد نموذج الذكاء الاصطناعي (gpt-5.2 للمدفوع، مخفي عن المستخدم)
         if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
             model = "gpt-5.2"
             use_web_search = True
@@ -297,7 +298,7 @@ def chat():
             use_web_search = False
             features = {"images": False}
 
-        # ✅ منع المستخدم المجاني من إرسال الصور (توليد/تحليل صور)
+        # ✅ منع المستخدم المجاني من إرسال الصور
         if image_data and not features["images"]:
             return jsonify({"reply": "📸 **تحليل وإنشاء الصور متاح فقط في الخطة المدفوعة.**\n\nللحصول على هذه الميزة، بالإضافة إلى **البحث في الويب والتحليل العميق والذكاء المتقدم**، يمكنك الترقية إلى خطة نبراس المدفوعة مقابل 7 ريال فقط شهرياً!"})
 
@@ -317,7 +318,7 @@ def chat():
         if image_data and features["images"]:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
-        # ✅ تفعيل البحث بالويب حصرياً للمستخدم المدفوع
+        # ✅ تفعيل البحث بالويب للمستخدم المدفوع فقط
         if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
@@ -351,7 +352,6 @@ def chat():
         if premium_trial and current_user.is_authenticated:
             remaining = 6 - get_daily_usage(current_user.id)
             if remaining == 0:
-                # ✅ تم إخفاء اسم النموذج التقني gpt-5.2 عن المستخدم
                 reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام الذكاء المتقدم والبحث بالويب وتحليل الصور مقابل 7 ريال شهرياً."
 
         return jsonify({"reply": reply})
