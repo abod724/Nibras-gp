@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from flask_session import Session
+from flask_sqlalchemy import SQLAlchemy
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
 from memory import add_message, get_history, clear_memory
@@ -42,6 +44,18 @@ else:
 app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
+# ===== إعداد الجلسات في قاعدة البيانات =====
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SESSION_TYPE'] = 'sqlalchemy'
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+app.config['SESSION_KEY_PREFIX'] = 'nabras_'
+
+db = SQLAlchemy(app)
+sess = Session()
+sess.init_app(app)
+
 init_db()
 print("✅ قاعدة البيانات جاهزة")
 
@@ -57,7 +71,7 @@ def load_user(user_id):
     return get_user_by_id(user_id)
 
 # =====================================================================
-# 📂 ربط ملف المعرفة (Knowledge.md) - مع طباعة تأكيد في Logs
+# 📂 ربط ملف المعرفة (Knowledge.md)
 # =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
@@ -645,11 +659,9 @@ def chat():
             add_message(str(user_id), "user", user_message)
             chat_history = get_history(str(user_id), limit=10)
         else:
-            # الضيف: نستخدم الجلسة مع تحديد عدد محدود من الرسائل
             if 'guest_history' not in session:
                 session['guest_history'] = []
             session['guest_history'].append({"role": "user", "content": user_message})
-            # نحتفظ بآخر 6 رسائل فقط (3 مستخدم + 3 مساعد) عشان الجلسة ما تكبر
             if len(session['guest_history']) > 6:
                 session['guest_history'] = session['guest_history'][-6:]
             chat_history = session['guest_history']
