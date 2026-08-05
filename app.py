@@ -1,14 +1,7 @@
-# =============================================================
-# تم التعديل: دعم flask_session + flask_sqlalchemy لتخزين الجلسات في قاعدة البيانات
-# =============================================================
-
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-
-# 🔥 استيراد المكتبات الجديدة للجلسات وقاعدة البيانات
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
-
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
 from memory import add_message, get_history, clear_memory
@@ -51,35 +44,20 @@ else:
 app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
-# =============================================================
-# 🚀 إعداد SQLAlchemy والجلسات (الجزء الجديد الذي يحل المشكلة)
-# =============================================================
-
-# 1. تكوين قاعدة البيانات لـ SQLAlchemy
+# ===== إعداد SQLAlchemy والجلسات =====
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# 2. تكوين Flask-Session لاستخدام SQLAlchemy
 app.config['SESSION_TYPE'] = 'sqlalchemy'
-app.config['SESSION_SQLALCHEMY'] = None  # سنحدده بعد إنشاء db
-app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'  # نفس الجدول الموجود في database.py
+app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
 app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True  # أمان إضافي
+app.config['SESSION_USE_SIGNER'] = True
 
-# 3. إنشاء كائن SQLAlchemy واحد فقط وربطه بالتطبيق
 db = SQLAlchemy(app)
-
-# 4. الآن أخبر flask_session أن يستخدم كائن db الذي أنشأناه
 app.config['SESSION_SQLALCHEMY'] = db
-
-# 5. تهيئة Flask-Session
 sess = Session()
 sess.init_app(app)
+print("✅ تم تهيئة Flask-Session مع SQLAlchemy")
 
-print("✅ تم تهيئة Flask-Session مع SQLAlchemy بنجاح!")
-# =============================================================
-
-# تهيئة قاعدة البيانات (جداول المشروع الأساسية)
 init_db()
 print("✅ قاعدة البيانات جاهزة")
 
@@ -95,7 +73,7 @@ def load_user(user_id):
     return get_user_by_id(user_id)
 
 # =====================================================================
-# 📂 ربط ملف المعرفة (Knowledge.md) - مع طباعة تأكيد في Logs
+# 📂 ربط ملف المعرفة (Knowledge.md)
 # =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
@@ -113,7 +91,6 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
     print("⚠️ لم يتم العثور على ملف معرفة، سيتم استخدام القيمة الافتراضية.")
-# =====================================================================
 
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ذكي ورفيق درب لكل شخص يسولف معك. لست مجرد بوت تقني جاف، بل شخصية حية، ذكية، سريعة البديهة، وتملك روحاً مرحة وحماسية ترفع العزوة وتخلي اللي يسولف معك وده ما يوقف.
@@ -151,14 +128,380 @@ SYSTEM_PROMPT = f"""
 """
 
 # =====================================================================
-# واجهات HTML (تم حذفها من هنا للاختصار، لكنها موجودة في الكود الأصلي،
-# وسأضعها كاملة في المرفق النهائي)
+# واجهات HTML (نفسها تماماً، لم تتغير)
 # =====================================================================
 
-# ... (باقي كود HTML كما هو، لم يتغير) ...
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>دخول - نبراس</title>
+    <style>
+        body{background: #ffffff; display:flex; justify-content:center; align-items:center; height:100vh; font-family:'Segoe UI', Arial, sans-serif; margin:0}
+        .box{background: transparent; padding:40px; border-radius:20px; box-shadow:0 8px 30px rgba(0,0,0,0.08); width:340px; text-align:center}
+        h2{color:#1a2b3c}
+        input{width:100%; padding:12px; border:1px solid #dce1e8; border-radius:10px; font-size:16px; margin:8px 0; text-align:center; box-sizing:border-box}
+        button{width:100%; padding:12px; background: transparent; border: none; color: #1a2b3c; font-size:18px; cursor:pointer}
+        .error{color:#c33; margin:8px 0}
+        a{color:#4a6a8a; text-decoration:none; display:block; margin-top:10px}
+        a.forgot{font-size:14px; color:#6a7b8c; margin-top:5px}
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>🔐 دخول نبراس</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST">
+        <input type="email" name="email" placeholder="البريد الإلكتروني" required>
+        <input type="password" name="password" placeholder="كلمة المرور" required>
+        <button type="submit">دخول</button>
+    </form>
+    <a href="{{ url_for('forgot_password') }}" class="forgot">نسيت كلمة المرور؟</a>
+    <a href="{{ url_for('register') }}">ليس لديك حساب؟ سجل الآن</a>
+</div>
+</body>
+</html>
+"""
+
+REGISTER_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل - نبراس</title>
+    <style>
+        body{background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
+        .box{background:white;padding:40px;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:340px;text-align:center}
+        h2{color:#1a2b3c}
+        input{width:100%;padding:12px;border:1px solid #dce1e8;border-radius:10px;font-size:16px;margin:8px 0;text-align:center;box-sizing:border-box}
+        button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:10px;font-size:18px;cursor:pointer}
+        button:hover{background:#3a5a7a}
+        .error{color:#c33;margin:8px 0}
+        a{color:#4a6a8a;text-decoration:none;display:block;margin-top:10px}
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>📝 حساب جديد</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST">
+        <input type="text" name="name" placeholder="الاسم الكامل" required>
+        <input type="email" name="email" placeholder="البريد الإلكتروني" required>
+        <input type="password" name="password" placeholder="كلمة المرور" required>
+        <button type="submit">تسجيل</button>
+    </form>
+    <a href="{{ url_for('login') }}">لديك حساب؟ سجل دخول</a>
+</div>
+</body>
+</html>
+"""
+
+FORGOT_PASSWORD_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نسيت كلمة المرور - نبراس</title>
+    <style>
+        body{background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
+        .box{background:white;padding:40px;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:340px;text-align:center}
+        h2{color:#1a2b3c}
+        input{width:100%;padding:12px;border:1px solid #dce1e8;border-radius:10px;font-size:16px;margin:8px 0;text-align:center;box-sizing:border-box}
+        button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:10px;font-size:18px;cursor:pointer}
+        button:hover{background:#3a5a7a}
+        .error{color:#c33;margin:8px 0}
+        .success{color:#2d7d46;margin:8px 0}
+        a{color:#4a6a8a;text-decoration:none;display:block;margin-top:10px}
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>🔐 نسيت كلمة المرور</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="success">{{ success }}</div>{% endif %}
+    <form method="POST">
+        <input type="email" name="email" placeholder="البريد الإلكتروني" required>
+        <button type="submit">إرسال رابط إعادة التعيين</button>
+    </form>
+    <a href="{{ url_for('login') }}">تذكرت كلمة المرور؟ سجل دخول</a>
+</div>
+</body>
+</html>
+"""
+
+RESET_PASSWORD_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعادة تعيين كلمة المرور - نبراس</title>
+    <style>
+        body{background:#f5f7fa;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',Arial,sans-serif;margin:0}
+        .box{background:white;padding:40px;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:340px;text-align:center}
+        h2{color:#1a2b3c}
+        input{width:100%;padding:12px;border:1px solid #dce1e8;border-radius:10px;font-size:16px;margin:8px 0;text-align:center;box-sizing:border-box}
+        button{width:100%;padding:12px;background:#4a6a8a;color:white;border:none;border-radius:10px;font-size:18px;cursor:pointer}
+        button:hover{background:#3a5a7a}
+        .error{color:#c33;margin:8px 0}
+        a{color:#4a6a8a;text-decoration:none;display:block;margin-top:10px}
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>🔑 إعادة تعيين كلمة المرور</h2>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST">
+        <input type="password" name="password" placeholder="كلمة المرور الجديدة" required>
+        <input type="password" name="confirm_password" placeholder="تأكيد كلمة المرور" required>
+        <button type="submit">تحديث كلمة المرور</button>
+    </form>
+    <a href="{{ url_for('login') }}">سجل دخول</a>
+</div>
+</body>
+</html>
+"""
+
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>نبراس</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}
+        body{background:#fff;height:100dvh;display:flex;justify-content:center;align-items:center}
+        .app{width:100%;max-width:450px;height:100dvh;display:flex;flex-direction:column;background:#fff}
+        .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid #eaeef2}
+        .header .menu-btn{background:none;border:none;font-size:22px;color:#5a6b7c;cursor:pointer;padding:4px}
+        .header .logout-btn{background:#e74c3c;color:#fff;border:none;padding:6px 14px;border-radius:30px;cursor:pointer;font-size:14px;text-decoration:none}
+        .header .logout-btn:hover{background:#c0392b}
+        .dropdown{display:none;position:absolute;top:64px;left:14px;right:14px;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.08);z-index:100;border:1px solid #eaedf2}
+        .dropdown.show{display:flex;flex-direction:column}
+        .dropdown .item{padding:14px 18px;font-size:15px;background:none;border:none;width:100%;text-align:right;cursor:pointer;border-bottom:1px solid #f0f2f5}
+        .dropdown .item:hover{background:#f5f7fa}
+        #chat{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+        .msg{max-width:80%;padding:10px 16px;border-radius:20px;font-size:18px;line-height:1.6;word-wrap:break-word;white-space:pre-wrap}
+        .msg.user{align-self:flex-end;background:#eef2f7;border-bottom-left-radius:6px}
+        .msg.bot{align-self:flex-start;background:#fff;border-bottom-right-radius:6px}
+        .msg .time{font-size:9px;opacity:0.35;display:block;margin-top:4px}
+        .msg.error{background:#fde8e8;color:#a33;align-self:center;max-width:90%}
+        .msg .image-upload{max-width:100%;max-height:200px;border-radius:12px;margin:4px 0;border:1px solid #ddd;display:block}
+        .input-area{display:flex;align-items:flex-end;gap:6px;padding:6px 12px;margin:8px 14px 16px;background:#f5f7fa;border-radius:40px;border:1px solid #dce1e8}
+        .input-area textarea{flex:1;border:none;background:transparent;padding:12px 4px;font-size:17px;outline:none;color:#1a2b3c;direction:rtl;resize:none;overflow:hidden;min-height:40px;max-height:120px;font-family:inherit}
+        .input-area .send{background:#4a6a8a;color:#fff;border:none;width:44px;height:44px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .input-area .btn-icon{background:none;border:none;color:#6a7b8c;font-size:20px;cursor:pointer;padding:4px;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center}
+        .input-area .mic-btn.listening{color:#c33;background:#fde8e8}
+        .plus-btn{background:none;border:none;color:#4a6a8a;font-size:24px;cursor:pointer;padding:4px;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center}
+        .plus-options{display:none;position:absolute;bottom:70px;right:0;background:#fff;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,0.12);padding:12px;gap:8px;flex-direction:row;border:1px solid #eaeef2;z-index:50}
+        .plus-options.show{display:flex}
+        .plus-options .option-btn{background:#f5f7fa;border:none;border-radius:50%;width:52px;height:52px;font-size:22px;color:#1a2b3c;cursor:pointer}
+        .plus-options .option-btn:hover{background:#e8ecf0}
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
+        <span style="font-size:16px;color:#1a2b3c;font-weight:bold">Nabras</span>
+        <div style="display:flex; align-items:center; gap:10px; position:relative;">
+            <button id="upgradeBtn" style="
+                background: linear-gradient(135deg, #f1c40f, #f39c12);
+                border: none;
+                border-radius: 30px;
+                padding: 6px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                color: #1a2b3c;
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(241, 196, 15, 0.4);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                transition: transform 0.2s;
+            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                💎 ترقية
+            </button>
+            <div id="upgradeDropdown" style="
+                display: none;
+                position: absolute;
+                top: 50px;
+                right: 0;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+                padding: 16px;
+                width: 260px;
+                z-index: 200;
+                border: 1px solid #eaedf2;
+            ">
+                <h4 style="margin:0 0 10px 0; color:#1a2b3c; font-size:16px;">💎 خطط نبراس</h4>
+                <div style="border-bottom:1px solid #f0f2f5; padding-bottom:8px; margin-bottom:8px;">
+                    <div style="font-size:14px; color:#1a2b3c;"><strong>مجاني</strong> - 0 ر.س</div>
+                    <div style="font-size:12px; color:#6a7b8c;">محادثات غير محدودة، نموذج أساسي</div>
+                </div>
+                <div style="border-bottom:1px solid #f0f2f5; padding-bottom:8px; margin-bottom:8px;">
+                    <div style="font-size:14px; color:#1a2b3c;"><strong style="color:#f1c40f;">مميز</strong> - 7 ر.س/شهر</div>
+                    <div style="font-size:12px; color:#6a7b8c;">بحث ويب، تحليل صور، ردود أسرع، دعم أقوى</div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                    <a href="/login" style="display:block; padding:8px; background:#4a6a8a; color:white; text-align:center; text-decoration:none; border-radius:8px; font-size:14px;">🔐 سجل دخولك لتجربة المميزات</a>
+                    <a href="/register" style="display:block; padding:8px; background:transparent; color:#4a6a8a; text-align:center; text-decoration:none; border-radius:8px; font-size:13px; border:1px solid #4a6a8a;">📝 إنشاء حساب جديد</a>
+                </div>
+            </div>
+            {% if current_user.is_authenticated %}
+                <a href="/logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> خروج</a>
+            {% else %}
+                <a href="/login" class="logout-btn" style="background:#2d7d46; font-weight:bold; padding:6px 18px; border-radius:30px;">دخول</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="dropdown" id="dropdown">
+        <button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button>
+        <button class="item" data-action="library"><i class="fas fa-layer-group"></i> المكتبة</button>
+        {% if current_user.is_authenticated %}
+            <button class="item" data-action="history"><i class="fas fa-history"></i> محادثاتي</button>
+            <button class="item" onclick="window.location.href='/account'"><i class="fas fa-user-cog"></i> حسابي</button>
+        {% endif %}
+        <button class="item" onclick="window.location.href='/plans'"><i class="fas fa-crown" style="color:#f1c40f;"></i> الترقية</button>
+    </div>
+    <div id="chat"></div>
+    <div class="input-area">
+        <button class="btn-icon mic-btn" id="micBtn"><i class="fas fa-microphone"></i></button>
+        <button class="plus-btn" id="plusBtn"><i class="fas fa-plus"></i></button>
+        <div class="plus-options" id="plusOptions">
+            <button class="option-btn camera" id="cameraBtn"><i class="fas fa-camera"></i></button>
+            <button class="option-btn gallery" id="galleryBtn"><i class="fas fa-images"></i></button>
+            <button class="option-btn files" id="filesBtn"><i class="fas fa-folder"></i></button>
+        </div>
+        <textarea id="userInput" placeholder="اكتب رسالة..." rows="1"></textarea>
+        <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="fileInputGeneric" style="display:none">
+</div>
+<script>
+(function(){
+let h=[]; let pendingImage=null;
+const chat=document.getElementById('chat'), input=document.getElementById('userInput'), send=document.getElementById('sendBtn');
+const menu=document.getElementById('menuToggle'), dropdown=document.getElementById('dropdown');
+const plus=document.getElementById('plusBtn'), options=document.getElementById('plusOptions');
+const mic=document.getElementById('micBtn'), file=document.getElementById('fileInput'), cam=document.getElementById('cameraInput'), gen=document.getElementById('fileInputGeneric');
+
+const addMsg=(text,sender='bot',sys=false,img=null)=>{
+    const el=document.createElement('div'); el.className='msg '+sender;
+    if(sender==='error')el.classList.add('error');
+    const tm=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+    if(img){
+        el.innerHTML=`<img src="${img}" class="image-upload"/><span class="file-label">${text||'صورة'}</span><span class="time"> ${tm}</span>`;
+        chat.appendChild(el); chat.scrollTop=chat.scrollHeight; return;
+    }
+    if(sender==='bot'&&!sys){
+        el.innerHTML=`<span class="typing-text"></span><span class="time"> ${tm}</span>`;
+        chat.appendChild(el); chat.scrollTop=chat.scrollHeight;
+        let i=0; const sp=el.querySelector('.typing-text');
+        const iv=setInterval(()=>{if(i<text.length){sp.textContent+=text.charAt(i);i++;chat.scrollTop=chat.scrollHeight}else clearInterval(iv)},20);
+        return;
+    }
+    el.innerHTML=text+` <span class="time">${tm}</span>`;
+    chat.appendChild(el); chat.scrollTop=chat.scrollHeight;
+};
+
+const sendMsg=async()=>{
+    const txt=input.value.trim(); if(!txt)return;
+    addMsg(txt,'user'); input.value=''; input.style.height='40px';
+    try{
+        const res=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt,image:null,history:h})});
+        const d=await res.json();
+        res.ok?addMsg(d.reply,'bot'):addMsg('خطأ: '+d.error,'error');
+    }catch(e){addMsg('تعذر الاتصال.','error')}
+};
+
+input.addEventListener('keypress',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendMsg()}});
+send.addEventListener('click',sendMsg);
+menu.addEventListener('click',e=>{e.stopPropagation(); dropdown.classList.toggle('show')});
+document.addEventListener('click',()=>{dropdown.classList.remove('show')});
+document.querySelectorAll('.dropdown .item').forEach(b=>{
+    b.addEventListener('click',()=>{
+        dropdown.classList.remove('show');
+        if(b.dataset.action==='new'){chat.innerHTML=''; h=[]; addMsg('بدأت محادثة جديدة.','bot',true)}
+        else if(b.dataset.action==='history'){window.location.href='/conversations'}
+    })
+});
+plus.addEventListener('click',()=>{plus.classList.toggle('rotate'); options.classList.toggle('show')});
+document.addEventListener('click',e=>{if(!plus.contains(e.target)&&!options.contains(e.target)){options.classList.remove('show');plus.classList.remove('rotate')}});
+
+const handleFile=(file)=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+        const data=ev.target.result;
+        pendingImage=data;
+        addMsg(file.name,'user',false,data);
+        let imgs=JSON.parse(localStorage.getItem('imgs')||'[]'); imgs.push(data); localStorage.setItem('imgs',JSON.stringify(imgs));
+        sendAfterMedia(data);
+    };
+    reader.readAsDataURL(file);
+};
+
+cam.addEventListener('change',function(){if(this.files[0])handleFile(this.files[0])});
+file.addEventListener('change',function(){if(this.files[0])handleFile(this.files[0])});
+gen.addEventListener('change',function(){if(this.files[0]){addMsg('📎 تم رفع: '+this.files[0].name,'user'); this.value=''}});
+document.getElementById('cameraBtn').addEventListener('click',()=>{cam.click(); options.classList.remove('show');plus.classList.remove('rotate')});
+document.getElementById('galleryBtn').addEventListener('click',()=>{file.click(); options.classList.remove('show');plus.classList.remove('rotate')});
+document.getElementById('filesBtn').addEventListener('click',()=>{gen.click(); options.classList.remove('show');plus.classList.remove('rotate')});
+
+const sendAfterMedia=(data)=>{
+    const txt=input.value.trim(); input.value=''; input.style.height='40px';
+    sendInternal(txt||"📎 ملف مرفق",data);
+};
+const sendInternal=async(txt,image)=>{
+    try{
+        const res=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt,image:image,history:h})});
+        const d=await res.json();
+        res.ok?addMsg(d.reply,'bot'):addMsg('خطأ: '+d.error,'error');
+    }catch(e){addMsg('تعذر الاتصال.','error')}
+};
+
+if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+    let rec=null;
+    mic.addEventListener('click',function(){
+        if(this.classList.contains('listening')){this.classList.remove('listening'); if(rec)rec.stop(); return}
+        const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+        rec=new SR(); rec.lang='ar-SA'; rec.continuous=false; rec.interimResults=false;
+        this.classList.add('listening'); addMsg('جاري الاستماع...','bot',true);
+        rec.onresult=e=>{input.value=e.results[0][0].transcript; this.classList.remove('listening'); setTimeout(sendMsg,300)};
+        rec.onerror=()=>{this.classList.remove('listening')};
+        rec.start();
+    });
+}
+})();
+</script>
+<script>
+    document.getElementById('upgradeBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var dropdown = document.getElementById('upgradeDropdown');
+        dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    });
+    document.addEventListener('click', function() {
+        document.getElementById('upgradeDropdown').style.display = 'none';
+    });
+    document.getElementById('upgradeDropdown').addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+</script>
+</body>
+</html>
+"""
 
 # =====================================================================
-# المسارات (جميع المسارات كما هي، لم تتغير)
+# المسارات (جميعها كما هي، لم تتغير)
 # =====================================================================
 
 @app.route('/')
