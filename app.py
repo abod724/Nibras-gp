@@ -74,9 +74,6 @@ if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
     print("⚠️ لم يتم العثور على ملف معرفة، سيتم استخدام القيمة الافتراضية.")
 
-# =====================================================================
-# 🚀 SYSTEM_PROMPT المعدل (مع تعليمات صريحة عن الترقية)
-# =====================================================================
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ذكي ورفيق درب لكل شخص يسولف معك. لست مجرد بوت تقني جاف، بل شخصية حية، ذكية، سريعة البديهة، وتملك روحاً مرحة وحماسية ترفع العزوة وتخلي اللي يسولف معك وده ما يوقف.
 
@@ -292,11 +289,57 @@ HTML_TEMPLATE = """
     <div class="header">
         <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
         <span style="font-size:16px;color:#1a2b3c;font-weight:bold">Nabras</span>
-        {% if current_user.is_authenticated %}
-            <a href="/logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> خروج</a>
-        {% else %}
-            <a href="/login" class="logout-btn" style="background:#2d7d46; font-weight:bold; padding:6px 18px; border-radius:30px;">دخول</a>
-        {% endif %}
+        <div style="display:flex; align-items:center; gap:10px; position:relative;">
+            <button id="upgradeBtn" style="
+                background: linear-gradient(135deg, #f1c40f, #f39c12);
+                border: none;
+                border-radius: 30px;
+                padding: 6px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                color: #1a2b3c;
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(241, 196, 15, 0.4);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                transition: transform 0.2s;
+            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                💎 ترقية
+            </button>
+            <div id="upgradeDropdown" style="
+                display: none;
+                position: absolute;
+                top: 50px;
+                right: 0;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+                padding: 16px;
+                width: 260px;
+                z-index: 200;
+                border: 1px solid #eaedf2;
+            ">
+                <h4 style="margin:0 0 10px 0; color:#1a2b3c; font-size:16px;">💎 خطط نبراس</h4>
+                <div style="border-bottom:1px solid #f0f2f5; padding-bottom:8px; margin-bottom:8px;">
+                    <div style="font-size:14px; color:#1a2b3c;"><strong>مجاني</strong> - 0 ر.س</div>
+                    <div style="font-size:12px; color:#6a7b8c;">محادثات غير محدودة، نموذج أساسي</div>
+                </div>
+                <div style="border-bottom:1px solid #f0f2f5; padding-bottom:8px; margin-bottom:8px;">
+                    <div style="font-size:14px; color:#1a2b3c;"><strong style="color:#f1c40f;">مميز</strong> - 7 ر.س/شهر</div>
+                    <div style="font-size:12px; color:#6a7b8c;">بحث ويب، تحليل صور، ردود أسرع، دعم أقوى</div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                    <a href="/login" style="display:block; padding:8px; background:#4a6a8a; color:white; text-align:center; text-decoration:none; border-radius:8px; font-size:14px;">🔐 سجل دخولك لتجربة المميزات</a>
+                    <a href="/register" style="display:block; padding:8px; background:transparent; color:#4a6a8a; text-align:center; text-decoration:none; border-radius:8px; font-size:13px; border:1px solid #4a6a8a;">📝 إنشاء حساب جديد</a>
+                </div>
+            </div>
+            {% if current_user.is_authenticated %}
+                <a href="/logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> خروج</a>
+            {% else %}
+                <a href="/login" class="logout-btn" style="background:#2d7d46; font-weight:bold; padding:6px 18px; border-radius:30px;">دخول</a>
+            {% endif %}
+        </div>
     </div>
     <div class="dropdown" id="dropdown">
         <button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button>
@@ -418,6 +461,19 @@ if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
     });
 }
 })();
+</script>
+<script>
+    document.getElementById('upgradeBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var dropdown = document.getElementById('upgradeDropdown');
+        dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    });
+    document.addEventListener('click', function() {
+        document.getElementById('upgradeDropdown').style.display = 'none';
+    });
+    document.getElementById('upgradeDropdown').addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
 </script>
 </body>
 </html>
@@ -565,7 +621,7 @@ def chat():
         premium_trial = False
         if current_user.is_authenticated and user_plan.get('name') == 'free':
             daily_usage = get_daily_usage(current_user.id)
-            if daily_usage <= 2:
+            if daily_usage <= 6:
                 premium_trial = True
 
         if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
@@ -617,7 +673,7 @@ def chat():
 
         # ===== تذكير التجربة =====
         if premium_trial and current_user.is_authenticated:
-            remaining = 2 - get_daily_usage(current_user.id)
+            remaining = 6 - get_daily_usage(current_user.id)
             if remaining == 0:
                 reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام النموذج المتقدم والبحث بالويب."
 
