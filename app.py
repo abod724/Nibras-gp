@@ -5,7 +5,7 @@
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
-from flask_session import Session as FlaskSession
+from flask_session import Session
 
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
@@ -50,7 +50,7 @@ app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
 # =============================================================
-# 🚀 إعداد SQLAlchemy والجلسات (تم تصحيح تعارض الأسماء)
+# 🚀 إعداد SQLAlchemy والجلسات (تم التصحيح)
 # =============================================================
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -58,10 +58,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ✅ تم تغيير اسم الكلاس لئلا يتعارض مع FlaskSession
-class SessionModel(db.Model):
+class Session(db.Model):
     __tablename__ = 'sessions'
-    __table_args__ = {'extend_existing': True}  # ✅ هذا يحمي جدول الجلسات من الخطأ
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(255), unique=True, nullable=False)
     data = db.Column(db.LargeBinary)
@@ -73,8 +71,7 @@ app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
-# ✅ استخدام الاسم الجديد هنا
-sess = FlaskSession()
+sess = Session()
 sess.init_app(app)
 
 with app.app_context():
@@ -129,7 +126,7 @@ SYSTEM_PROMPT = f"""
 
 [توجيه حسب نموذج التشغيل - Model Adaptation]:
 - إذا كنت تعمل على نموذج (GPT-4o-mini / المجاني): ابدع بكل ما أوتيت من قوة! لا تظهر بمظهر البوت البسيط؛ كن سريع البديهة، عالي الحماس، استغل ملف (knowledge.md) بذكاء، وقدم إجابات ممتعة ومليانة أفكار وحيوية تخلي المستخدم يقول: "يا رجل إذا هذا المجاني كذا، أجل وشلون المدفوع؟!".
-- إذا كنت تعمل على نموذج (GPT-5-2025-08-07 / المدفوع): أطلق "الوحش"! هنا الصقها ببعضها؛ تعمّق لأقصى درجة في ملف (knowledge.md)، وفعّل أدوات البحث المتقدم في الويب لجلب أحدث وأدق البيانات والتحليلات. لا تكتفي بالإجابة، بل حلل، قارن، وابتكر رؤى استراتيجية عميقة لا تخطر على البال مع حماس يملأ المكان.
+- إذا كنت تعمل على نموذج (GPT-4o / المدفوع): أطلق "الوحش"! هنا الصقها ببعضها؛ تعمّق لأقصى درجة في ملف (knowledge.md)، وفعّل أدوات البحث المتقدم في الويب لجلب أحدث وأدق البيانات والتحليلات. لا تكتفي بالإجابة، بل حلل، قارن، وابتكر رؤى استراتيجية عميقة لا تخطر على البال مع حماس يملأ المكان.
 
 القواعد الذهبية:
 1. تجنب تماماً التحدث بالفصحى الرسمية المقعرة أو الأسلوب الأكاديمي البارد.
@@ -278,8 +275,7 @@ def chat():
                     user_plan = {'name': 'free', 'daily_limit': 5}
                 can_chat, message = check_daily_limit(current_user.id)
                 if not can_chat:
-                    # ✅ تحسين رسالة انتهاء الحد للمستخدم المجاني
-                    return jsonify({"reply": f"⚠️ {message}\n\n💡 انتهى حد المحادثات المجانية. للاستمرار والاستفادة من **البحث بالويب، تحليل الصور، الذكاء المتقدم والردود الأسرع**، يمكنك الترقية إلى خطتنا المدفوعة بقيمة 7 ريال شهرياً.", "limit_reached": True})
+                    return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
         else:
             is_admin = False
             user_plan = {'name': 'free', 'daily_limit': 9999}
@@ -291,19 +287,12 @@ def chat():
             if daily_usage <= 6:
                 premium_trial = True
 
-        # ✅ تحديث النموذج بناءً على الخطط (gpt-5-2025-08-07 حسب نبراس)
         if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
-            model = "gpt-5-2025-08-07"   # 🔥 تم التغيير هنا ليطابق نبراس
+            model = "gpt-4o"
             use_web_search = True
-            features = {"images": True}
         else:
-            model = "gpt-4o-mini"        # للمجاني
+            model = "gpt-4o-mini"
             use_web_search = False
-            features = {"images": False}
-
-        # ✅ منع المستخدم المجاني من إرسال الصور (توليد/تحليل صور)
-        if image_data and not features["images"]:
-            return jsonify({"reply": "📸 **تحليل وإنشاء الصور متاح فقط في الخطة المدفوعة.**\n\nللحصول على هذه الميزة، بالإضافة إلى **البحث في الويب والتحليل العميق والذكاء المتقدم**، يمكنك الترقية إلى خطة نبراس المدفوعة مقابل 7 ريال فقط شهرياً!"})
 
         if current_user.is_authenticated:
             add_message(str(user_id), "user", user_message)
@@ -318,10 +307,9 @@ def chat():
         for entry in chat_history:
             messages.append({"role": entry["role"], "content": entry["content"]})
 
-        if image_data and features["images"]:
+        if image_data:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
-        # ✅ تفعيل البحث بالويب للمستخدم المدفوع فقط
         if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
@@ -336,7 +324,7 @@ def chat():
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=1000 if model == "gpt-5-2025-08-07" else 800,
+            max_tokens=1000 if model == "gpt-4o" else 800,
             temperature=0.8
         )
         reply = response.choices[0].message.content.strip()
@@ -355,7 +343,7 @@ def chat():
         if premium_trial and current_user.is_authenticated:
             remaining = 6 - get_daily_usage(current_user.id)
             if remaining == 0:
-                reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام النموذج المتقدم (GPT-5) والبحث بالويب وتحليل الصور مقابل 7 ريال شهرياً."
+                reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام النموذج المتقدم والبحث بالويب."
 
         return jsonify({"reply": reply})
 
