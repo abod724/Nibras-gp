@@ -5,7 +5,7 @@
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
-from flask_session import Session
+from flask_session import Session as FlaskSession
 
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
@@ -50,7 +50,7 @@ app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
 # =============================================================
-# 🚀 إعداد SQLAlchemy والجلسات (تم التصحيح)
+# 🚀 إعداد SQLAlchemy والجلسات (تم تصحيح تعارض الأسماء نهائياً)
 # =============================================================
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -58,8 +58,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-class Session(db.Model):
+# ✅ تم تغيير اسم الكلاس إلى SessionModel لئلا يتعارض مع FlaskSession
+class SessionModel(db.Model):
     __tablename__ = 'sessions'
+    __table_args__ = {'extend_existing': True}
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(255), unique=True, nullable=False)
     data = db.Column(db.LargeBinary)
@@ -71,7 +73,7 @@ app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
-sess = Session()
+sess = FlaskSession()
 sess.init_app(app)
 
 with app.app_context():
@@ -275,7 +277,7 @@ def chat():
                     user_plan = {'name': 'free', 'daily_limit': 5}
                 can_chat, message = check_daily_limit(current_user.id)
                 if not can_chat:
-                    return jsonify({"reply": f"⚠️ {message}\n\n💡 يمكنك الترقية إلى خطة مدفوعة للاستمرار في المحادثات.", "limit_reached": True})
+                    return jsonify({"reply": f"⚠️ {message}\n\n💡 انتهى حد المحادثات المجانية. للاستمرار والاستفادة من **البحث بالويب، تحليل الصور، الذكاء المتقدم والردود الأسرع**، يمكنك الترقية إلى خطتنا المدفوعة بقيمة 7 ريال شهرياً.", "limit_reached": True})
         else:
             is_admin = False
             user_plan = {'name': 'free', 'daily_limit': 9999}
@@ -287,12 +289,19 @@ def chat():
             if daily_usage <= 6:
                 premium_trial = True
 
+        # ✅ تم تحديد النموذج المدفوع كـ gpt-4o بناءً على طلبك
         if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
             model = "gpt-4o"
             use_web_search = True
+            features = {"images": True}
         else:
             model = "gpt-4o-mini"
             use_web_search = False
+            features = {"images": False}
+
+        # ✅ منع المستخدم المجاني من إرسال الصور (توليد/تحليل صور)
+        if image_data and not features["images"]:
+            return jsonify({"reply": "📸 **تحليل وإنشاء الصور متاح فقط في الخطة المدفوعة.**\n\nللحصول على هذه الميزة، بالإضافة إلى **البحث في الويب والتحليل العميق والذكاء المتقدم**، يمكنك الترقية إلى خطة نبراس المدفوعة مقابل 7 ريال فقط شهرياً!"})
 
         if current_user.is_authenticated:
             add_message(str(user_id), "user", user_message)
@@ -307,7 +316,7 @@ def chat():
         for entry in chat_history:
             messages.append({"role": entry["role"], "content": entry["content"]})
 
-        if image_data:
+        if image_data and features["images"]:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
         if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث"]):
@@ -343,7 +352,7 @@ def chat():
         if premium_trial and current_user.is_authenticated:
             remaining = 6 - get_daily_usage(current_user.id)
             if remaining == 0:
-                reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام النموذج المتقدم والبحث بالويب."
+                reply += "\n\n💎 انتهت محادثاتك التجريبية المميزة. يمكنك الترقية للاستمرار في استخدام النموذج المتقدم والبحث بالويب وتحليل الصور مقابل 7 ريال شهرياً."
 
         return jsonify({"reply": reply})
 
