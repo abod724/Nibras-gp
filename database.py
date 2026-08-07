@@ -2,6 +2,10 @@ import os
 import psycopg2
 from psycopg2.extras import Json
 
+# ✅ تم حذف تعريف db نهائياً من هنا، وسنستورده من app.py
+# (لأن app.py هو المسؤول الوحيد عن تعريف قاعدة البيانات).
+from app import db
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_connection():
@@ -72,17 +76,6 @@ def init_db():
         )
     """)
 
-    # ===== جدول الجلسات (لـ Flask-Session) =====
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id SERIAL PRIMARY KEY,
-            session_id TEXT UNIQUE NOT NULL,
-            data TEXT,
-            expiry TIMESTAMP
-        )
-    """)
-
-    # ===== إدخال الخطط الافتراضية =====
     cur.execute("""
         INSERT INTO plans (name, description, price, daily_limit)
         VALUES ('free', 'خطة مجانية للاستخدام الأساسي', 0, 5)
