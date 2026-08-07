@@ -21,10 +21,10 @@ def get_user_by_email(email):
     return None
 
 def create_user(email, password, name):
-    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     execute_query(
         "INSERT INTO users (email, password_hash, name) VALUES (%s, %s, %s)",
-        (email, password_hash, name)
+        (email, hashed, name)
     )
 
 def check_password(email, password):
@@ -32,4 +32,3 @@ def check_password(email, password):
     if row:
         return bcrypt.checkpw(password.encode('utf-8'), row[0].encode('utf-8'))
     return False
-
