@@ -2,10 +2,6 @@ import os
 import psycopg2
 from psycopg2.extras import Json
 
-# ✅ تم حذف تعريف db نهائياً من هنا، وسنستورده من app.py
-# (لأن app.py هو المسؤول الوحيد عن تعريف قاعدة البيانات).
-from app import db
-
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_connection():
