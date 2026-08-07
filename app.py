@@ -5,7 +5,7 @@
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
-from flask_session import Session as FlaskSession  # ✅ التعديل 1: تغيير الاستيراد
+from flask_session import Session as FlaskSession
 
 from database import fetch_all, init_db
 from auth import User, get_user_by_id, get_user_by_email, create_user, check_password
@@ -58,7 +58,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ✅ التعديل 2: تغيير اسم كلاس الجدول وإضافة حماية من التكرار
+# ✅ تم تغيير اسم الكلاس لئلا يتعارض مع FlaskSession
 class SessionModel(db.Model):
     __tablename__ = 'sessions'
     __table_args__ = {'extend_existing': True} 
@@ -73,7 +73,6 @@ app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
-# ✅ التعديل 3: استخدام الاسم الجديد للمكتبة
 sess = FlaskSession()
 sess.init_app(app)
 
@@ -129,7 +128,7 @@ SYSTEM_PROMPT = f"""
 
 [توجيه حسب نموذج التشغيل - Model Adaptation]:
 - إذا كنت تعمل على نموذج (GPT-4o-mini / المجاني): ابدع بكل ما أوتيت من قوة! لا تظهر بمظهر البوت البسيط؛ كن سريع البديهة، عالي الحماس، استغل ملف (knowledge.md) بذكاء، وقدم إجابات ممتعة ومليانة أفكار وحيوية تخلي المستخدم يقول: "يا رجل إذا هذا المجاني كذا، أجل وشلون المدفوع؟!".
-- إذا كنت تعمل على نموذج (GPT-5-2025-08-07 / المدفوع): أطلق "الوحش"! هنا الصقها ببعضها؛ تعمّق لأقصى درجة في ملف (knowledge.md)، وفعّل أدوات البحث المتقدم في الويب لجلب أحدث وأدق البيانات والتحليلات. لا تكتفي بالإجابة، بل حلل، قارن، وابتكر رؤى استراتيجية عميقة لا تخطر على البال مع حماس يملأ المكان.
+- إذا كنت تعمل على نموذج (GPT-4o / المدفوع): أطلق "الوحش"! هنا الصقها ببعضها؛ تعمّق لأقصى درجة في ملف (knowledge.md)، وفعّل أدوات البحث المتقدم في الويب لجلب أحدث وأدق البيانات والتحليلات. لا تكتفي بالإجابة، بل حلل، قارن، وابتكر رؤى استراتيجية عميقة لا تخطر على البال مع حماس يملأ المكان.
 
 القواعد الذهبية:
 1. تجنب تماماً التحدث بالفصحى الرسمية المقعرة أو الأسلوب الأكاديمي البارد.
@@ -290,9 +289,9 @@ def chat():
             if daily_usage <= 6:
                 premium_trial = True
 
-        # ✅ التعديل 4: تحديث النموذج ليتوافق مع نبراس (gpt-5-2025-08-07)
+        # ✅ 🔥 تم تعديل النموذج المدفوع إلى GPT-4o بناءً على طلبك
         if is_admin or (current_user.is_authenticated and user_plan.get('name') == 'premium') or premium_trial:
-            model = "gpt-5-2025-08-07"
+            model = "gpt-4o"               # 🔥 تم التغيير هنا (رجعنا لـ 4o)
             use_web_search = True
             features = {"images": True}
         else:
@@ -334,7 +333,7 @@ def chat():
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=1000 if model == "gpt-5-2025-08-07" else 800,
+            max_tokens=1000 if model == "gpt-4o" else 800,
             temperature=0.8
         )
         reply = response.choices[0].message.content.strip()
