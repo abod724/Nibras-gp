@@ -4,8 +4,6 @@
 
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-
-# 🔥 استيراد المكتبات الجديدة للجلسات وقاعدة البيانات
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 
@@ -52,34 +50,36 @@ app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
 # =============================================================
-# 🚀 إعداد SQLAlchemy والجلسات (الجزء الجديد الذي يحل المشكلة)
+# 🚀 إعداد SQLAlchemy والجلسات (تم التصحيح)
 # =============================================================
 
-# 1. تكوين قاعدة البيانات لـ SQLAlchemy
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 2. تكوين Flask-Session لاستخدام SQLAlchemy
-app.config['SESSION_TYPE'] = 'sqlalchemy'
-app.config['SESSION_SQLALCHEMY'] = None  # سنحدده بعد إنشاء db
-app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'  # نفس الجدول الموجود في database.py
-app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True  # أمان إضافي
-
-# 3. إنشاء كائن SQLAlchemy واحد فقط وربطه بالتطبيق
 db = SQLAlchemy(app)
 
-# 4. الآن أخبر flask_session أن يستخدم كائن db الذي أنشأناه
-app.config['SESSION_SQLALCHEMY'] = db
+class Session(db.Model):
+    __tablename__ = 'sessions'
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(255), unique=True, nullable=False)
+    data = db.Column(db.LargeBinary)
+    expiry = db.Column(db.DateTime)
 
-# 5. تهيئة Flask-Session
+app.config['SESSION_TYPE'] = 'sqlalchemy'
+app.config['SESSION_SQLALCHEMY'] = db
+app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+
 sess = Session()
 sess.init_app(app)
 
-print("✅ تم تهيئة Flask-Session مع SQLAlchemy بنجاح!")
+with app.app_context():
+    db.create_all()
+
+print("✅ تم تهيئة Flask-Session مع SQLAlchemy وإنشاء الجدول بنجاح!")
 # =============================================================
 
-# تهيئة قاعدة البيانات (جداول المشروع الأساسية)
 init_db()
 print("✅ قاعدة البيانات جاهزة")
 
@@ -94,9 +94,6 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return get_user_by_id(user_id)
 
-# =====================================================================
-# 📂 ربط ملف المعرفة (Knowledge.md) - مع طباعة تأكيد في Logs
-# =====================================================================
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -113,7 +110,6 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
     print("⚠️ لم يتم العثور على ملف معرفة، سيتم استخدام القيمة الافتراضية.")
-# =====================================================================
 
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ذكي ورفيق درب لكل شخص يسولف معك. لست مجرد بوت تقني جاف، بل شخصية حية، ذكية، سريعة البديهة، وتملك روحاً مرحة وحماسية ترفع العزوة وتخلي اللي يسولف معك وده ما يوقف.
@@ -149,17 +145,6 @@ SYSTEM_PROMPT = f"""
 - **لا تخرج عن هذا النص** عند سؤالك عن الترقية، ولا تذكر أي بدائل أخرى.
 ═══════════════════════════════════════════════════════════
 """
-
-# =====================================================================
-# واجهات HTML (تم حذفها من هنا للاختصار، لكنها موجودة في الكود الأصلي،
-# وسأضعها كاملة في المرفق النهائي)
-# =====================================================================
-
-# ... (باقي كود HTML كما هو، لم يتغير) ...
-
-# =====================================================================
-# المسارات (جميع المسارات كما هي، لم تتغير)
-# =====================================================================
 
 @app.route('/')
 def index():
@@ -268,7 +253,6 @@ def chat():
         if not SYSTEM_ENABLED:
             return jsonify({"reply": "⚠️ نظام المحادثات معطل حالياً. يرجى المحاولة لاحقاً."})
 
-        # ===== تحديد معرف المستخدم =====
         if current_user.is_authenticated:
             user_id = current_user.id
             is_guest = False
@@ -279,7 +263,6 @@ def chat():
             user_id = session['guest_id']
             is_guest = True
 
-        # ===== التحقق من صلاحيات المسؤول والمستخدمين =====
         if current_user.is_authenticated:
             if current_user.email == "abdullaha0569361@gmail.com":
                 is_admin = True
@@ -298,7 +281,6 @@ def chat():
             user_plan = {'name': 'free', 'daily_limit': 9999}
             can_chat = True
 
-        # ===== تحديد النموذج ومصادر المعرفة =====
         premium_trial = False
         if current_user.is_authenticated and user_plan.get('name') == 'free':
             daily_usage = get_daily_usage(current_user.id)
@@ -312,7 +294,6 @@ def chat():
             model = "gpt-4o-mini"
             use_web_search = False
 
-        # ===== إضافة رسالة المستخدم =====
         if current_user.is_authenticated:
             add_message(str(user_id), "user", user_message)
             chat_history = get_history(str(user_id), limit=10)
@@ -329,7 +310,6 @@ def chat():
         if image_data:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]})
 
-        # ===== البحث بالويب =====
         if use_web_search and any(word in user_message for word in ["أخبار", "اليوم", "الآن", "جديد", "تحديث"]):
             try:
                 print(f"🔍 محاولة البحث بالويب عن: {user_message}")
@@ -341,7 +321,6 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -352,18 +331,15 @@ def chat():
         if not reply:
             reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
 
-        # ===== حفظ رد المساعد =====
         if current_user.is_authenticated:
             add_message(str(user_id), "assistant", reply)
         else:
             if 'guest_history' in session:
                 session['guest_history'].append({"role": "assistant", "content": reply})
 
-        # ===== زيادة العداد =====
         if current_user.is_authenticated and not is_admin:
             increment_daily_usage(current_user.id)
 
-        # ===== تذكير التجربة =====
         if premium_trial and current_user.is_authenticated:
             remaining = 6 - get_daily_usage(current_user.id)
             if remaining == 0:
