@@ -2,27 +2,17 @@ import os
 import psycopg2
 from psycopg2.extras import Json
 
-# =====================================================================
-# 📌 إعدادات الحدود اليومية (عدّل الأرقام هنا بسهولة)
-# =====================================================================
-FREE_PLAN_DAILY_LIMIT = 5       # الحد اليومي للخطة المجانية
-PREMIUM_PLAN_DAILY_LIMIT = 9999 # الحد اليومي للخطة المدفوعة (غير محدود)
-# =====================================================================
-
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_connection():
-    """إنشاء اتصال بقاعدة البيانات"""
     if not DATABASE_URL:
-        raise Exception("DATABASE_URL غير موجود في متغيرات البيئة")
+        raise Exception("DATABASE_URL غير موجود")
     return psycopg2.connect(DATABASE_URL)
 
 def init_db():
-    """إنشاء جميع الجداول إذا لم تكن موجودة، وإدخال الخطط الافتراضية"""
     conn = get_connection()
     cur = conn.cursor()
 
-    # ===== جدول المستخدمين =====
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -30,22 +20,22 @@ def init_db():
             password_hash TEXT NOT NULL,
             name TEXT,
             custom_daily_limit INT DEFAULT NULL,
+            reset_token TEXT DEFAULT NULL,
+            reset_token_expiry TIMESTAMP DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # ===== جدول المحادثات =====
     cur.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # ===== جدول خطط الاشتراك =====
     cur.execute("""
         CREATE TABLE IF NOT EXISTS plans (
             id SERIAL PRIMARY KEY,
@@ -58,7 +48,6 @@ def init_db():
         )
     """)
 
-    # ===== جدول اشتراكات المستخدمين =====
     cur.execute("""
         CREATE TABLE IF NOT EXISTS user_subscriptions (
             id SERIAL PRIMARY KEY,
@@ -73,7 +62,6 @@ def init_db():
         )
     """)
 
-    # ===== جدول الاستخدام اليومي =====
     cur.execute("""
         CREATE TABLE IF NOT EXISTS daily_usage (
             id SERIAL PRIMARY KEY,
@@ -84,18 +72,26 @@ def init_db():
         )
     """)
 
-    # ===== إدخال الخطط الافتراضية (مجانية ومدفوعة) =====
     cur.execute("""
-        INSERT INTO plans (name, description, price, daily_limit)
-        VALUES ('free', 'خطة مجانية للاستخدام الأساسي', 0, %s)
-        ON CONFLICT (name) DO NOTHING
-    """, (FREE_PLAN_DAILY_LIMIT,))
+        CREATE TABLE IF NOT EXISTS sessions (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT UNIQUE NOT NULL,
+            data BYTEA,
+            expiry TIMESTAMP
+        )
+    """)
 
     cur.execute("""
         INSERT INTO plans (name, description, price, daily_limit)
-        VALUES ('premium', 'خطة مدفوعة بمميزات غير محدودة', 5.00, %s)
+        VALUES ('free', 'خطة مجانية للاستخدام الأساسي', 0, 5)
         ON CONFLICT (name) DO NOTHING
-    """, (PREMIUM_PLAN_DAILY_LIMIT,))
+    """)
+
+    cur.execute("""
+        INSERT INTO plans (name, description, price, daily_limit)
+        VALUES ('premium', 'خطة مدفوعة بمميزات غير محدودة', 5.00, 9999)
+        ON CONFLICT (name) DO NOTHING
+    """)
 
     conn.commit()
     cur.close()
@@ -103,7 +99,6 @@ def init_db():
     print("✅ تم تهيئة قاعدة البيانات بنجاح")
 
 def execute_query(query, params=None):
-    """تنفيذ استعلام (INSERT, UPDATE, DELETE)"""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(query, params or ())
@@ -112,7 +107,6 @@ def execute_query(query, params=None):
     conn.close()
 
 def fetch_all(query, params=None):
-    """استرجاع جميع الصفوف من استعلام SELECT"""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(query, params or ())
@@ -122,7 +116,6 @@ def fetch_all(query, params=None):
     return rows
 
 def fetch_one(query, params=None):
-    """استرجاع صف واحد من استعلام SELECT"""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(query, params or ())
