@@ -72,17 +72,15 @@ def init_db():
         )
     """)
 
-    # ===== جدول الجلسات (لـ Flask-Session) =====
     cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id SERIAL PRIMARY KEY,
             session_id TEXT UNIQUE NOT NULL,
-            data TEXT,
+            data BYTEA,
             expiry TIMESTAMP
         )
     """)
 
-    # ===== إدخال الخطط الافتراضية =====
     cur.execute("""
         INSERT INTO plans (name, description, price, daily_limit)
         VALUES ('free', 'خطة مجانية للاستخدام الأساسي', 0, 5)
