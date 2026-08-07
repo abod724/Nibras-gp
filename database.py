@@ -1,6 +1,5 @@
 import os
 import psycopg2
-from psycopg2.extras import Json
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -43,7 +42,6 @@ def init_db():
             description TEXT,
             price DECIMAL(10, 2) DEFAULT 0,
             daily_limit INT DEFAULT 5,
-            features JSONB DEFAULT '{}',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -56,9 +54,7 @@ def init_db():
             status VARCHAR(20) DEFAULT 'active',
             start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             end_date TIMESTAMP,
-            stripe_subscription_id VARCHAR(255),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -72,31 +68,9 @@ def init_db():
         )
     """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id SERIAL PRIMARY KEY,
-            session_id TEXT UNIQUE NOT NULL,
-            data BYTEA,
-            expiry TIMESTAMP
-        )
-    """)
-
-    cur.execute("""
-        INSERT INTO plans (name, description, price, daily_limit)
-        VALUES ('free', 'خطة مجانية للاستخدام الأساسي', 0, 5)
-        ON CONFLICT (name) DO NOTHING
-    """)
-
-    cur.execute("""
-        INSERT INTO plans (name, description, price, daily_limit)
-        VALUES ('premium', 'خطة مدفوعة بمميزات غير محدودة', 5.00, 9999)
-        ON CONFLICT (name) DO NOTHING
-    """)
-
     conn.commit()
     cur.close()
     conn.close()
-    print("✅ تم تهيئة قاعدة البيانات بنجاح")
 
 def execute_query(query, params=None):
     conn = get_connection()
