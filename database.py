@@ -73,6 +73,15 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT UNIQUE NOT NULL,
+            data BYTEA,
+            expiry TIMESTAMP
+        )
+    """)
+
+    cur.execute("""
         INSERT INTO plans (name, description, price, daily_limit)
         VALUES ('free', 'خطة مجانية للاستخدام الأساسي', 0, 5)
         ON CONFLICT (name) DO NOTHING
