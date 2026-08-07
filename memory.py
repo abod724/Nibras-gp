@@ -1,4 +1,3 @@
-
 from database import execute_query, fetch_all, fetch_one, init_db
 
 # تهيئة قاعدة البيانات (إنشاء الجداول)
