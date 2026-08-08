@@ -813,21 +813,21 @@ def chat():
             session_memory[user_id] = []
 
         # =========================================================
-        # ✅ التعديل: استبدال النماذج بـ GPT-5
+        # ✅ التعديل: جميع المستخدمين يستخدمون gpt-5-mini
         # =========================================================
         if is_admin:
-            model = "gpt-5"                     # ✅ تغيير من gpt-4o
+            model = "gpt-5-mini"                # ✅ الجميع gpt-5-mini
             use_web_search = True
             allow_images = True
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
-            model = "gpt-5"                     # ✅ تغيير من gpt-4o
+            model = "gpt-5-mini"                # ✅ الجميع gpt-5-mini
             use_web_search = True
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
-            model = "gpt-5-mini"                # ✅ تغيير من gpt-4o-mini
-            use_web_search = False
+            model = "gpt-5-mini"                # ✅ الجميع gpt-5-mini
+            use_web_search = False               # الضيف لا يبحث
             allow_images = False
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
@@ -878,6 +878,7 @@ def chat():
                 "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]
             })
 
+        # ===== البحث بالويب =====
         if use_web_search:
             try:
                 full_context = ""
@@ -888,7 +889,7 @@ def chat():
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
                 search_response = client.responses.create(
-                    model="gpt-4o-mini",
+                    model="gpt-5-mini",        # استخدام gpt-5-mini للبحث أيضاً
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
                     input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
                     tools=[{"type": "web_search"}],
@@ -901,6 +902,7 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
+        # ===== الرد النهائي =====
         try:
             response = client.chat.completions.create(
                 model=model,
