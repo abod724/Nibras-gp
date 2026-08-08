@@ -242,7 +242,7 @@ HTML_TEMPLATE = """
         #removeImageBtn { background: none; border: none; color: #c33; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 12px; }
         #removeImageBtn:hover { background: #fde8e8; }
         .input-area { display: flex; align-items: flex-end; justify-content: center; gap: 8px; padding: 8px 14px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; min-height: 60px; }
-        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 0; font-size: 16px; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 20px; max-height: 80px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.4; }
+        .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 0; font-size: 18px; font-weight: 500; outline: none; color: #1a2b3c; direction: rtl; resize: none; overflow: hidden; min-height: 20px; max-height: 80px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.4; }
         .input-area textarea::placeholder { color: #9aabbc; }
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .input-area .btn-icon:hover { background: #e8ecf0; }
