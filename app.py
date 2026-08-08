@@ -169,7 +169,7 @@ HTML_TEMPLATE = """
         .dropdown .conv-item:hover { background: #f5f7fa; }
         .dropdown .conv-item:last-child { border-bottom: none; }
         #chat { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; background: #ffffff; font-size: 16px; }
-        .msg { max-width: 80%; padding: 12px 18px; border-radius: 20px; font-size: 16px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+        .msg { max-width: 80%; padding: 12px 18px; border-radius: 20px; font-size: 16px; font-weight: 500; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
         .msg.user { align-self: flex-end; background: transparent; color: #1a2b3c; border-bottom-left-radius: 6px; }
         .msg.bot { align-self: flex-start; background: #ffffff; color: #1a2b3c; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 10px; opacity: 0.35; display: block; margin-top: 4px; }
@@ -813,21 +813,21 @@ def chat():
             session_memory[user_id] = []
 
         # =========================================================
-        # ✅ التعديل: جميع المستخدمين يستخدمون gpt-5-mini
+        # ✅ جميع المستخدمين يستخدمون gpt-5-mini
         # =========================================================
         if is_admin:
-            model = "gpt-5-mini"                # ✅ الجميع gpt-5-mini
+            model = "gpt-5-mini"
             use_web_search = True
             allow_images = True
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
-            model = "gpt-5-mini"                # ✅ الجميع gpt-5-mini
+            model = "gpt-5-mini"
             use_web_search = True
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
-            model = "gpt-5-mini"                # ✅ الجميع gpt-5-mini
-            use_web_search = False               # الضيف لا يبحث
+            model = "gpt-5-mini"
+            use_web_search = False
             allow_images = False
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
@@ -889,7 +889,7 @@ def chat():
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
                 search_response = client.responses.create(
-                    model="gpt-5-mini",        # استخدام gpt-5-mini للبحث أيضاً
+                    model="gpt-5-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
                     input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
                     tools=[{"type": "web_search"}],
