@@ -813,19 +813,22 @@ def chat():
             session_memory[user_id] = []
 
         # =========================================================
-        # ✅ جميع المستخدمين يستخدمون gpt-5-mini
+        # ✅ سياسة النماذج حسب نوع المستخدم
         # =========================================================
         if is_admin:
-            model = "gpt-5-mini"
+            # المشرف: نموذج متقدم + بحث + صور (غير محدود)
+            model = "gpt-5.4-mini"
             use_web_search = True
             allow_images = True
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
-            model = "gpt-5-mini"
+            # المسجل التجريبي: نموذج متقدم + بحث + صور (5 محادثات)
+            model = "gpt-5.4-mini"
             use_web_search = True
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
+            # الضيف: نموذج اقتصادي + بدون بحث + بدون صور (غير محدود)
             model = "gpt-5-mini"
             use_web_search = False
             allow_images = False
@@ -889,7 +892,7 @@ def chat():
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
                 search_response = client.responses.create(
-                    model="gpt-5-mini",
+                    model="gpt-5.4-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
                     input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
                     tools=[{"type": "web_search"}],
