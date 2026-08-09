@@ -813,15 +813,15 @@ def chat():
             session_memory[user_id] = []
 
         # =========================================================
-        # ✅ سياسة النماذج حسب نوع المستخدم
+        # ✅ جميع المستخدمين يستخدمون gpt-5-mini
         # =========================================================
         if is_admin:
-            model = "gpt-5.4-mini"
+            model = "gpt-5-mini"
             use_web_search = True
             allow_images = True
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
-            model = "gpt-5.4-mini"
+            model = "gpt-5-mini"
             use_web_search = True
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
@@ -889,7 +889,7 @@ def chat():
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
                 search_response = client.responses.create(
-                    model="gpt-5.4-mini",
+                    model="gpt-5-mini",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
                     input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
                     tools=[{"type": "web_search"}],
@@ -907,7 +907,7 @@ def chat():
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_completion_tokens=1000,  # ✅ تم التعديل من max_tokens
+                max_tokens=1000,
                 temperature=0.8
             )
             reply = response.choices[0].message.content.strip()
@@ -920,7 +920,7 @@ def chat():
                 response = client.chat.completions.create(
                     model=fallback_model,
                     messages=messages,
-                    max_completion_tokens=800,  # ✅ تم التعديل من max_tokens
+                    max_tokens=800,
                     temperature=0.8
                 )
                 reply = response.choices[0].message.content.strip()
