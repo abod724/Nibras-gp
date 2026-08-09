@@ -816,19 +816,16 @@ def chat():
         # ✅ سياسة النماذج حسب نوع المستخدم
         # =========================================================
         if is_admin:
-            # المشرف: نموذج متقدم + بحث + صور (غير محدود)
             model = "gpt-5.4-mini"
             use_web_search = True
             allow_images = True
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
-            # المسجل التجريبي: نموذج متقدم + بحث + صور (5 محادثات)
             model = "gpt-5.4-mini"
             use_web_search = True
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
-            # الضيف: نموذج اقتصادي + بدون بحث + بدون صور (غير محدود)
             model = "gpt-5-mini"
             use_web_search = False
             allow_images = False
@@ -910,7 +907,7 @@ def chat():
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=1000,
+                max_completion_tokens=1000,  # ✅ تم التعديل من max_tokens
                 temperature=0.8
             )
             reply = response.choices[0].message.content.strip()
@@ -923,7 +920,7 @@ def chat():
                 response = client.chat.completions.create(
                     model=fallback_model,
                     messages=messages,
-                    max_tokens=800,
+                    max_completion_tokens=800,  # ✅ تم التعديل من max_tokens
                     temperature=0.8
                 )
                 reply = response.choices[0].message.content.strip()
