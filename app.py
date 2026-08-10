@@ -10,10 +10,29 @@ app = Flask(__name__)
 
 # إعداد المفاتيح السرية
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
+
+# ========== قراءة مفاتيح API من المتغيرات ==========
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+
 if not OPENAI_API_KEY:
     raise Exception("OPENAI_API_KEY غير موجود! يجب إضافته في متغيرات البيئة")
+
+# ========== تهيئة العملاء ==========
+# العميل الأساسي (OpenAI)
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+# عميل DeepSeek (اختياري، فقط إذا تم وضع المفتاح)
+deepseek_client = None
+if DEEPSEEK_API_KEY:
+    try:
+        deepseek_client = openai.OpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
+        print("✅ تم تفعيل DeepSeek بنجاح!")
+    except Exception as e:
+        print(f"⚠️ فشل تفعيل DeepSeek: {e}")
 
 SYSTEM_ENABLED = True
 
@@ -220,8 +239,8 @@ HTML_TEMPLATE = """
             animation: fadeOut 0.5s ease forwards;
         }
         @keyframes fadeOut {
-            from { opacity: 1; transform: scale(1); }
-            to { opacity: 0; transform: scale(0.9); }
+            from { opacity: 1; transform: scale(0.9); }
+            to { opacity: 0; transform: scale(1); }
         }
 
         #imagePreviewContainer {
@@ -902,19 +921,55 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
+        # =========================================================
+        # ===== الرد النهائي (مع تفعيل DeepSeek أولاً) =====
+        # =========================================================
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=1000,
-                temperature=0.8
-            )
-            reply = response.choices[0].message.content.strip()
-            if not reply:
-                reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+            # حافظ على الإعدادات الافتراضية للنموذج الأساسي
+            current_model = model
+            
+            # 1. محاولة استخدام DeepSeek (لأنه أرخص وأقوى)
+            if deepseek_client:
+                try:
+                    print(f"🔄 جاري استخدام DeepSeek...")
+                    response = deepseek_client.chat.completions.create(
+                        model="deepseek-chat", # النموذج الصحيح لـ DeepSeek
+                        messages=messages,
+                        max_tokens=1000,
+                        temperature=0.8
+                    )
+                    reply = response.choices[0].message.content.strip()
+                    if not reply:
+                        reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+                    print("✅ تم الرد عبر DeepSeek بنجاح!")
+                    
+                except Exception as ds_e:
+                    # إذا فشل DeepSeek، نستخدم OpenAI كاحتياطي
+                    print(f"⚠️ فشل DeepSeek، التحول إلى OpenAI. الخطأ: {ds_e}")
+                    response = client.chat.completions.create(
+                        model=current_model,
+                        messages=messages,
+                        max_tokens=1000,
+                        temperature=0.8
+                    )
+                    reply = response.choices[0].message.content.strip()
+                    if not reply:
+                        reply = "فشل النموذج المتقدم، تم التبديل للنموذج العادي."
+            else:
+                # 2. في حال عدم وجود مفتاح DeepSeek، نستخدم OpenAI مباشرة
+                print("ℹ️ مفتاح DeepSeek غير موجود، استخدام OpenAI مباشرة.")
+                response = client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    max_tokens=1000,
+                    temperature=0.8
+                )
+                reply = response.choices[0].message.content.strip()
+                if not reply:
+                    reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
+
         except openai.BadRequestError as e:
-            print(f"⚠️ فشل نموذج {model}: {e}. جارٍ التبديل لـ gpt-4o-mini.")
+            print(f"⚠️ فشل النموذج الأساسي: {e}. جارٍ التبديل لـ gpt-4o-mini.")
             try:
                 fallback_model = "gpt-4o-mini"
                 response = client.chat.completions.create(
@@ -929,7 +984,7 @@ def chat():
             except Exception as e2:
                 reply = f"حدث خطأ في الاتصال بـ OpenAI: {str(e2)}"
         except Exception as e:
-            print(f"❌ خطأ: {e}")
+            print(f"❌ خطأ عام: {e}")
             reply = "حدث خطأ في السيرفر، حاول مرة أخرى."
 
         session_memory[user_id].append({"role": "assistant", "content": reply})
