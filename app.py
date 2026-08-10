@@ -4,6 +4,7 @@ import os
 import secrets
 import json
 import hashlib
+import sqlite3
 from datetime import datetime
 
 app = Flask(__name__)
@@ -31,30 +32,47 @@ if DEEPSEEK_API_KEY:
 
 SYSTEM_ENABLED = True
 
-CONVERSATIONS_FILE = "conversations.json"
+# ========== إعداد قاعدة بيانات SQLite ==========
+DATABASE_FILE = "conversations.db"
 
-def load_conversations():
-    if os.path.exists(CONVERSATIONS_FILE):
-        try:
-            with open(CONVERSATIONS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
+def init_db():
+    conn = sqlite3.connect(DATABASE_FILE)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT,
+            messages TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-def save_conversations(data):
-    with open(CONVERSATIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+init_db()
+
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def get_user_conversations(user_id):
-    all_conv = load_conversations()
-    return all_conv.get(user_id, [])
+    conn = get_db_connection()
+    rows = conn.execute('SELECT id, title, timestamp FROM conversations WHERE user_id = ? ORDER BY timestamp DESC', (user_id,)).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def load_conversation_by_id(user_id, conv_id):
+    conn = get_db_connection()
+    row = conn.execute('SELECT messages FROM conversations WHERE user_id = ? AND id = ?', (user_id, conv_id)).fetchone()
+    conn.close()
+    if row:
+        return json.loads(row['messages'])
+    return None
 
 def save_user_conversation(user_id, conversation, conv_id=None):
-    all_conv = load_conversations()
-    if user_id not in all_conv:
-        all_conv[user_id] = []
-    
+    conn = get_db_connection()
     if conv_id is None:
         if conversation and len(conversation) > 0:
             title = conversation[0]["content"][:30]
@@ -64,29 +82,27 @@ def save_user_conversation(user_id, conversation, conv_id=None):
             title = "محادثة جديدة"
         
         new_conv_id = hashlib.md5(f"{user_id}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
-        all_conv[user_id].append({
-            "id": new_conv_id,
-            "messages": conversation,
-            "timestamp": datetime.now().isoformat(),
-            "title": title
-        })
-        save_conversations(all_conv)
+        messages_json = json.dumps(conversation, ensure_ascii=False)
+        timestamp = datetime.now().isoformat()
+        
+        conn.execute(
+            'INSERT INTO conversations (id, user_id, title, messages, timestamp) VALUES (?, ?, ?, ?, ?)',
+            (new_conv_id, user_id, title, messages_json, timestamp)
+        )
+        conn.commit()
+        conn.close()
         return new_conv_id
     else:
-        for conv in all_conv[user_id]:
-            if conv["id"] == conv_id:
-                conv["messages"] = conversation
-                conv["timestamp"] = datetime.now().isoformat()
-                save_conversations(all_conv)
-                return conv_id
-        return save_user_conversation(user_id, conversation, None)
-
-def load_conversation_by_id(user_id, conv_id):
-    conversations = get_user_conversations(user_id)
-    for conv in conversations:
-        if conv["id"] == conv_id:
-            return conv["messages"]
-    return None
+        messages_json = json.dumps(conversation, ensure_ascii=False)
+        timestamp = datetime.now().isoformat()
+        
+        conn.execute(
+            'UPDATE conversations SET messages = ?, timestamp = ? WHERE user_id = ? AND id = ?',
+            (messages_json, timestamp, user_id, conv_id)
+        )
+        conn.commit()
+        conn.close()
+        return conv_id
 
 session_memory = {}
 
@@ -769,9 +785,7 @@ def plans():
 def history():
     user_id = get_user_id()
     conversations = get_user_conversations(user_id)
-    conversations.sort(key=lambda x: x["timestamp"], reverse=True)
-    result = [{"id": c["id"], "title": c["title"]} for c in conversations]
-    return jsonify({"conversations": result})
+    return jsonify({"conversations": conversations})
 
 @app.route('/load_conversation/<conv_id>')
 def load_conversation(conv_id):
@@ -820,7 +834,6 @@ def chat():
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
-            # ===== التعديل المهم هنا: نسمح للضيوف باستخدام الصور أيضاً =====
             model = "gpt-5-mini"
             use_web_search = False
             allow_images = True  
