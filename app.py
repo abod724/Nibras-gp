@@ -4,75 +4,44 @@ import os
 import secrets
 import json
 import hashlib
-import sqlite3
 from datetime import datetime
 
 app = Flask(__name__)
 
+# إعداد المفاتيح السرية
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
-
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-
 if not OPENAI_API_KEY:
     raise Exception("OPENAI_API_KEY غير موجود! يجب إضافته في متغيرات البيئة")
-
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-deepseek_client = None
-if DEEPSEEK_API_KEY:
-    try:
-        deepseek_client = openai.OpenAI(
-            api_key=DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com"
-        )
-        print("✅ تم تفعيل DeepSeek بنجاح!")
-    except Exception as e:
-        print(f"⚠️ فشل تفعيل DeepSeek: {e}")
 
 SYSTEM_ENABLED = True
 
-# ========== إعداد قاعدة بيانات SQLite ==========
-DATABASE_FILE = "conversations.db"
+# ========== نظام تخزين المحادثات (في ملف JSON) ==========
+CONVERSATIONS_FILE = "conversations.json"
 
-def init_db():
-    conn = sqlite3.connect(DATABASE_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            title TEXT,
-            messages TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-    conn.close()
+def load_conversations():
+    if os.path.exists(CONVERSATIONS_FILE):
+        try:
+            with open(CONVERSATIONS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
 
-init_db()
-
-def get_db_connection():
-    conn = sqlite3.connect(DATABASE_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+def save_conversations(data):
+    with open(CONVERSATIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def get_user_conversations(user_id):
-    conn = get_db_connection()
-    rows = conn.execute('SELECT id, title, timestamp FROM conversations WHERE user_id = ? ORDER BY timestamp DESC', (user_id,)).fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
-
-def load_conversation_by_id(user_id, conv_id):
-    conn = get_db_connection()
-    row = conn.execute('SELECT messages FROM conversations WHERE user_id = ? AND id = ?', (user_id, conv_id)).fetchone()
-    conn.close()
-    if row:
-        return json.loads(row['messages'])
-    return None
+    all_conv = load_conversations()
+    return all_conv.get(user_id, [])
 
 def save_user_conversation(user_id, conversation, conv_id=None):
-    conn = get_db_connection()
+    all_conv = load_conversations()
+    if user_id not in all_conv:
+        all_conv[user_id] = []
+    
     if conv_id is None:
         if conversation and len(conversation) > 0:
             title = conversation[0]["content"][:30]
@@ -82,30 +51,34 @@ def save_user_conversation(user_id, conversation, conv_id=None):
             title = "محادثة جديدة"
         
         new_conv_id = hashlib.md5(f"{user_id}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
-        messages_json = json.dumps(conversation, ensure_ascii=False)
-        timestamp = datetime.now().isoformat()
-        
-        conn.execute(
-            'INSERT INTO conversations (id, user_id, title, messages, timestamp) VALUES (?, ?, ?, ?, ?)',
-            (new_conv_id, user_id, title, messages_json, timestamp)
-        )
-        conn.commit()
-        conn.close()
+        all_conv[user_id].append({
+            "id": new_conv_id,
+            "messages": conversation,
+            "timestamp": datetime.now().isoformat(),
+            "title": title
+        })
+        save_conversations(all_conv)
         return new_conv_id
     else:
-        messages_json = json.dumps(conversation, ensure_ascii=False)
-        timestamp = datetime.now().isoformat()
-        
-        conn.execute(
-            'UPDATE conversations SET messages = ?, timestamp = ? WHERE user_id = ? AND id = ?',
-            (messages_json, timestamp, user_id, conv_id)
-        )
-        conn.commit()
-        conn.close()
-        return conv_id
+        for conv in all_conv[user_id]:
+            if conv["id"] == conv_id:
+                conv["messages"] = conversation
+                conv["timestamp"] = datetime.now().isoformat()
+                save_conversations(all_conv)
+                return conv_id
+        return save_user_conversation(user_id, conversation, None)
 
+def load_conversation_by_id(user_id, conv_id):
+    conversations = get_user_conversations(user_id)
+    for conv in conversations:
+        if conv["id"] == conv_id:
+            return conv["messages"]
+    return None
+
+# ========== الذاكرة المؤقتة للجلسة الحالية ==========
 session_memory = {}
 
+# ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -120,27 +93,27 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
+# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
-أنت "نبراس"، مساعد ذكي على منصة "نبراس كلاود". أنت برنامج محايد، عاقل، ومتزن. لا ترتبط بأي شركة أو جهة أخرى.
+أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
 **مصادر معرفتك:**
 1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
 2. **معرفتك العامة**.
-3. **البحث بالويب** (عند تفعيله).
+3. **البحث بالويب** تستخدمه عندما يسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.
 
 **ملف المعرفة الخاص بك:**
 {knowledge_content}
 
-**تعليمات الشخصية والسلوك:**
-- **اللهجة:** تتحدث باللهجة السعودية العامية البيضاء.
-- **السلوك العام:** كن **عاقلاً ومتزناً** في ردودك. أنت شخص بالغ وهادئ. لا تكن مرحاً أو مبالغاً في العاطفة. ردودك يجب أن تكون محايدة، مباشرة، ومهنية.
-- **التعامل مع الإيموجي:** **ممنوع تماماً** استخدام أي إيموجيات (مثل 🤔، 🤭، 😊، 💡، ✅). لا تستخدمها نهائياً في أي رد.
-- **ممنوعات صارمة:** ممنوع كتابة "هههه"، "هاها"، "هه" أو أي صوت ضحك كتابي. وممنوع اختلاق القصص أو الهلوسة.
-- **الإجابة عن الهوية:**
-    - إذا سألك أحد "من طورك؟ من سواك؟ من برمجك؟"، يجب أن يكون جوابك حرفياً بهذه الجملة فقط: **"طورني وبرمجني فريق نبراس كلاود العالمي."**
-- إذا سألك عن شيء لا تعرفه، قل بصراحة: "ما عندي علم بهذا".
+**تعليمات مهمة:**
+- إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
+- إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
+- دائماً حافظ على لهجتك العامية البيضاء.
+- إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
+- **لا تكتب "لحظة" أو "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
 """
 
+# ========== دالة إنشاء الصور ==========
 def generate_image(prompt):
     try:
         response = client.images.generate(
@@ -154,6 +127,7 @@ def generate_image(prompt):
         print(f"❌ فشل توليد الصورة: {e}")
         return None
 
+# ========== واجهة الدردشة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -203,6 +177,7 @@ HTML_TEMPLATE = """
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .generated-image { max-width: 100%; border-radius: 12px; margin: 8px 0; border: 1px solid #e0e0e0; display: block; }
 
+        /* ===== رسالة الترحيب في وسط الشاشة ===== */
         .welcome-overlay {
             position: fixed;
             top: 0;
@@ -245,8 +220,8 @@ HTML_TEMPLATE = """
             animation: fadeOut 0.5s ease forwards;
         }
         @keyframes fadeOut {
-            from { opacity: 1; transform: scale(0.9); }
-            to { opacity: 0; transform: scale(1); }
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.9); }
         }
 
         #imagePreviewContainer {
@@ -368,6 +343,7 @@ HTML_TEMPLATE = """
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
 
+        // ===== تحميل المحادثات السابقة =====
         async function loadHistory() {
             try {
                 const res = await fetch('/history');
@@ -392,6 +368,7 @@ HTML_TEMPLATE = """
             }
         }
 
+        // ===== تحميل محادثة معينة =====
         async function loadConversation(convId) {
             try {
                 const res = await fetch(`/load_conversation/${convId}`);
@@ -411,6 +388,7 @@ HTML_TEMPLATE = """
             }
         }
 
+        // ===== محادثة جديدة =====
         document.querySelector('[data-action="new"]').addEventListener('click', function() {
             chatBox.innerHTML = '';
             conversationHistory = [];
@@ -429,6 +407,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== دالة addMessage =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
@@ -488,8 +467,10 @@ HTML_TEMPLATE = """
             return el;
         }
 
+        // ===== رسالة الترحيب في وسط الشاشة (5 ثوانٍ) =====
         function showWelcome() {
             if (!sessionStorage.getItem('welcomeShown')) {
+                // إنشاء عنصر الترحيب
                 const overlay = document.createElement('div');
                 overlay.className = 'welcome-overlay';
                 overlay.innerHTML = `
@@ -501,6 +482,7 @@ HTML_TEMPLATE = """
                 document.body.appendChild(overlay);
                 sessionStorage.setItem('welcomeShown', 'true');
                 
+                // إزالة الترحيب بعد 5 ثوانٍ
                 setTimeout(() => {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
@@ -510,6 +492,7 @@ HTML_TEMPLATE = """
                     }
                 }, 5000);
                 
+                // إزالة الترحيب عند النقر أو الكتابة
                 const removeWelcome = function() {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
@@ -525,6 +508,7 @@ HTML_TEMPLATE = """
             }
         }
 
+        // ===== باقي الكود =====
         function showImagePreview(dataUrl) {
             imagePreview.src = dataUrl;
             imagePreviewContainer.style.display = 'flex';
@@ -670,6 +654,7 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
+        // ===== تشغيل الترحيب عند تحميل الصفحة =====
         showWelcome();
 
     })();
@@ -678,6 +663,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# ========== صفحات الدخول والخطط ==========
 LOGIN_HTML = """
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -752,6 +738,7 @@ PLANS_HTML = """
 </div></body></html>
 """
 
+# ========== مسارات التطبيق ==========
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -785,7 +772,9 @@ def plans():
 def history():
     user_id = get_user_id()
     conversations = get_user_conversations(user_id)
-    return jsonify({"conversations": conversations})
+    conversations.sort(key=lambda x: x["timestamp"], reverse=True)
+    result = [{"id": c["id"], "title": c["title"]} for c in conversations]
+    return jsonify({"conversations": result})
 
 @app.route('/load_conversation/<conv_id>')
 def load_conversation(conv_id):
@@ -823,6 +812,9 @@ def chat():
         if conv_id is None:
             session_memory[user_id] = []
 
+        # =========================================================
+        # ✅ جميع المستخدمين يستخدمون gpt-5-mini
+        # =========================================================
         if is_admin:
             model = "gpt-5-mini"
             use_web_search = True
@@ -836,10 +828,13 @@ def chat():
         else:
             model = "gpt-5-mini"
             use_web_search = False
-            allow_images = True  
+            allow_images = False
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
 
+        # =========================================================
+        # كشف طلب إنشاء صورة
+        # =========================================================
         draw_keywords = [
             "ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", 
             "رسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي",
@@ -866,6 +861,9 @@ def chat():
             else:
                 print("⚠️ فشل توليد الصورة، نكمل للرد النصي.")
 
+        # =========================================================
+        # باقي الكود
+        # =========================================================
         session_memory[user_id].append({"role": "user", "content": user_message})
         chat_history = session_memory[user_id][-10:]
 
@@ -880,6 +878,7 @@ def chat():
                 "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]
             })
 
+        # ===== البحث بالويب =====
         if use_web_search:
             try:
                 full_context = ""
@@ -903,48 +902,19 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
+        # ===== الرد النهائي =====
         try:
-            current_model = model
-            
-            if deepseek_client:
-                try:
-                    print(f"🔄 جاري استخدام DeepSeek...")
-                    response = deepseek_client.chat.completions.create(
-                        model="deepseek-chat",
-                        messages=messages,
-                        max_tokens=1000,
-                        temperature=0.8
-                    )
-                    reply = response.choices[0].message.content.strip()
-                    if not reply:
-                        reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-                    print("✅ تم الرد عبر DeepSeek بنجاح!")
-                    
-                except Exception as ds_e:
-                    print(f"⚠️ فشل DeepSeek، التحول إلى OpenAI. الخطأ: {ds_e}")
-                    response = client.chat.completions.create(
-                        model=current_model,
-                        messages=messages,
-                        max_tokens=1000,
-                        temperature=0.8
-                    )
-                    reply = response.choices[0].message.content.strip()
-                    if not reply:
-                        reply = "فشل النموذج المتقدم، تم التبديل للنموذج العادي."
-            else:
-                print("ℹ️ مفتاح DeepSeek غير موجود، استخدام OpenAI مباشرة.")
-                response = client.chat.completions.create(
-                    model=current_model,
-                    messages=messages,
-                    max_tokens=1000,
-                    temperature=0.8
-                )
-                reply = response.choices[0].message.content.strip()
-                if not reply:
-                    reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
-
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.8
+            )
+            reply = response.choices[0].message.content.strip()
+            if not reply:
+                reply = "ما قدرت أجيب لك رد، حاول مرة أخرى."
         except openai.BadRequestError as e:
-            print(f"⚠️ فشل النموذج الأساسي: {e}. جارٍ التبديل لـ gpt-4o-mini.")
+            print(f"⚠️ فشل نموذج {model}: {e}. جارٍ التبديل لـ gpt-4o-mini.")
             try:
                 fallback_model = "gpt-4o-mini"
                 response = client.chat.completions.create(
@@ -959,7 +929,7 @@ def chat():
             except Exception as e2:
                 reply = f"حدث خطأ في الاتصال بـ OpenAI: {str(e2)}"
         except Exception as e:
-            print(f"❌ خطأ عام: {e}")
+            print(f"❌ خطأ: {e}")
             reply = "حدث خطأ في السيرفر، حاول مرة أخرى."
 
         session_memory[user_id].append({"role": "assistant", "content": reply})
