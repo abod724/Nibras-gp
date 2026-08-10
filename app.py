@@ -441,7 +441,10 @@ HTML_TEMPLATE = """
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
-                        chatBox.scrollTop = chatBox.scrollHeight;
+                        // تحقق: إذا كان المستخدم قريباً من الأسفل (فرق أقل من 150 بكسل)، انزل للأسفل، وإلا ابقَ في مكانه
+                        if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 150) {
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
                         setTimeout(typeChar, 20);
                     } else {
                         if (generatedImageUrl) {
@@ -888,7 +891,6 @@ def chat():
                     elif msg["role"] == "assistant":
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
-                # استخدام gpt-4o للبحث وحذف المعاملات غير المدعومة
                 search_response = client.responses.create(
                     model="gpt-4o",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
