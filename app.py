@@ -441,12 +441,11 @@ HTML_TEMPLATE = """
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
-                        // تحقق: إذا كان المستخدم قريباً من الأسفل (فرق أقل من 150 بكسل)، انزل للأسفل، وإلا ابقَ في مكانه
-                        if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 150) {
-                            chatBox.scrollTop = chatBox.scrollHeight;
-                        }
+                        // ✅ لا نُجبر التمرير أثناء الكتابة نهائياً، نترك المستخدم يتحكم بالشاشة كما يشاء
                         setTimeout(typeChar, 20);
                     } else {
+                        // ✅ عند انتهاء الكتابة فقط، ننزل للأسفل تلقائياً
+                        chatBox.scrollTop = chatBox.scrollHeight;
                         if (generatedImageUrl) {
                             const imgEl = document.createElement('img');
                             imgEl.src = generatedImageUrl;
