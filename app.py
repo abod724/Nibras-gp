@@ -8,21 +8,16 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# إعداد المفاتيح السرية
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 
-# ========== قراءة مفاتيح API من المتغيرات ==========
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
 if not OPENAI_API_KEY:
     raise Exception("OPENAI_API_KEY غير موجود! يجب إضافته في متغيرات البيئة")
 
-# ========== تهيئة العملاء ==========
-# العميل الأساسي (OpenAI)
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-# عميل DeepSeek (اختياري، فقط إذا تم وضع المفتاح)
 deepseek_client = None
 if DEEPSEEK_API_KEY:
     try:
@@ -36,7 +31,6 @@ if DEEPSEEK_API_KEY:
 
 SYSTEM_ENABLED = True
 
-# ========== نظام تخزين المحادثات (في ملف JSON) ==========
 CONVERSATIONS_FILE = "conversations.json"
 
 def load_conversations():
@@ -94,10 +88,8 @@ def load_conversation_by_id(user_id, conv_id):
             return conv["messages"]
     return None
 
-# ========== الذاكرة المؤقتة للجلسة الحالية ==========
 session_memory = {}
 
-# ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
@@ -112,7 +104,6 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
-# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد ذكي على منصة "نبراس كلاود". أنت برنامج تم تطويره وتشغيله على هذه المنصة فقط، ولا تربطك أي علاقة أو انتماء لأي شركة أو جهة أخرى.
 
@@ -124,17 +115,17 @@ SYSTEM_PROMPT = f"""
 **ملف المعرفة الخاص بك:**
 {knowledge_content}
 
-**تعليمات الشخصية واللغة (مهمة جداً):**
-- **اللهجة:** تتحدث باللهجة السعودية العامية البيضاء.
-- **السلوك العام:** أنت ودود، لطيف، تحب مساعدة المستخدمين. **لا تكن جافاً أو مختصراً جداً**، بل تحدث بشكل طبيعي وسلس، وقدم شرحاً وافياً ومفيداً حسب الحاجة.
-- **الإيموجي (المهم):** استخدم الإيموجي **باعتدال شديد** (مثل 😊 أو 🙂) فقط إذا كان المستخدم يمزح أو يسأل سؤالاً خفيفاً، ولا تستخدم أكثر من إيموجي واحد في الرد الواحد.
-- **ممنوعات صارمة:** **ممنوع** كتابة "هههه"، "هه"، أو الضحك الكتابي. وممنوع اختلاق قصص أو معلومات عن نفسك أو الانتماء لأي شركة أخرى (مثل X/Twitter أو OpenAI).
-- **إذا سألك أحد من طورك أو من سواك أو من برمجك:**
-    - يجب أن يكون جوابك حرفياً بهذه الجملة فقط: **"طورني وبرمجني فريق نبراس كلاود العالمي."** (لا تخلط أي كلام إنجليزي أو تخترع أي شيء إضافي).
-- إذا سألك عن شيء لا تعرفه، قل بصراحة: "ما عندي علم بهذا".
+**تعليمات شخصية صارمة (نفذها بدقة):**
+- **اللهجة:** تتحدث باللهجة السعودية العامية البيضاء (وليس الخليجية بشكل عام).
+- **السلوك العام:** أنت ودود، لكنك مهني وجاف في ردودك. لا تكن مبالغاً في العاطفة، ولا تستخدم عبارات مثل "يا سلااام" أو "والله" بكثرة.
+- **الإيموجي (مهم جداً):** **ممنوع تماماً** استخدام أي رموز تعبيرية (إيموجي) مهما كان السبب. لا تضع 🌹، 😄، 🥰، 🤔، 🤗، 🔥، 👍، ولا أي شيء مشابه. ردودك يجب أن تكون نصية خالية من الإيموجي ١٠٠٪.
+- **الضحك الكتابي:** **ممنوع تماماً** كتابة "هههه"، "هه"، "هاها"، أو أي صوت ضحك أو تعبير صوتي آخر.
+- **الردود:** اجعل ردودك مختصرة، واضحة، ومباشرة. إذا طلب المستخدم قصة أو شرحاً، قدمه بتفاصيل كافية لكن بدون حشو عاطفي.
+- **الإجابة عن الهوية:**
+    - إذا سألك أحد "من طورك؟ من سواك؟ من برمجك؟"، يجب أن يكون جوابك حرفياً بهذه الجملة فقط: **"طورني وبرمجني فريق نبراس كلاود العالمي."**
+- إذا سألك عن شيء لا تعرفه أو لا تجده في معلوماتك، قل بصراحة: "ما عندي علم بهذا".
 """
 
-# ========== دالة إنشاء الصور ==========
 def generate_image(prompt):
     try:
         response = client.images.generate(
@@ -148,7 +139,6 @@ def generate_image(prompt):
         print(f"❌ فشل توليد الصورة: {e}")
         return None
 
-# ========== واجهة الدردشة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -198,7 +188,6 @@ HTML_TEMPLATE = """
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .generated-image { max-width: 100%; border-radius: 12px; margin: 8px 0; border: 1px solid #e0e0e0; display: block; }
 
-        /* ===== رسالة الترحيب في وسط الشاشة ===== */
         .welcome-overlay {
             position: fixed;
             top: 0;
@@ -364,7 +353,6 @@ HTML_TEMPLATE = """
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
 
-        // ===== تحميل المحادثات السابقة =====
         async function loadHistory() {
             try {
                 const res = await fetch('/history');
@@ -389,7 +377,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== تحميل محادثة معينة =====
         async function loadConversation(convId) {
             try {
                 const res = await fetch(`/load_conversation/${convId}`);
@@ -409,7 +396,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== محادثة جديدة =====
         document.querySelector('[data-action="new"]').addEventListener('click', function() {
             chatBox.innerHTML = '';
             conversationHistory = [];
@@ -428,7 +414,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== دالة addMessage =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
@@ -488,10 +473,8 @@ HTML_TEMPLATE = """
             return el;
         }
 
-        // ===== رسالة الترحيب في وسط الشاشة (5 ثوانٍ) =====
         function showWelcome() {
             if (!sessionStorage.getItem('welcomeShown')) {
-                // إنشاء عنصر الترحيب
                 const overlay = document.createElement('div');
                 overlay.className = 'welcome-overlay';
                 overlay.innerHTML = `
@@ -503,7 +486,6 @@ HTML_TEMPLATE = """
                 document.body.appendChild(overlay);
                 sessionStorage.setItem('welcomeShown', 'true');
                 
-                // إزالة الترحيب بعد 5 ثوانٍ
                 setTimeout(() => {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
@@ -513,7 +495,6 @@ HTML_TEMPLATE = """
                     }
                 }, 5000);
                 
-                // إزالة الترحيب عند النقر أو الكتابة
                 const removeWelcome = function() {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
@@ -529,7 +510,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== باقي الكود =====
         function showImagePreview(dataUrl) {
             imagePreview.src = dataUrl;
             imagePreviewContainer.style.display = 'flex';
@@ -675,7 +655,6 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        // ===== تشغيل الترحيب عند تحميل الصفحة =====
         showWelcome();
 
     })();
@@ -684,7 +663,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ========== صفحات الدخول والخطط ==========
 LOGIN_HTML = """
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -759,7 +737,6 @@ PLANS_HTML = """
 </div></body></html>
 """
 
-# ========== مسارات التطبيق ==========
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -833,9 +810,6 @@ def chat():
         if conv_id is None:
             session_memory[user_id] = []
 
-        # =========================================================
-        # ✅ جميع المستخدمين يستخدمون gpt-5-mini
-        # =========================================================
         if is_admin:
             model = "gpt-5-mini"
             use_web_search = True
@@ -853,9 +827,6 @@ def chat():
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
 
-        # =========================================================
-        # كشف طلب إنشاء صورة
-        # =========================================================
         draw_keywords = [
             "ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", 
             "رسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي",
@@ -882,9 +853,6 @@ def chat():
             else:
                 print("⚠️ فشل توليد الصورة، نكمل للرد النصي.")
 
-        # =========================================================
-        # باقي الكود
-        # =========================================================
         session_memory[user_id].append({"role": "user", "content": user_message})
         chat_history = session_memory[user_id][-10:]
 
@@ -899,7 +867,6 @@ def chat():
                 "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]
             })
 
-        # ===== البحث بالويب =====
         if use_web_search:
             try:
                 full_context = ""
@@ -923,19 +890,14 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # =========================================================
-        # ===== الرد النهائي (مع تفعيل DeepSeek أولاً) =====
-        # =========================================================
         try:
-            # حافظ على الإعدادات الافتراضية للنموذج الأساسي
             current_model = model
             
-            # 1. محاولة استخدام DeepSeek (لأنه أرخص وأقوى)
             if deepseek_client:
                 try:
                     print(f"🔄 جاري استخدام DeepSeek...")
                     response = deepseek_client.chat.completions.create(
-                        model="deepseek-chat", # النموذج الصحيح لـ DeepSeek
+                        model="deepseek-chat",
                         messages=messages,
                         max_tokens=1000,
                         temperature=0.8
@@ -946,7 +908,6 @@ def chat():
                     print("✅ تم الرد عبر DeepSeek بنجاح!")
                     
                 except Exception as ds_e:
-                    # إذا فشل DeepSeek، نستخدم OpenAI كاحتياطي
                     print(f"⚠️ فشل DeepSeek، التحول إلى OpenAI. الخطأ: {ds_e}")
                     response = client.chat.completions.create(
                         model=current_model,
@@ -958,7 +919,6 @@ def chat():
                     if not reply:
                         reply = "فشل النموذج المتقدم، تم التبديل للنموذج العادي."
             else:
-                # 2. في حال عدم وجود مفتاح DeepSeek، نستخدم OpenAI مباشرة
                 print("ℹ️ مفتاح DeepSeek غير موجود، استخدام OpenAI مباشرة.")
                 response = client.chat.completions.create(
                     model=current_model,
