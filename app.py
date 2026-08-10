@@ -813,20 +813,20 @@ def chat():
             session_memory[user_id] = []
 
         # =========================================================
-        # ✅ جميع المستخدمين يستخدمون gpt-5-mini
+        # ✅ جميع المستخدمين يستخدمون gpt-4o
         # =========================================================
         if is_admin:
-            model = "gpt-5-mini"
+            model = "gpt-4o"
             use_web_search = True
             allow_images = True
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
-            model = "gpt-5-mini"
+            model = "gpt-4o"
             use_web_search = True
             allow_images = True
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
-            model = "gpt-5-mini"
+            model = "gpt-4o"
             use_web_search = False
             allow_images = False
             if is_trial_user and trial_remaining == 0:
@@ -878,7 +878,7 @@ def chat():
                 "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]
             })
 
-        # ===== البحث بالويب =====
+        # ===== البحث بالويب (تم التصحيح) =====
         if use_web_search:
             try:
                 full_context = ""
@@ -888,13 +888,12 @@ def chat():
                     elif msg["role"] == "assistant":
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
+                # استخدام gpt-4o للبحث وحذف المعاملات غير المدعومة
                 search_response = client.responses.create(
-                    model="gpt-5-mini",
+                    model="gpt-4o",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
                     input=f"ابحث في الويب عن أحدث المعلومات حول: {user_message}، وقدم لي ملخصاً مفيداً.",
-                    tools=[{"type": "web_search"}],
-                    temperature=0.7,
-                    max_output_tokens=800
+                    tools=[{"type": "web_search"}]
                 )
                 search_result = search_response.output_text.strip()
                 if search_result:
@@ -902,12 +901,12 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
+        # ===== الرد النهائي (تم التصحيح) =====
         try:
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=1000,
+                max_completion_tokens=1000,
                 temperature=0.8
             )
             reply = response.choices[0].message.content.strip()
@@ -920,7 +919,7 @@ def chat():
                 response = client.chat.completions.create(
                     model=fallback_model,
                     messages=messages,
-                    max_tokens=800,
+                    max_completion_tokens=800,
                     temperature=0.8
                 )
                 reply = response.choices[0].message.content.strip()
