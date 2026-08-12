@@ -97,14 +97,9 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
-# ========== تعليمات النظام ==========
+# ========== تعليمات النظام (تم إعادتها كما هي تماماً) ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
-
-**تعليمات الإسهاب (ضبط الردود):**
-- كن مختصراً جداً. إذا سألك المستخدم "كيفك؟"، أجب بجملة واحدة فقط.
-- تجنب استخدام كلمة "بسبب" أو "لأن" في بداية الجملة.
-- **اختصارك وجفافك في الرد هو المطلوب.** 
 
 **مصادر معرفتك:**
 1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
@@ -580,7 +575,7 @@ HTML_TEMPLATE = """
             userInput.value = '';
         });
 
-        // ===== دالة addMessage (تم تعديل التمرير الذكي) =====
+        // ===== دالة addMessage =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
@@ -615,7 +610,7 @@ HTML_TEMPLATE = """
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
                         
-                        // ===== التعديل الذكي للتمرير =====
+                        // ===== التمرير الذكي للشاشة =====
                         // إذا كان المستخدم قريباً من الأسفل، ننزل مع الكتابة. وإذا سحب لأعلى، نتوقف.
                         const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 50;
                         if (isNearBottom) {
