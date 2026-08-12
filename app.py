@@ -140,8 +140,15 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
+        
+        /* ===== تعديلات الرأس (Header) وزر الكتم ===== */
         .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
+        .header-left { display: flex; align-items: center; gap: 6px; }
         .menu-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
+        .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
+        .mute-btn:hover { color: #1a2b3c; }
+        .mute-btn.muted { color: #c33; }
+        
         .btn-group { display: flex; gap: 8px; }
         .btn { padding: 6px 16px; border-radius: 20px; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
         .btn-outline { background: transparent; border: 1px solid #4a6a8a; color: #4a6a8a; }
@@ -220,7 +227,7 @@ HTML_TEMPLATE = """
             animation: fadeOut 0.5s ease forwards;
         }
         @keyframes fadeOut {
-            from { opacity: 1; transform: scale(1); }
+            from { opacity: 1; transform: scale(0.9); }
             to { opacity: 0; transform: scale(0.9); }
         }
 
@@ -279,7 +286,10 @@ HTML_TEMPLATE = """
 <body>
 <div class="app">
     <div class="header">
-        <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
+        <div class="header-left">
+            <button class="mute-btn" id="muteBtn" title="كتم الصوت / تفعيل الصوت"><i class="fas fa-volume-up"></i></button>
+            <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
+        </div>
         <div class="btn-group">
             {% if session.get('admin_email') or session.get('user_email') %}
                 <a href="/logout" class="btn btn-outline">تسجيل خروج</a>
@@ -342,6 +352,22 @@ HTML_TEMPLATE = """
         const imagePreview = document.getElementById('imagePreview');
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
+
+        // ===== منطق كتم الصوت (إضافة جديدة) =====
+        let isMuted = false;
+        const muteBtn = document.getElementById('muteBtn');
+        muteBtn.addEventListener('click', function() {
+            isMuted = !isMuted;
+            const icon = muteBtn.querySelector('i');
+            if (isMuted) {
+                icon.className = 'fas fa-volume-mute';
+                muteBtn.classList.add('muted');
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+            } else {
+                icon.className = 'fas fa-volume-up';
+                muteBtn.classList.remove('muted');
+            }
+        });
 
         // ===== تحميل المحادثات السابقة =====
         async function loadHistory() {
@@ -441,11 +467,9 @@ HTML_TEMPLATE = """
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
-                        // ✅ لا نُجبر التمرير أثناء الكتابة نهائياً، نترك المستخدم يتحكم بالشاشة كما يشاء
+                        chatBox.scrollTop = chatBox.scrollHeight;
                         setTimeout(typeChar, 20);
                     } else {
-                        // ✅ عند انتهاء الكتابة فقط، ننزل للأسفل تلقائياً
-                        chatBox.scrollTop = chatBox.scrollHeight;
                         if (generatedImageUrl) {
                             const imgEl = document.createElement('img');
                             imgEl.src = generatedImageUrl;
@@ -606,6 +630,17 @@ HTML_TEMPLATE = """
                     if (data.conv_id) {
                         currentConvId = data.conv_id;
                     }
+
+                    // ========= هذا هو التعديل ليشغل الصوت =========
+                    if (!isMuted && 'speechSynthesis' in window) {
+                        window.speechSynthesis.cancel(); // إيقاف تكرار الأصوات
+                        const utterance = new SpeechSynthesisUtterance(data.reply);
+                        utterance.lang = 'ar-SA'; // اللغة العربية
+                        utterance.rate = 1.0;     // سرعة النطق
+                        window.speechSynthesis.speak(utterance);
+                    }
+                    // ==============================================
+
                 } else {
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
@@ -890,6 +925,7 @@ def chat():
                     elif msg["role"] == "assistant":
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
+                # استخدام gpt-4o للبحث وحذف المعاملات غير المدعومة
                 search_response = client.responses.create(
                     model="gpt-4o",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
