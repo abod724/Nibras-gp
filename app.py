@@ -917,13 +917,21 @@ def load_conversation(conv_id):
         return jsonify({"messages": messages})
     return jsonify({"messages": None}), 404
 
+# ===== هذا هو التعديل الوحيد والأهم ====
 def get_user_id():
     if 'admin_email' in session:
         return "admin_" + session['admin_email']
     elif 'user_email' in session:
         return "user_" + session['user_email']
     else:
-        return "guest_" + request.remote_addr
+        # نأخذ الـ IP الحقيقي للزائر (حل مشكلة 127.0.0.1 وتضارب المستخدمين)
+        real_ip = request.headers.get('X-Forwarded-For')
+        if real_ip:
+            real_ip = real_ip.split(',')[0].strip()
+        else:
+            real_ip = request.remote_addr
+        return "guest_" + (real_ip or 'unknown')
+# =====================================================
 
 @app.route('/set_gender', methods=['POST'])
 def set_gender():
