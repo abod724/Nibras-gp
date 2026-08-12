@@ -5,6 +5,9 @@ import secrets
 import json
 import hashlib
 from datetime import datetime
+import asyncio
+import edge_tts
+import base64
 
 app = Flask(__name__)
 
@@ -127,6 +130,16 @@ def generate_image(prompt):
         print(f"❌ فشل توليد الصورة: {e}")
         return None
 
+# ========== دالة توليد الصوت البشري (Edge TTS) ==========
+async def generate_speech(text, gender):
+    voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
+    communicate = edge_tts.Communicate(text, voice_id)
+    audio_data = b""
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_data += chunk["data"]
+    return base64.b64encode(audio_data).decode('utf-8')
+
 # ========== واجهة الدردشة ==========
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -148,6 +161,8 @@ HTML_TEMPLATE = """
         .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
         .mute-btn:hover { color: #1a2b3c; }
         .mute-btn.muted { color: #c33; }
+        .gender-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
+        .gender-btn:hover { color: #1a2b3c; }
         
         .btn-group { display: flex; gap: 8px; }
         .btn { padding: 6px 16px; border-radius: 20px; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
@@ -288,6 +303,7 @@ HTML_TEMPLATE = """
     <div class="header">
         <div class="header-left">
             <button class="mute-btn" id="muteBtn" title="كتم الصوت / تفعيل الصوت"><i class="fas fa-volume-up"></i></button>
+            <button class="gender-btn" id="genderBtn" title="تبديل الصوت بين رجل وامرأة">🚹</button>
             <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
         </div>
         <div class="btn-group">
@@ -335,6 +351,7 @@ HTML_TEMPLATE = """
         let pendingImageData = null;
         let isWaiting = false;
         let currentConvId = null;
+        let currentAudio = null; // للملفات الصوتية الجديدة
         
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
@@ -353,8 +370,10 @@ HTML_TEMPLATE = """
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
 
-        // ===== منطق كتم الصوت (إضافة جديدة) =====
+        // ===== منطق كتم الصوت وتبديل الجنس =====
         let isMuted = false;
+        let isMale = true; // افتراضي رجل
+        
         const muteBtn = document.getElementById('muteBtn');
         muteBtn.addEventListener('click', function() {
             isMuted = !isMuted;
@@ -362,11 +381,26 @@ HTML_TEMPLATE = """
             if (isMuted) {
                 icon.className = 'fas fa-volume-mute';
                 muteBtn.classList.add('muted');
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
+                if (currentAudio) { 
+                    currentAudio.pause(); 
+                    currentAudio.currentTime = 0; 
+                }
             } else {
                 icon.className = 'fas fa-volume-up';
                 muteBtn.classList.remove('muted');
             }
+        });
+
+        const genderBtn = document.getElementById('genderBtn');
+        genderBtn.addEventListener('click', function() {
+            isMale = !isMale;
+            this.innerText = isMale ? '🚹' : '🚺';
+            // إرسال التغيير للسيرفر
+            fetch('/set_gender', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gender: isMale ? 'male' : 'female' })
+            });
         });
 
         // ===== تحميل المحادثات السابقة =====
@@ -631,13 +665,17 @@ HTML_TEMPLATE = """
                         currentConvId = data.conv_id;
                     }
 
-                    // ========= هذا هو التعديل ليشغل الصوت =========
-                    if (!isMuted && 'speechSynthesis' in window) {
-                        window.speechSynthesis.cancel(); // إيقاف تكرار الأصوات
-                        const utterance = new SpeechSynthesisUtterance(data.reply);
-                        utterance.lang = 'ar-SA'; // اللغة العربية
-                        utterance.rate = 1.0;     // سرعة النطق
-                        window.speechSynthesis.speak(utterance);
+                    // ========= تشغيل الصوت البشري الجديد =========
+                    if (!isMuted && data.audio) {
+                        if (currentAudio) { 
+                            currentAudio.pause(); 
+                            currentAudio.currentTime = 0; 
+                        }
+                        
+                        // تشغيل الصوت القادم من السيرفر بصيغة base64
+                        const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+                        currentAudio = new Audio(audioSrc);
+                        currentAudio.play();
                     }
                     // ==============================================
 
@@ -829,6 +867,12 @@ def get_user_id():
     else:
         return "guest_" + request.remote_addr
 
+@app.route('/set_gender', methods=['POST'])
+def set_gender():
+    data = request.get_json()
+    session['voice_gender'] = data.get('gender', 'male')
+    return jsonify({"status": "ok"})
+
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -978,7 +1022,15 @@ def chat():
                 session['is_trial_expired'] = True
                 reply += "\n\n⚠️ انتهت محادثاتك التجريبية. الترقية للاستمرار مع البحث بالويب والصور."
 
-        return jsonify({"reply": reply, "conv_id": new_conv_id})
+        # ======= توليد الصوت البشري وإضافته للرد =======
+        try:
+            user_gender = session.get('voice_gender', 'male')
+            audio_base64 = asyncio.run(generate_speech(reply, user_gender))
+        except Exception as e:
+            print(f"⚠️ فشل توليد الصوت: {e}")
+            audio_base64 = None
+
+        return jsonify({"reply": reply, "audio": audio_base64, "conv_id": new_conv_id})
 
     except Exception as e:
         print(f"❌ خطأ عام في /chat: {e}")
