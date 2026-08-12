@@ -97,7 +97,7 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
-# ========== تعليمات النظام (تم إعادتها كما هي تماماً) ==========
+# ========== تعليمات النظام (عادت كما هي) ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
@@ -575,7 +575,7 @@ HTML_TEMPLATE = """
             userInput.value = '';
         });
 
-        // ===== دالة addMessage =====
+        // ===== دالة addMessage (مع التمرير الذكي النهائي) =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
@@ -605,18 +605,27 @@ HTML_TEMPLATE = """
                 chatBox.scrollTop = chatBox.scrollHeight;
                 const typingSpan = el.querySelector('.typing-text');
                 let index = 0;
+                
+                // ===== السر: بمجرد أن تلمس الشاشة، يوقف التمرير =====
+                let userInteracted = false;
+                const onUserInteract = () => {
+                    userInteracted = true;
+                    chatBox.removeEventListener('touchstart', onUserInteract);
+                    chatBox.removeEventListener('scroll', onUserInteract);
+                };
+                chatBox.addEventListener('touchstart', onUserInteract);
+                chatBox.addEventListener('scroll', onUserInteract);
+                // ====================================================
+
                 function typeChar() {
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
                         
-                        // ===== التمرير الذكي للشاشة =====
-                        // إذا كان المستخدم قريباً من الأسفل، ننزل مع الكتابة. وإذا سحب لأعلى، نتوقف.
-                        const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 50;
-                        if (isNearBottom) {
+                        // إذا لم يلمس المستخدم الشاشة، ينزل مع الكلام. إذا لمسها، يثبت في مكانه
+                        if (!userInteracted) {
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
-                        // ======================================
                         
                         setTimeout(typeChar, 20);
                     } else {
@@ -990,14 +999,12 @@ def load_conversation(conv_id):
         return jsonify({"messages": messages})
     return jsonify({"messages": None}), 404
 
-# ===== حل مشكلة دخول أكثر من واحد =====
 def get_user_id():
     if 'admin_email' in session:
         return "admin_" + session['admin_email']
     elif 'user_email' in session:
         return "user_" + session['user_email']
     else:
-        # نأخذ الـ IP الحقيقي للزائر (حل مشكلة 127.0.0.1 وتضارب المستخدمين)
         real_ip = request.headers.get('X-Forwarded-For')
         if real_ip:
             real_ip = real_ip.split(',')[0].strip()
@@ -1107,7 +1114,6 @@ def chat():
                     elif msg["role"] == "assistant":
                         full_context += "نبراس: " + msg["content"] + "\n"
                 
-                # استخدام gpt-4o للبحث وحذف المعاملات غير المدعومة
                 search_response = client.responses.create(
                     model="gpt-4o",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
@@ -1120,7 +1126,7 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي (تم التصحيح) =====
+        # ===== الرد النهائي =====
         try:
             response = client.chat.completions.create(
                 model=model,
