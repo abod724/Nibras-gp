@@ -197,6 +197,31 @@ HTML_TEMPLATE = """
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .generated-image { max-width: 100%; border-radius: 12px; margin: 8px 0; border: 1px solid #e0e0e0; display: block; }
 
+        /* ===== مؤشر جاري التفكير ===== */
+        .typing-indicator {
+            align-self: flex-start;
+            background: #ffffff;
+            padding: 12px 18px;
+            border-radius: 20px;
+            border-bottom-right-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #5a6b7c;
+        }
+        .typing-dots {
+            display: inline-block;
+        }
+        .typing-dots::after {
+            content: '...';
+            animation: dotAnimation 1.2s steps(4, end) infinite;
+        }
+        @keyframes dotAnimation {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+
         /* ===== رسالة الترحيب في وسط الشاشة ===== */
         .welcome-overlay {
             position: fixed;
@@ -703,6 +728,13 @@ HTML_TEMPLATE = """
             userInput.style.height = 'auto';
             isWaiting = true;
 
+            // ===== مؤشر "جاري التفكير..." =====
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'msg bot typing-indicator';
+            typingDiv.innerHTML = '<span class="typing-dots">جاري التفكير</span>';
+            chatBox.appendChild(typingDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
             const payload = {
                 message: text || "📎 مرفق",
                 image: imageToSend || null,
@@ -717,30 +749,38 @@ HTML_TEMPLATE = """
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                if (res.ok) {
-                    addMessage(data.reply, 'bot');
-                    if (data.conv_id) {
-                        currentConvId = data.conv_id;
-                    }
+                
+                // إزالة المؤشر فور وصول الرد
+                if (typingDiv && typingDiv.parentNode) {
+                    typingDiv.remove();
+                }
 
-                    // ========= تشغيل الصوت البشري الجديد =========
+                if (res.ok) {
+                    // بدء الكتابة فوراً
+                    addMessage(data.reply, 'bot');
+
+                    // تشغيل الصوت فوراً مع الكتابة
                     if (!isMuted && data.audio) {
                         if (currentAudio) { 
                             currentAudio.pause(); 
                             currentAudio.currentTime = 0; 
                         }
-                        
-                        // تشغيل الصوت القادم من السيرفر بصيغة base64
                         const audioSrc = `data:audio/mp3;base64,${data.audio}`;
                         currentAudio = new Audio(audioSrc);
                         currentAudio.play();
                     }
-                    // ==============================================
+
+                    if (data.conv_id) {
+                        currentConvId = data.conv_id;
+                    }
 
                 } else {
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
             } catch (e) {
+                if (typingDiv && typingDiv.parentNode) {
+                    typingDiv.remove();
+                }
                 addMessage('تعذر الاتصال بالسيرفر.', 'error');
             } finally {
                 isWaiting = false;
