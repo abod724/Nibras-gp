@@ -161,8 +161,6 @@ HTML_TEMPLATE = """
         .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
         .mute-btn:hover { color: #1a2b3c; }
         .mute-btn.muted { color: #c33; }
-        .gender-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
-        .gender-btn:hover { color: #1a2b3c; }
         
         .btn-group { display: flex; gap: 8px; }
         .btn { padding: 6px 16px; border-radius: 20px; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
@@ -296,6 +294,32 @@ HTML_TEMPLATE = """
             .welcome-overlay .welcome-box h2 { font-size: 22px; }
             .welcome-overlay .welcome-box p { font-size: 16px; }
         }
+
+        /* تنسيق زر الصوت داخل القائمة */
+        .gender-option {
+            flex: 1;
+            padding: 8px 4px;
+            border-radius: 10px;
+            border: 1px solid #dce1e8;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 600;
+            color: #5a6b7c;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .gender-option:hover {
+            background: #f5f7fa;
+        }
+        .gender-option.active {
+            background: #4a6a8a;
+            color: white;
+            border-color: #4a6a8a;
+        }
     </style>
 </head>
 <body>
@@ -303,7 +327,6 @@ HTML_TEMPLATE = """
     <div class="header">
         <div class="header-left">
             <button class="mute-btn" id="muteBtn" title="كتم الصوت / تفعيل الصوت"><i class="fas fa-volume-up"></i></button>
-            <button class="gender-btn" id="genderBtn" title="تبديل الصوت بين رجل وامرأة">🚹</button>
             <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
         </div>
         <div class="btn-group">
@@ -318,6 +341,20 @@ HTML_TEMPLATE = """
     
     <div class="dropdown" id="dropdown">
         <button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button>
+        
+        <!-- ====== قسم اختيار الصوت الجديد داخل القائمة ====== -->
+        <div class="item" style="flex-direction: column; align-items: stretch; gap: 6px; cursor: default; border-bottom: 1px solid #f0f2f5;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #1a2b3c;">
+                <i class="fas fa-microphone" style="font-size: 18px; color: #5a6b7c;"></i>
+                <span>صوت المساعد</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="gender-option active" data-gender="male">👨 ذكر</button>
+                <button class="gender-option" data-gender="female">👩 أنثى</button>
+            </div>
+        </div>
+        <!-- =================================================== -->
+
         <div id="historyList"></div>
     </div>
 
@@ -370,10 +407,8 @@ HTML_TEMPLATE = """
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
 
-        // ===== منطق كتم الصوت وتبديل الجنس =====
+        // ===== منطق كتم الصوت =====
         let isMuted = false;
-        let isMale = true; // افتراضي رجل
-        
         const muteBtn = document.getElementById('muteBtn');
         muteBtn.addEventListener('click', function() {
             isMuted = !isMuted;
@@ -391,15 +426,46 @@ HTML_TEMPLATE = """
             }
         });
 
-        const genderBtn = document.getElementById('genderBtn');
-        genderBtn.addEventListener('click', function() {
-            isMale = !isMale;
-            this.innerText = isMale ? '🚹' : '🚺';
-            // إرسال التغيير للسيرفر
-            fetch('/set_gender', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gender: isMale ? 'male' : 'female' })
+        // ===== منطق اختيار الصوت داخل القائمة =====
+        let isMale = true; // افتراضي رجل
+        const genderOptions = document.querySelectorAll('.gender-option');
+        
+        // تحديث الحالة عند فتح القائمة
+        menuToggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dropdown.classList.toggle('show');
+            if (dropdown.classList.contains('show')) {
+                loadHistory();
+                // نحدد الزر النشط بناءً على الحالة الحالية
+                genderOptions.forEach(btn => btn.classList.remove('active'));
+                if (isMale) {
+                    document.querySelector('.gender-option[data-gender="male"]').classList.add('active');
+                } else {
+                    document.querySelector('.gender-option[data-gender="female"]').classList.add('active');
+                }
+            }
+        });
+
+        // أحداث النقر على أزرار الجنس
+        genderOptions.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const gender = this.dataset.gender;
+                isMale = gender === 'male';
+                
+                // تحديث واجهة القائمة
+                genderOptions.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                // إرسال التغيير للسيرفر
+                fetch('/set_gender', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gender: gender })
+                });
+                
+                // إغلاق القائمة بعد الاختيار
+                dropdown.classList.remove('show');
             });
         });
 
@@ -457,14 +523,6 @@ HTML_TEMPLATE = """
             pendingImageData = null;
             imagePreviewContainer.style.display = 'none';
             userInput.value = '';
-        });
-
-        menuToggle.addEventListener('click', function(e) {
-            e.stopPropagation();
-            dropdown.classList.toggle('show');
-            if (dropdown.classList.contains('show')) {
-                loadHistory();
-            }
         });
 
         // ===== دالة addMessage =====
