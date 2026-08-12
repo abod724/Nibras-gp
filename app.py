@@ -114,7 +114,7 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
 - دائماً حافظ على لهجتك العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
-- **لا تكتب "لحظة" أو "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
+- **لا تكتب "لحظة" או "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
 """
 
 # ========== دالة إزالة الإيموجي ==========
@@ -465,9 +465,14 @@ HTML_TEMPLATE = """
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
 
-        // ===== منطق كتم الصوت =====
-        let isMuted = false;
+        // ===== منطق كتم الصوت (مكتوم افتراضياً) =====
+        let isMuted = true; // تم التغيير هنا: يبدأ مكتوماً
         const muteBtn = document.getElementById('muteBtn');
+        
+        // ضبط الحالة الافتراضية عند تحميل الصفحة (الأيقونة مقطوعة)
+        muteBtn.querySelector('i').className = 'fas fa-volume-mute';
+        muteBtn.classList.add('muted');
+
         muteBtn.addEventListener('click', function() {
             isMuted = !isMuted;
             const icon = muteBtn.querySelector('i');
@@ -809,7 +814,7 @@ HTML_TEMPLATE = """
                     // بدء الكتابة فوراً
                     addMessage(data.reply, 'bot');
 
-                    // تشغيل الصوت فوراً مع الكتابة
+                    // تشغيل الصوت فوراً مع الكتابة (فقط إذا لم يكن مكتوماً)
                     if (!isMuted && data.audio) {
                         if (currentAudio) { 
                             currentAudio.pause(); 
