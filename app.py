@@ -8,6 +8,7 @@ from datetime import datetime
 import asyncio
 import edge_tts
 import base64
+import re
 
 app = Flask(__name__)
 
@@ -100,6 +101,11 @@ if not knowledge_content:
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
+**تعليمات الإسهاب (ضبط الردود):**
+- كن مختصراً جداً. إذا سألك المستخدم "كيفك؟"، أجب بجملة واحدة فقط.
+- تجنب استخدام كلمة "بسبب" أو "لأن" في بداية الجملة.
+- **اختصارك وجفافك في الرد هو المطلوب.** 
+
 **مصادر معرفتك:**
 1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
 2. **معرفتك العامة**.
@@ -115,6 +121,29 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
 - **لا تكتب "لحظة" أو "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
 """
+
+# ========== دالة إزالة الإيموجي ==========
+def remove_emoji(text):
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  
+        u"\U0001F300-\U0001F5FF"  
+        u"\U0001F680-\U0001F6FF"  
+        u"\U0001F1E0-\U0001F1FF"  
+        u"\U00002500-\U00002BEF"  
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        u"\U0001f926-\U0001f937"
+        u"\U00010000-\U0010ffff"
+        u"\u2640-\u2642"
+        u"\u2600-\u2B55"
+        u"\u200d"
+        u"\u23cf"
+        u"\u23e9"
+        u"\u231a"
+        u"\ufe0f"
+        u"\u3030"
+    "]+", flags=re.UNICODE)
+    return emoji_pattern.sub(r'', text)
 
 # ========== دالة إنشاء الصور ==========
 def generate_image(prompt):
@@ -133,7 +162,8 @@ def generate_image(prompt):
 # ========== دالة توليد الصوت البشري (Edge TTS) ==========
 async def generate_speech(text, gender):
     voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
-    communicate = edge_tts.Communicate(text, voice_id)
+    clean_text = remove_emoji(text) 
+    communicate = edge_tts.Communicate(clean_text, voice_id)
     audio_data = b""
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
@@ -550,7 +580,7 @@ HTML_TEMPLATE = """
             userInput.value = '';
         });
 
-        // ===== دالة addMessage =====
+        // ===== دالة addMessage (تم تعديل التمرير الذكي) =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
@@ -584,7 +614,15 @@ HTML_TEMPLATE = """
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
-                        chatBox.scrollTop = chatBox.scrollHeight;
+                        
+                        // ===== التعديل الذكي للتمرير =====
+                        // إذا كان المستخدم قريباً من الأسفل، ننزل مع الكتابة. وإذا سحب لأعلى، نتوقف.
+                        const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 50;
+                        if (isNearBottom) {
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                        // ======================================
+                        
                         setTimeout(typeChar, 20);
                     } else {
                         if (generatedImageUrl) {
@@ -957,7 +995,7 @@ def load_conversation(conv_id):
         return jsonify({"messages": messages})
     return jsonify({"messages": None}), 404
 
-# ===== هذا هو التعديل الوحيد والأهم ====
+# ===== حل مشكلة دخول أكثر من واحد =====
 def get_user_id():
     if 'admin_email' in session:
         return "admin_" + session['admin_email']
@@ -971,7 +1009,6 @@ def get_user_id():
         else:
             real_ip = request.remote_addr
         return "guest_" + (real_ip or 'unknown')
-# =====================================================
 
 @app.route('/set_gender', methods=['POST'])
 def set_gender():
