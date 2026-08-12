@@ -179,9 +179,11 @@ HTML_TEMPLATE = """
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
         
-        /* ===== تعديلات الرأس (Header) وزر الكتم ===== */
+        /* ===== تعديلات الرأس (Header) ونقل الترقية ===== */
         .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
+        .header-right { display: flex; align-items: center; gap: 6px; }
         .header-left { display: flex; align-items: center; gap: 6px; }
+        
         .menu-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
         .mute-btn:hover { color: #1a2b3c; }
@@ -374,25 +376,31 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="app">
+    <!-- ===== تم تعديل الهيدر ===== -->
     <div class="header">
-        <div class="header-left">
+        <!-- القسم الأيمن (نقاط ثلاث وكتم) -->
+        <div class="header-right">
             <button class="mute-btn" id="muteBtn" title="كتم الصوت / تفعيل الصوت"><i class="fas fa-volume-up"></i></button>
             <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
         </div>
-        <div class="btn-group">
-            {% if session.get('admin_email') or session.get('user_email') %}
-                <a href="/logout" class="btn btn-outline">تسجيل خروج</a>
-            {% else %}
-                <a href="/login" class="btn btn-outline">دخول</a>
-            {% endif %}
-            <a href="/plans" class="btn btn-gold">💎 ترقية</a>
+        <!-- القسم الأيسر (دخول/خروج) -->
+        <div class="header-left">
+            <div class="btn-group">
+                {% if session.get('admin_email') or session.get('user_email') %}
+                    <a href="/logout" class="btn btn-outline">تسجيل خروج</a>
+                {% else %}
+                    <a href="/login" class="btn btn-outline">دخول</a>
+                {% endif %}
+            </div>
         </div>
     </div>
     
     <div class="dropdown" id="dropdown">
+        <!-- ===== تم إضافة زر الترقية هنا ===== -->
         <button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button>
+        <button class="item" onclick="window.location.href='/plans'"><i class="fas fa-gem"></i> ترقية</button>
         
-        <!-- ====== قسم اختيار الصوت الجديد داخل القائمة ====== -->
+        <!-- ====== قسم اختيار الصوت داخل القائمة ====== -->
         <div class="item" style="flex-direction: column; align-items: stretch; gap: 6px; cursor: default; border-bottom: 1px solid #f0f2f5;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #1a2b3c;">
                 <i class="fas fa-microphone" style="font-size: 18px; color: #5a6b7c;"></i>
