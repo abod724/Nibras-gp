@@ -1,11 +1,12 @@
 {
   "name": "نبراس",
   "short_name": "نبراس",
-  "description": "مساعد ذكي سعودي يتكلم ويكتب",
+  "description": "نبراس، مساعد ذكي سعودي يتحدث ويكتب بصوت بشري",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4a6a8a",
+  "id": "com.nibras.app",
   "icons": [
     {
       "src": "/icon-192.png",
