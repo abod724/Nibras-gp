@@ -828,10 +828,10 @@ PLANS_HTML = """
 </div></body></html>
 """
 
-# ========== مسار سياسة الخصوصية (جديد) ==========
+# ========== مسار سياسة الخصوصية (تم تحديثه ليعمل بالتأكيد) ==========
 @app.route('/privacy')
 def privacy_policy():
-    return """
+    return render_template_string("""
     <!DOCTYPE html>
     <html dir="rtl" lang="ar">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>سياسة الخصوصية - نبراس</title>
@@ -874,7 +874,7 @@ def privacy_policy():
     </div>
     </body>
     </html>
-    """
+    """)
 
 # ========== مسارات التطبيق ==========
 @app.route('/')
