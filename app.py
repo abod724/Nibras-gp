@@ -114,7 +114,7 @@ SYSTEM_PROMPT = f"""
 - إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
 - دائماً حافظ على لهجتك العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
-- **لا تكتب "لحظة" או "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
+- **لا تكتب "لحظة" أو "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
 """
 
 # ========== دالة إزالة الإيموجي ==========
@@ -154,11 +154,12 @@ def generate_image(prompt):
         print(f"❌ فشل توليد الصورة: {e}")
         return None
 
-# ========== دالة توليد الصوت البشري (Edge TTS) ==========
+# ========== دالة توليد الصوت البشري (Edge TTS) مع ضبط السرعة ==========
 async def generate_speech(text, gender):
     voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
     clean_text = remove_emoji(text) 
-    communicate = edge_tts.Communicate(clean_text, voice_id)
+    # تم ضبط السرعة ليكون الصوت أهدأ وأقرب للعامية
+    communicate = edge_tts.Communicate(clean_text, voice_id, rate='-15%')
     audio_data = b""
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
@@ -187,7 +188,12 @@ HTML_TEMPLATE = """
         .menu-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
         .mute-btn:hover { color: #1a2b3c; }
-        .mute-btn.muted { color: #c33; }
+        .mute-btn.muted { 
+            color: #444444;
+            opacity: 0.4; 
+            transform: scale(0.9);
+            transition: all 0.2s ease;
+        }
         
         .btn-group { display: flex; gap: 8px; }
         .btn { padding: 6px 16px; border-radius: 20px; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
@@ -466,7 +472,7 @@ HTML_TEMPLATE = """
         const historyList = document.getElementById('historyList');
 
         // ===== منطق كتم الصوت (مكتوم افتراضياً) =====
-        let isMuted = true; // تم التغيير هنا: يبدأ مكتوماً
+        let isMuted = true; // يبدأ مكتوماً
         const muteBtn = document.getElementById('muteBtn');
         
         // ضبط الحالة الافتراضية عند تحميل الصفحة (الأيقونة مقطوعة)
