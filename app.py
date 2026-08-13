@@ -9,6 +9,7 @@ import asyncio
 import edge_tts
 import base64
 import re
+import sqlite3
 
 app = Flask(__name__)
 
@@ -21,63 +22,68 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ========== نظام تخزين المحادثات (في ملف JSON) ==========
-CONVERSATIONS_FILE = "conversations.json"
+# ========== قاعدة البيانات الجديدة (SQLite) ==========
+DB_FILE = "conversations.db"
 
-def load_conversations():
-    if os.path.exists(CONVERSATIONS_FILE):
-        try:
-            with open(CONVERSATIONS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_conversations(data):
-    with open(CONVERSATIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS conversations
+                 (user_id TEXT, conv_id TEXT, messages TEXT, timestamp TEXT, title TEXT)''')
+    conn.commit()
+    conn.close()
 
 def get_user_conversations(user_id):
-    all_conv = load_conversations()
-    return all_conv.get(user_id, [])
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT conv_id, messages, timestamp, title FROM conversations WHERE user_id=?", (user_id,))
+    rows = c.fetchall()
+    conn.close()
+    
+    result = []
+    for row in rows:
+        result.append({
+            "id": row[0],
+            "messages": json.loads(row[1]),
+            "timestamp": row[2],
+            "title": row[3]
+        })
+    return result
 
 def save_user_conversation(user_id, conversation, conv_id=None):
-    all_conv = load_conversations()
-    if user_id not in all_conv:
-        all_conv[user_id] = []
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
     
     if conv_id is None:
-        if conversation and len(conversation) > 0:
-            title = conversation[0]["content"][:30]
-            if len(conversation[0]["content"]) > 30:
-                title += "..."
-        else:
-            title = "محادثة جديدة"
-        
+        title = conversation[0]["content"][:30] + "..." if len(conversation[0]["content"]) > 30 else conversation[0]["content"]
         new_conv_id = hashlib.md5(f"{user_id}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
-        all_conv[user_id].append({
-            "id": new_conv_id,
-            "messages": conversation,
-            "timestamp": datetime.now().isoformat(),
-            "title": title
-        })
-        save_conversations(all_conv)
+        
+        messages_json = json.dumps(conversation)
+        c.execute("INSERT INTO conversations (user_id, conv_id, messages, timestamp, title) VALUES (?, ?, ?, ?, ?)",
+                  (user_id, new_conv_id, messages_json, datetime.now().isoformat(), title))
+        conn.commit()
+        conn.close()
         return new_conv_id
     else:
-        for conv in all_conv[user_id]:
-            if conv["id"] == conv_id:
-                conv["messages"] = conversation
-                conv["timestamp"] = datetime.now().isoformat()
-                save_conversations(all_conv)
-                return conv_id
-        return save_user_conversation(user_id, conversation, None)
+        messages_json = json.dumps(conversation)
+        c.execute("UPDATE conversations SET messages=?, timestamp=? WHERE user_id=? AND conv_id=?",
+                  (messages_json, datetime.now().isoformat(), user_id, conv_id))
+        conn.commit()
+        conn.close()
+        return conv_id
 
 def load_conversation_by_id(user_id, conv_id):
-    conversations = get_user_conversations(user_id)
-    for conv in conversations:
-        if conv["id"] == conv_id:
-            return conv["messages"]
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT messages FROM conversations WHERE user_id=? AND conv_id=?", (user_id, conv_id))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return json.loads(row[0])
     return None
+
+# تهيئة قاعدة البيانات عند بدء التشغيل
+init_db()
 
 # ========== الذاكرة المؤقتة للجلسة الحالية ==========
 session_memory = {}
@@ -97,7 +103,7 @@ for filename in possible_names:
 if not knowledge_content:
     knowledge_content = "أنت نبراس، مساعد ذكي."
 
-# ========== تعليمات النظام (عادت كما هي) ==========
+# ========== تعليمات النظام ==========
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
@@ -154,11 +160,10 @@ def generate_image(prompt):
         print(f"❌ فشل توليد الصورة: {e}")
         return None
 
-# ========== دالة توليد الصوت البشري (Edge TTS) مع ضبط السرعة ==========
+# ========== دالة توليد الصوت البشري (Edge TTS) ==========
 async def generate_speech(text, gender):
     voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
     clean_text = remove_emoji(text) 
-    # تم ضبط السرعة ليكون الصوت أهدأ وأقرب للعامية
     communicate = edge_tts.Communicate(clean_text, voice_id, rate='-15%')
     audio_data = b""
     async for chunk in communicate.stream():
@@ -179,12 +184,9 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background: #ffffff; height: 100dvh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0; }
         .app { width: 100%; max-width: 450px; height: 100dvh; background: #ffffff; display: flex; flex-direction: column; position: relative; }
-        
-        /* ===== تعديلات الرأس (Header) ونقل الترقية ===== */
         .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #eaeef2; flex-shrink: 0; background: #ffffff; }
         .header-right { display: flex; align-items: center; gap: 6px; }
         .header-left { display: flex; align-items: center; gap: 6px; }
-        
         .menu-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
         .mute-btn:hover { color: #1a2b3c; }
@@ -194,7 +196,6 @@ HTML_TEMPLATE = """
             transform: scale(0.9);
             transition: all 0.2s ease;
         }
-        
         .btn-group { display: flex; gap: 8px; }
         .btn { padding: 6px 16px; border-radius: 20px; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
         .btn-outline { background: transparent; border: 1px solid #4a6a8a; color: #4a6a8a; }
@@ -229,92 +230,18 @@ HTML_TEMPLATE = """
         .msg.error { background: #fde8e8; color: #a33; align-self: center; max-width: 90%; }
         .msg .image-upload { max-width: 100%; max-height: 200px; border-radius: 12px; margin: 4px 0; border: 1px solid #ddd; display: block; }
         .msg .generated-image { max-width: 100%; border-radius: 12px; margin: 8px 0; border: 1px solid #e0e0e0; display: block; }
-
-        /* ===== مؤشر جاري التفكير ===== */
-        .typing-indicator {
-            align-self: flex-start;
-            background: #ffffff;
-            padding: 12px 18px;
-            border-radius: 20px;
-            border-bottom-right-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
-            color: #5a6b7c;
-        }
-        .typing-dots {
-            display: inline-block;
-        }
-        .typing-dots::after {
-            content: '...';
-            animation: dotAnimation 1.2s steps(4, end) infinite;
-        }
-        @keyframes dotAnimation {
-            0%, 20% { content: ''; }
-            40% { content: '.'; }
-            60% { content: '..'; }
-            80%, 100% { content: '...'; }
-        }
-
-        /* ===== رسالة الترحيب في وسط الشاشة ===== */
-        .welcome-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.25);
-            z-index: 9999;
-            animation: fadeIn 0.5s ease;
-            pointer-events: none;
-        }
-        .welcome-overlay .welcome-box {
-            background: #ffffff;
-            padding: 30px 40px;
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-            text-align: center;
-            max-width: 90%;
-            pointer-events: auto;
-            direction: rtl;
-        }
-        .welcome-overlay .welcome-box h2 {
-            font-size: 28px;
-            color: #1a2b3c;
-            margin-bottom: 8px;
-        }
-        .welcome-overlay .welcome-box p {
-            font-size: 18px;
-            color: #5a6b7c;
-            margin: 0;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.9); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        .welcome-overlay.fade-out {
-            animation: fadeOut 0.5s ease forwards;
-        }
-        @keyframes fadeOut {
-            from { opacity: 1; transform: scale(0.9); }
-            to { opacity: 0; transform: scale(0.9); }
-        }
-
-        #imagePreviewContainer {
-            display: none;
-            padding: 6px 18px;
-            align-items: center;
-            gap: 10px;
-            background: #f5f7fa;
-            margin: 0 14px;
-            border-radius: 20px 20px 0 0;
-            border: 1px solid #dce1e8;
-            border-bottom: none;
-            flex-wrap: wrap;
-            flex-shrink: 0;
-        }
+        .typing-indicator { align-self: flex-start; background: #ffffff; padding: 12px 18px; border-radius: 20px; border-bottom-right-radius: 6px; font-size: 16px; font-weight: 600; color: #5a6b7c; }
+        .typing-dots { display: inline-block; }
+        .typing-dots::after { content: '...'; animation: dotAnimation 1.2s steps(4, end) infinite; }
+        @keyframes dotAnimation { 0%, 20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%, 100% { content: '...'; } }
+        .welcome-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); z-index: 9999; animation: fadeIn 0.5s ease; pointer-events: none; }
+        .welcome-overlay .welcome-box { background: #ffffff; padding: 30px 40px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); text-align: center; max-width: 90%; pointer-events: auto; direction: rtl; }
+        .welcome-overlay .welcome-box h2 { font-size: 28px; color: #1a2b3c; margin-bottom: 8px; }
+        .welcome-overlay .welcome-box p { font-size: 18px; color: #5a6b7c; margin: 0; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        .welcome-overlay.fade-out { animation: fadeOut 0.5s ease forwards; }
+        @keyframes fadeOut { from { opacity: 1; transform: scale(0.9); } to { opacity: 0; transform: scale(0.9); } }
+        #imagePreviewContainer { display: none; padding: 6px 18px; align-items: center; gap: 10px; background: #f5f7fa; margin: 0 14px; border-radius: 20px 20px 0 0; border: 1px solid #dce1e8; border-bottom: none; flex-wrap: wrap; flex-shrink: 0; }
         #imagePreviewContainer img { max-height: 60px; border-radius: 8px; border: 1px solid #ddd; }
         #imagePreviewContainer .label { font-size: 13px; color: #5a6b7c; }
         #removeImageBtn { background: none; border: none; color: #c33; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 12px; }
@@ -352,44 +279,18 @@ HTML_TEMPLATE = """
             .welcome-overlay .welcome-box h2 { font-size: 22px; }
             .welcome-overlay .welcome-box p { font-size: 16px; }
         }
-
-        /* تنسيق زر الصوت داخل القائمة */
-        .gender-option {
-            flex: 1;
-            padding: 8px 4px;
-            border-radius: 10px;
-            border: 1px solid #dce1e8;
-            background: transparent;
-            font-size: 14px;
-            font-weight: 600;
-            color: #5a6b7c;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-        }
-        .gender-option:hover {
-            background: #f5f7fa;
-        }
-        .gender-option.active {
-            background: #4a6a8a;
-            color: white;
-            border-color: #4a6a8a;
-        }
+        .gender-option { flex: 1; padding: 8px 4px; border-radius: 10px; border: 1px solid #dce1e8; background: transparent; font-size: 14px; font-weight: 600; color: #5a6b7c; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .gender-option:hover { background: #f5f7fa; }
+        .gender-option.active { background: #4a6a8a; color: white; border-color: #4a6a8a; }
     </style>
 </head>
 <body>
 <div class="app">
-    <!-- ===== تم تعديل الهيدر ===== -->
     <div class="header">
-        <!-- القسم الأيمن (نقاط ثلاث وكتم) -->
         <div class="header-right">
             <button class="mute-btn" id="muteBtn" title="كتم الصوت / تفعيل الصوت"><i class="fas fa-volume-up"></i></button>
             <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
         </div>
-        <!-- القسم الأيسر (دخول/خروج) -->
         <div class="header-left">
             <div class="btn-group">
                 {% if session.get('admin_email') or session.get('user_email') %}
@@ -402,11 +303,8 @@ HTML_TEMPLATE = """
     </div>
     
     <div class="dropdown" id="dropdown">
-        <!-- ===== تم إضافة زر الترقية هنا ===== -->
         <button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button>
         <button class="item" onclick="window.location.href='/plans'"><i class="fas fa-gem"></i> ترقية</button>
-        
-        <!-- ====== قسم اختيار الصوت داخل القائمة ====== -->
         <div class="item" style="flex-direction: column; align-items: stretch; gap: 6px; cursor: default; border-bottom: 1px solid #f0f2f5;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #1a2b3c;">
                 <i class="fas fa-microphone" style="font-size: 18px; color: #5a6b7c;"></i>
@@ -417,8 +315,6 @@ HTML_TEMPLATE = """
                 <button class="gender-option" data-gender="female">👩 أنثى</button>
             </div>
         </div>
-        <!-- =================================================== -->
-
         <div id="historyList"></div>
     </div>
 
@@ -452,7 +348,7 @@ HTML_TEMPLATE = """
         let pendingImageData = null;
         let isWaiting = false;
         let currentConvId = null;
-        let currentAudio = null; // للملفات الصوتية الجديدة
+        let currentAudio = null;
         
         const chatBox = document.getElementById('chat');
         const userInput = document.getElementById('userInput');
@@ -471,11 +367,8 @@ HTML_TEMPLATE = """
         const removeImageBtn = document.getElementById('removeImageBtn');
         const historyList = document.getElementById('historyList');
 
-        // ===== منطق كتم الصوت (مكتوم افتراضياً) =====
-        let isMuted = true; // يبدأ مكتوماً
+        let isMuted = true;
         const muteBtn = document.getElementById('muteBtn');
-        
-        // ضبط الحالة الافتراضية عند تحميل الصفحة (الأيقونة مقطوعة)
         muteBtn.querySelector('i').className = 'fas fa-volume-mute';
         muteBtn.classList.add('muted');
 
@@ -495,17 +388,13 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== منطق اختيار الصوت داخل القائمة =====
-        let isMale = true; // افتراضي رجل
+        let isMale = true;
         const genderOptions = document.querySelectorAll('.gender-option');
-        
-        // تحديث الحالة عند فتح القائمة
         menuToggle.addEventListener('click', function(e) {
             e.stopPropagation();
             dropdown.classList.toggle('show');
             if (dropdown.classList.contains('show')) {
                 loadHistory();
-                // نحدد الزر النشط بناءً على الحالة الحالية
                 genderOptions.forEach(btn => btn.classList.remove('active'));
                 if (isMale) {
                     document.querySelector('.gender-option[data-gender="male"]').classList.add('active');
@@ -515,30 +404,22 @@ HTML_TEMPLATE = """
             }
         });
 
-        // أحداث النقر على أزرار الجنس
         genderOptions.forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const gender = this.dataset.gender;
                 isMale = gender === 'male';
-                
-                // تحديث واجهة القائمة
                 genderOptions.forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
-                
-                // إرسال التغيير للسيرفر
                 fetch('/set_gender', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ gender: gender })
                 });
-                
-                // إغلاق القائمة بعد الاختيار
                 dropdown.classList.remove('show');
             });
         });
 
-        // ===== تحميل المحادثات السابقة =====
         async function loadHistory() {
             try {
                 const res = await fetch('/history');
@@ -563,7 +444,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== تحميل محادثة معينة =====
         async function loadConversation(convId) {
             try {
                 const res = await fetch(`/load_conversation/${convId}`);
@@ -583,7 +463,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== محادثة جديدة =====
         document.querySelector('[data-action="new"]').addEventListener('click', function() {
             chatBox.innerHTML = '';
             conversationHistory = [];
@@ -594,7 +473,6 @@ HTML_TEMPLATE = """
             userInput.value = '';
         });
 
-        // ===== دالة addMessage (مع التمرير الذكي النهائي) =====
         function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
             const el = document.createElement('div');
             el.className = `msg ${sender}`;
@@ -624,8 +502,6 @@ HTML_TEMPLATE = """
                 chatBox.scrollTop = chatBox.scrollHeight;
                 const typingSpan = el.querySelector('.typing-text');
                 let index = 0;
-                
-                // ===== السر: بمجرد أن تلمس الشاشة، يوقف التمرير =====
                 let userInteracted = false;
                 const onUserInteract = () => {
                     userInteracted = true;
@@ -634,18 +510,14 @@ HTML_TEMPLATE = """
                 };
                 chatBox.addEventListener('touchstart', onUserInteract);
                 chatBox.addEventListener('scroll', onUserInteract);
-                // ====================================================
 
                 function typeChar() {
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
-                        
-                        // إذا لم يلمس المستخدم الشاشة، ينزل مع الكلام. إذا لمسها، يثبت في مكانه
                         if (!userInteracted) {
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
-                        
                         setTimeout(typeChar, 20);
                     } else {
                         if (generatedImageUrl) {
@@ -671,10 +543,8 @@ HTML_TEMPLATE = """
             return el;
         }
 
-        // ===== رسالة الترحيب في وسط الشاشة (5 ثوانٍ) =====
         function showWelcome() {
             if (!sessionStorage.getItem('welcomeShown')) {
-                // إنشاء عنصر الترحيب
                 const overlay = document.createElement('div');
                 overlay.className = 'welcome-overlay';
                 overlay.innerHTML = `
@@ -685,8 +555,6 @@ HTML_TEMPLATE = """
                 `;
                 document.body.appendChild(overlay);
                 sessionStorage.setItem('welcomeShown', 'true');
-                
-                // إزالة الترحيب بعد 5 ثوانٍ
                 setTimeout(() => {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
@@ -695,8 +563,6 @@ HTML_TEMPLATE = """
                         }, 500);
                     }
                 }, 5000);
-                
-                // إزالة الترحيب عند النقر أو الكتابة
                 const removeWelcome = function() {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
@@ -712,7 +578,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ===== باقي الكود =====
         function showImagePreview(dataUrl) {
             imagePreview.src = dataUrl;
             imagePreviewContainer.style.display = 'flex';
@@ -789,7 +654,6 @@ HTML_TEMPLATE = """
             userInput.style.height = 'auto';
             isWaiting = true;
 
-            // ===== مؤشر "جاري التفكير..." =====
             const typingDiv = document.createElement('div');
             typingDiv.className = 'msg bot typing-indicator';
             typingDiv.innerHTML = '<span class="typing-dots">جاري التفكير</span>';
@@ -810,17 +674,12 @@ HTML_TEMPLATE = """
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                
-                // إزالة المؤشر فور وصول الرد
                 if (typingDiv && typingDiv.parentNode) {
                     typingDiv.remove();
                 }
 
                 if (res.ok) {
-                    // بدء الكتابة فوراً
                     addMessage(data.reply, 'bot');
-
-                    // تشغيل الصوت فوراً مع الكتابة (فقط إذا لم يكن مكتوماً)
                     if (!isMuted && data.audio) {
                         if (currentAudio) { 
                             currentAudio.pause(); 
@@ -830,11 +689,9 @@ HTML_TEMPLATE = """
                         currentAudio = new Audio(audioSrc);
                         currentAudio.play();
                     }
-
                     if (data.conv_id) {
                         currentConvId = data.conv_id;
                     }
-
                 } else {
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
@@ -888,7 +745,6 @@ HTML_TEMPLATE = """
             recognition.start();
         });
 
-        // ===== تشغيل الترحيب عند تحميل الصفحة =====
         showWelcome();
 
     })();
@@ -971,6 +827,54 @@ PLANS_HTML = """
     </div>
 </div></body></html>
 """
+
+# ========== مسار سياسة الخصوصية (جديد) ==========
+@app.route('/privacy')
+def privacy_policy():
+    return """
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>سياسة الخصوصية - نبراس</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 20px; display: flex; justify-content: center; }
+        .container { max-width: 800px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { color: #1a2b3c; text-align: center; border-bottom: 2px solid #eaeef2; padding-bottom: 15px; }
+        h2 { color: #4a6a8a; margin-top: 20px; }
+        p { line-height: 1.8; color: #444; }
+        a { color: #4a6a8a; }
+        .footer { margin-top: 30px; text-align: center; font-size: 14px; color: #777; border-top: 1px solid #eaeef2; padding-top: 20px; }
+    </style>
+    </head>
+    <body>
+    <div class="container">
+        <h1>سياسة الخصوصية لتطبيق نبراس</h1>
+        <p>آخر تحديث: 13 أغسطس 2026</p>
+        
+        <h2>ما هي البيانات التي نجمعها؟</h2>
+        <p><strong>1. رسائل المحادثة:</strong> عندما تستخدم تطبيق نبراس، نقوم بحفظ نصوص المحادثات التي تجريها مع المساعد الذكي. هذا ضروري لكي تستطيع العودة لقراءة محادثاتك السابقة.</p>
+        <p><strong>2. البريد الإلكتروني:</strong> إذا قمت بتسجيل الدخول، نقوم بحفظ عنوان بريدك الإلكتروني فقط لتمييز حسابك وتخزين محادثاتك الخاصة بك.</p>
+        
+        <h2>كيف نستخدم بياناتك؟</h2>
+        <p><strong>1. عرض المحادثات:</strong> نستخدم بياناتك فقط لعرض تاريخ محادثاتك عندما تطلب ذلك داخل التطبيق.</p>
+        <p><strong>2. الذكاء الاصطناعي (OpenAI):</strong> عند سؤال المساعد، يتم إرسال رسالتك إلى خدمة OpenAI الخارجية لتوليد الرد. <strong>OpenAI لا تستخدم بياناتك لتدريب نماذجها</strong> (حسب سياسة استخدامها الحالية)، لكننا ننصح بقراءة سياسة الخصوصية الخاصة بهم.</p>
+        
+        <h2>هل نشارك بياناتك مع أي طرف ثالث؟</h2>
+        <p>نحن لا نبيع أو نؤجر أو نشارك بياناتك مع أي طرف ثالث، باستثناء خدمة OpenAI التي نستخدمها لتشغيل الذكاء الاصطناعي، وهي ضرورية لعمل التطبيق.</p>
+        
+        <h2>كيف نخزن بياناتك؟</h2>
+        <p>يتم تخزين جميع بيانات المحادثة وقاعدة المستخدمين بشكل آمن على خوادمنا الداخلية، ولا يتم الوصول إليها إلا لأغراض صيانة التطبيق.</p>
+        
+        <h2>حقوقك:</h2>
+        <p>لديك الحق في طلب حذف جميع بياناتك في أي وقت. يمكنك التواصل معنا عبر البريد الإلكتروني: <a href="mailto:abdullaha0569361@gmail.com">abdullaha0569361@gmail.com</a>.</p>
+        
+        <h2>تحديثات السياسة</h2>
+        <p>قد نقوم بتحديث هذه السياسة من وقت لآخر. سيتم نشر أي تغييرات هنا.</p>
+        
+        <div class="footer">شكراً لاستخدامك نبراس! 💙</div>
+    </div>
+    </body>
+    </html>
+    """
 
 # ========== مسارات التطبيق ==========
 @app.route('/')
@@ -1057,9 +961,6 @@ def chat():
         if conv_id is None:
             session_memory[user_id] = []
 
-        # =========================================================
-        # ✅ جميع المستخدمين يستخدمون gpt-4o
-        # =========================================================
         if is_admin:
             model = "gpt-4o"
             use_web_search = True
@@ -1077,38 +978,24 @@ def chat():
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
 
-        # =========================================================
-        # كشف طلب إنشاء صورة
-        # =========================================================
-        draw_keywords = [
-            "ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", 
-            "رسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي",
-            "أنشئ لي", "انشئ لي", "انشى لي", "صوره لي"
-        ]
+        draw_keywords = ["ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", "رسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي", "أنشئ لي", "انشئ لي", "انشى لي", "صوره لي"]
         if allow_images and any(keyword in user_message for keyword in draw_keywords):
             print(f"🎨 اكتشاف طلب رسم: {user_message}")
             image_url = generate_image(user_message)
             if image_url:
                 reply = f"🖼️ إليك الصورة التي طلبتها:\n{image_url}"
-                
                 session_memory[user_id].append({"role": "user", "content": user_message})
                 session_memory[user_id].append({"role": "assistant", "content": reply})
-                
                 new_conv_id = save_user_conversation(user_id, session_memory[user_id], conv_id)
-                
                 if is_trial_user and trial_remaining > 0:
                     session['trial_remaining'] = trial_remaining - 1
                     if session['trial_remaining'] == 0:
                         session['is_trial_expired'] = True
                         reply += "\n\n⚠️ انتهت محادثاتك التجريبية. الترقية للاستمرار."
-                
                 return jsonify({"reply": reply, "conv_id": new_conv_id})
             else:
                 print("⚠️ فشل توليد الصورة، نكمل للرد النصي.")
 
-        # =========================================================
-        # باقي الكود
-        # =========================================================
         session_memory[user_id].append({"role": "user", "content": user_message})
         chat_history = session_memory[user_id][-10:]
 
@@ -1123,7 +1010,6 @@ def chat():
                 "content": [{"type": "text", "text": user_message or "حلل هذه الصورة"}, {"type": "image_url", "image_url": {"url": image_data}}]
             })
 
-        # ===== البحث بالويب (تم التصحيح) =====
         if use_web_search:
             try:
                 full_context = ""
@@ -1132,7 +1018,6 @@ def chat():
                         full_context += msg["content"] + "\n"
                     elif msg["role"] == "assistant":
                         full_context += "نبراس: " + msg["content"] + "\n"
-                
                 search_response = client.responses.create(
                     model="gpt-4o",
                     instructions=f"{SYSTEM_PROMPT}\n\nسياق المحادثة السابقة:\n{full_context}",
@@ -1145,7 +1030,6 @@ def chat():
             except Exception as e:
                 print(f"⚠️ فشل البحث بالويب: {e}")
 
-        # ===== الرد النهائي =====
         try:
             response = client.chat.completions.create(
                 model=model,
@@ -1176,7 +1060,6 @@ def chat():
             reply = "حدث خطأ في السيرفر، حاول مرة أخرى."
 
         session_memory[user_id].append({"role": "assistant", "content": reply})
-
         new_conv_id = save_user_conversation(user_id, session_memory[user_id], conv_id)
 
         if is_trial_user and trial_remaining > 0:
@@ -1185,7 +1068,6 @@ def chat():
                 session['is_trial_expired'] = True
                 reply += "\n\n⚠️ انتهت محادثاتك التجريبية. الترقية للاستمرار مع البحث بالويب والصور."
 
-        # ======= توليد الصوت البشري وإضافته للرد =======
         try:
             user_gender = session.get('voice_gender', 'male')
             audio_base64 = asyncio.run(generate_speech(reply, user_gender))
