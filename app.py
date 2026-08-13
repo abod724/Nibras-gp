@@ -163,7 +163,6 @@ def generate_image(prompt):
 async def generate_speech(text, gender):
     voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
     clean_text = remove_emoji(text) 
-    # تم ضبط السرعة ليكون الصوت أهدأ وأقرب للعامية
     communicate = edge_tts.Communicate(clean_text, voice_id, rate='-15%')
     audio_data = b""
     async for chunk in communicate.stream():
@@ -179,7 +178,8 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
     <title>نبراس</title>
-    <link rel="manifest" href="/manifest.json"> <!-- تم إضافة هذا السطر لربط ملف الوصف -->
+    <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
+    <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -778,7 +778,7 @@ LOGIN_HTML = """
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="POST">
         <input type="email" name="email" placeholder="البريد الإلكتروني" required>
-        <input type="password" name="password" placeholder="كلمة المرور" required>
+        <input type="password" name="password" placeholder="कلمة المرور" required>
         <button type="submit">دخول</button>
     </form>
     <a href="/">⬅ العودة للرئيسية</a>
