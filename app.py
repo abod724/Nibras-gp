@@ -179,6 +179,9 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
     <title>نبراس</title>
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
+    <!-- ===== تم التعديل هنا ليتناسب مع الصورة الجديدة ===== -->
+    <link rel="icon" type="image/jpeg" href="/icon-512.jpeg" />
+    <!-- ======================================================== -->
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <style>
@@ -778,7 +781,7 @@ LOGIN_HTML = """
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="POST">
         <input type="email" name="email" placeholder="البريد الإلكتروني" required>
-        <input type="password" name="password" placeholder="कلمة المرور" required>
+        <input type="password" name="password" placeholder="كلمة المرور" required>
         <button type="submit">دخول</button>
     </form>
     <a href="/">⬅ العودة للرئيسية</a>
