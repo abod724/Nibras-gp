@@ -22,7 +22,7 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ========== قاعدة البيانات الجديدة (SQLite) ==========
+# ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
 
 def init_db():
@@ -82,10 +82,9 @@ def load_conversation_by_id(user_id, conv_id):
         return json.loads(row[0])
     return None
 
-# تهيئة قاعدة البيانات عند بدء التشغيل
 init_db()
 
-# ========== الذاكرة المؤقتة للجلسة الحالية ==========
+# ========== الذاكرة المؤقتة ==========
 session_memory = {}
 
 # ========== تحميل ملف المعرفة ==========
@@ -164,6 +163,7 @@ def generate_image(prompt):
 async def generate_speech(text, gender):
     voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
     clean_text = remove_emoji(text) 
+    # تم ضبط السرعة ليكون الصوت أهدأ وأقرب للعامية
     communicate = edge_tts.Communicate(clean_text, voice_id, rate='-15%')
     audio_data = b""
     async for chunk in communicate.stream():
@@ -179,6 +179,7 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
     <title>نبراس</title>
+    <link rel="manifest" href="/manifest.json"> <!-- تم إضافة هذا السطر لربط ملف الوصف -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -828,7 +829,7 @@ PLANS_HTML = """
 </div></body></html>
 """
 
-# ========== مسار سياسة الخصوصية (تم تحديثه ليعمل بالتأكيد) ==========
+# ========== مسار سياسة الخصوصية ==========
 @app.route('/privacy')
 def privacy_policy():
     return render_template_string("""
