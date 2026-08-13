@@ -1,7 +1,7 @@
 {
-  "name": "نبراسgp",
-  "short_name": "نبراسgp",
-  "description": "نبراس، مساعد ذكي سعودي يتحدث ويكتب بصوت بشري",
+  "name": "نبراس GP",
+  "short_name": "نبراس GP",
+  "description": "مساعد ذكي سعودي يتحدث ويكتب بصوت بشري",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -9,14 +9,9 @@
   "id": "com.nibras.app",
   "icons": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512.png",
+      "src": "/icon-512.jpeg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ]
 }
