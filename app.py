@@ -178,9 +178,9 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover" />
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
-    <!-- ===== التعديل: ربط الصورة ===== -->
+    <!-- ===== تم التعديل هنا ليتناسب مع الصورة الجديدة ===== -->
     <link rel="icon" type="image/jpeg" href="/icon-512.jpeg" />
-    <!-- ====================================== -->
+    <!-- ======================================================== -->
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <style>
@@ -226,7 +226,9 @@ HTML_TEMPLATE = """
         .dropdown .conv-item:hover { background: #f5f7fa; }
         .dropdown .conv-item:last-child { border-bottom: none; }
         #chat { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; background: #ffffff; font-size: 16px; }
+        /* ===== تم زيادة حجم الخط هنا لتطبيق الجوال ===== */
         .msg { max-width: 80%; padding: 14px 20px; border-radius: 20px; font-size: 20px; font-weight: 600; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; color: #111111; }
+        /* ======================================================= */
         .msg.user { align-self: flex-end; background: transparent; border-bottom-left-radius: 6px; }
         .msg.bot { align-self: flex-start; background: #ffffff; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 10px; opacity: 0.35; display: block; margin-top: 4px; }
@@ -249,7 +251,7 @@ HTML_TEMPLATE = """
         #imagePreviewContainer .label { font-size: 13px; color: #5a6b7c; }
         #removeImageBtn { background: none; border: none; color: #c33; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 12px; }
         #removeImageBtn:hover { background: #fde8e8; }
-        .input-area { display: flex; align-items: flex-end; justify-content: center; gap: 8px; padding: 8px 14px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; min-height: 60px; }
+        .input-area { display: flex; align-items: flex-end; justify-content: center; gap: 8px; padding: 8px 14px; margin: 8px 14px 16px 14px; background: #f5f7fa; border-radius: 40px; border: 1px solid #dce1e8; flex-shrink: 0; min-height: 60px; padding-bottom: calc(env(safe-area-inset-bottom) + 20px); }
         .input-area textarea { flex: 1; border: none; background: transparent; padding: 12px 0; font-size: 20px; font-weight: 600; outline: none; color: #111111; direction: rtl; resize: none; overflow: hidden; min-height: 20px; max-height: 80px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.4; }
         .input-area textarea::placeholder { color: #9aabbc; }
         .input-area .btn-icon { background: none; border: none; color: #6a7b8c; font-size: 20px; cursor: pointer; padding: 4px; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -270,7 +272,7 @@ HTML_TEMPLATE = """
             .btn { font-size: 12px; padding: 5px 12px; }
             .dropdown { top: 58px; left: 10px; right: 10px; }
             #chat { padding: 14px 16px; }
-            .input-area { margin: 6px 10px 12px 10px; padding: 6px 10px; min-height: 50px; }
+            .input-area { margin: 6px 10px 12px 10px; padding: 6px 10px; min-height: 50px; padding-bottom: calc(env(safe-area-inset-bottom) + 15px); }
             .input-area textarea { font-size: 18px; }
             .input-area .send { width: 38px; height: 38px; font-size: 14px; }
             .input-area .btn-icon { width: 32px; height: 32px; font-size: 16px; }
@@ -322,9 +324,6 @@ HTML_TEMPLATE = """
     </div>
 
     <div id="chat"></div>
-
-    <!-- مسافة آمنة بسيطة تفصل مربع الكتابة عن شريط التنقل -->
-    <div style="height: calc(env(safe-area-inset-bottom) + 10px); width: 100%; flex-shrink: 0;"></div>
 
     <div id="imagePreviewContainer">
         <img id="imagePreview" src="" alt="معاينة" />
