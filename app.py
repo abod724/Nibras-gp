@@ -22,6 +22,12 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
+# ===== هذا هو التعديل الوحيد (يسمح للسيرفر بقراءة الصورة من الجذر) =====
+@app.route('/<path:filename>')
+def serve_static_files(filename):
+    return app.send_static_file(filename)
+# ======================================================================
+
 # ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
 
