@@ -191,10 +191,10 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
     <title>نبراس</title>
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
-    <!-- ===== تم التعديل هنا ليتناسب مع الصورة الجديدة ===== -->
-    <link rel="icon" type="image/jpeg" href="/icon-512.jpeg" />
-    <!-- ======================================================== -->
-    <link rel="manifest" href="/manifest.json">
+    <!-- ===== تم التعديل هنا ليتناسب مع مجلد static الجديد ===== -->
+    <link rel="manifest" href="/static/manifest.json" />
+    <link rel="icon" type="image/jpeg" href="/static/icon-512.jpeg" />
+    <!-- ========================================================== -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -994,7 +994,7 @@ def chat():
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
 
-        draw_keywords = ["ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", "रسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي", "أنشئ لي", "انشئ لي", "انشى لي", "صوره لي"]
+        draw_keywords = ["ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", "رسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي", "أنشئ لي", "انشئ لي", "انشى لي", "صوره لي"]
         if allow_images and any(keyword in user_message for keyword in draw_keywords):
             print(f"🎨 اكتشاف طلب رسم: {user_message}")
             image_url = generate_image(user_message)
