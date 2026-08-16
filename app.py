@@ -22,17 +22,15 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ===== هذا التعديل موجود مسبقاً (يسمح للسيرفر بقراءة الصورة من الجذر) =====
+# ===== مسار لقراءة الصورة والملفات من مجلد static =====
 @app.route('/<path:filename>')
 def serve_static_files(filename):
     return app.send_static_file(filename)
-# ========================================================================
 
-# ===== هذا هو التعديل الجديد لملف robots.txt =====
+# ===== مسار ملف robots.txt =====
 @app.route('/robots.txt')
 def serve_robots():
     return send_from_directory('static', 'robots.txt')
-# ===============================================
 
 # ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
@@ -305,7 +303,7 @@ HTML_TEMPLATE = """
     <div class="header">
         <div class="header-right">
             <button class="mute-btn" id="muteBtn" title="كتم الصوت / تفعيل الصوت"><i class="fas fa-volume-up"></i></button>
-            <button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button>
+            <button class="menu-btn" id="menuToggle" aria-label="القائمة"><i class="fas fa-ellipsis-v"></i></button>
         </div>
         <div class="header-left">
             <div class="btn-group">
@@ -343,15 +341,15 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="input-area">
-        <button class="btn-icon mic-btn" id="micBtn"><i class="fas fa-microphone"></i></button>
-        <button class="plus-btn" id="plusBtn"><i class="fas fa-plus"></i></button>
+        <button class="btn-icon mic-btn" id="micBtn" aria-label="تسجيل صوتي"><i class="fas fa-microphone"></i></button>
+        <button class="plus-btn" id="plusBtn" aria-label="إضافة ملف"><i class="fas fa-plus"></i></button>
         <div class="plus-options" id="plusOptions">
             <button class="option-btn camera" id="cameraBtn"><i class="fas fa-camera"></i></button>
             <button class="option-btn gallery" id="galleryBtn"><i class="fas fa-images"></i></button>
             <button class="option-btn files" id="filesBtn"><i class="fas fa-folder"></i></button>
         </div>
         <textarea id="userInput" placeholder="اكتب رسالتك..." autofocus rows="1"></textarea>
-        <button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button>
+        <button class="send" id="sendBtn" aria-label="إرسال الرسالة"><i class="fas fa-arrow-left"></i></button>
     </div>
     
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
