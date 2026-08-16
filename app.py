@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_from_directory
 import openai
 import os
 import secrets
@@ -22,11 +22,17 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ===== هذا هو التعديل الوحيد (يسمح للسيرفر بقراءة الصورة من الجذر) =====
+# ===== هذا التعديل موجود مسبقاً (يسمح للسيرفر بقراءة الصورة من الجذر) =====
 @app.route('/<path:filename>')
 def serve_static_files(filename):
     return app.send_static_file(filename)
-# ======================================================================
+# ========================================================================
+
+# ===== هذا هو التعديل الجديد لملف robots.txt =====
+@app.route('/robots.txt')
+def serve_robots():
+    return send_from_directory('static', 'robots.txt')
+# ===============================================
 
 # ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
@@ -988,7 +994,7 @@ def chat():
             if is_trial_user and trial_remaining == 0:
                 limit_msg = "⚠️ انتهت المحادثات التجريبية. الترقية للاستمرار."
 
-        draw_keywords = ["ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", "رسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي", "أنشئ لي", "انشئ لي", "انشى لي", "صوره لي"]
+        draw_keywords = ["ارسم", "أنشئ", "انشئ", "انشى", "صوره", "صورة", "صور", "रسم", "ارسمي", "صمم", "ولّد", "generate", "draw", "ارسم لي", "أنشئ لي", "انشئ لي", "انشى لي", "صوره لي"]
         if allow_images and any(keyword in user_message for keyword in draw_keywords):
             print(f"🎨 اكتشاف طلب رسم: {user_message}")
             image_url = generate_image(user_message)
