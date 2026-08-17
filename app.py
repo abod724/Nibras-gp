@@ -297,30 +297,6 @@ HTML_TEMPLATE = """
         .gender-option { flex: 1; padding: 8px 4px; border-radius: 10px; border: 1px solid #dce1e8; background: transparent; font-size: 14px; font-weight: 600; color: #5a6b7c; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 4px; }
         .gender-option:hover { background: #f5f7fa; }
         .gender-option.active { background: #4a6a8a; color: white; border-color: #4a6a8a; }
-        
-        /* ===== شريط الأدوات تحت الرد ===== */
-        .toolbar {
-            display: flex;
-            gap: 18px;
-            direction: rtl;
-            margin-top: 2px;
-            margin-bottom: 6px;
-            color: #8e8e8e;
-            stroke-width: 2;
-            stroke: currentColor;
-            fill: none;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            align-self: flex-start;
-        }
-        .toolbar svg {
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .toolbar svg:hover {
-            color: #4b4b4b;
-            transform: scale(1.1);
-        }
     </style>
 </head>
 <body>
@@ -566,19 +542,6 @@ HTML_TEMPLATE = """
                             el.appendChild(imgEl);
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
-                        
-                        // ===== شريط الأدوات تحت رسالة البوت =====
-                        const toolbarDiv = document.createElement('div');
-                        toolbarDiv.className = 'toolbar';
-                        toolbarDiv.innerHTML = `
-                            <svg onclick="sendAction('regenerate', this)" width="22" height="22" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9" /></svg>
-                            <svg onclick="sendAction('share', this)" width="22" height="22" viewBox="0 0 24 24"><path d="M9 13l-4-4 4-4M5 9h11a4 4 0 0 1 4 4v4" /></svg>
-                            <svg onclick="sendAction('dislike', this)" width="22" height="22" viewBox="0 0 24 24"><path d="M17 14V6c0-1.1-.9-2-2-2H7c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h4l-2 4h2l3 3v-7h3" /></svg>
-                            <svg onclick="sendAction('like', this)" width="22" height="22" viewBox="0 0 24 24"><path d="M7 10V18c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2h-4l2-4h-2l-3 3v7h-3" /></svg>
-                            <svg onclick="sendAction('open', this)" width="22" height="22" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><path d="M14 3v4h4" /></svg>
-                        `;
-                        chatBox.appendChild(toolbarDiv);
-                        chatBox.scrollTop = chatBox.scrollHeight;
                     }
                 }
                 typeChar();
@@ -767,68 +730,6 @@ HTML_TEMPLATE = """
                 sendMessage(); 
             } 
         });
-
-        // ===== دالة إرسال الأيقونات مع تفاعل مرئي للمستخدم =====
-        function sendAction(action, element) {
-            // 1. تغيير لون الأيقونة فوراً (حتى قبل رد السيرفر) عشان المستخدم يحس بالتفاعل
-            const originalColor = element.style.color || '#8e8e8e';
-            element.style.color = '#4a6a8a'; 
-
-            // 2. إرسال الأمر للبايثون
-            fetch('/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: action })
-            })
-            .then(r => r.json())
-            .then(data => {
-                // 3. إظهار رسالة للمستخدم (تظهر وتختفي لوحدها)
-                showToast(data.message);
-                
-                // 4. إذا كان إعجاب، يثبت اللون أزرق، وإذا عدم إعجاب يثبت أحمر
-                if (action === 'like') {
-                    element.style.color = '#007bff'; // لون أزرق جذاب
-                } else if (action === 'dislike') {
-                    element.style.color = '#dc3545'; // لون أحمر
-                } else {
-                    // باقي الأزرار ترجع للونها الرمادي بعد ثانية
-                    setTimeout(() => { element.style.color = originalColor; }, 1000);
-                }
-            })
-            .catch(e => {
-                console.error("خطأ في إرسال الحدث:", e);
-                element.style.color = originalColor;
-                showToast("حدث خطأ، حاول مرة أخرى", true);
-            });
-        }
-
-        // دالة لعمل رسالة عائمة (Toast) تظهر وتختفي بشكل جميل
-        function showToast(message, isError = false) {
-            const oldToast = document.querySelector('.custom-toast');
-            if(oldToast) oldToast.remove();
-
-            const toast = document.createElement('div');
-            toast.className = 'custom-toast';
-            toast.style.cssText = `
-                position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-                background: ${isError ? '#fde8e8' : '#1a2b3c'};
-                color: ${isError ? '#a33' : 'white'};
-                padding: 10px 20px; border-radius: 20px; font-size: 15px; font-weight: bold;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999;
-                direction: rtl; opacity: 0; transition: opacity 0.3s ease;
-            `;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            
-            // ظهور سلس
-            setTimeout(() => { toast.style.opacity = '1'; }, 10);
-            
-            // اختفاء سلس بعد ثانيتين ونص
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 2500);
-        }
 
         document.addEventListener('click', function(e) {
             if (!menuToggle.contains(e.target) && !dropdown.contains(e.target)) {
@@ -1149,21 +1050,6 @@ def chat():
     except Exception as e:
         print(f"❌ خطأ عام في /chat: {e}")
         return jsonify({"error": str(e)}), 500
-
-
-# ===== مسار استقبال ضغطات الأيقونات =====
-@app.route('/action', methods=['POST'])
-def action_handler():
-    action = request.json.get('action')
-    if action == 'like':
-        return jsonify({'message': 'شكراً لإعجابك!'})
-    elif action == 'dislike':
-        return jsonify({'message': 'تم تسجيل عدم الإعجاب'})
-    elif action == 'regenerate':
-        return jsonify({'message': 'جاري إعادة التوليد...'})
-    else:
-        return jsonify({'message': 'تم الاستلام'})
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
