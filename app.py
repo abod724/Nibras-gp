@@ -872,54 +872,6 @@ PLANS_HTML = """
 </div></body></html>
 """
 
-# ========== مسار سياسة الخصوصية ==========
-@app.route('/privacy')
-def privacy_policy():
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>سياسة الخصوصية - نبراس</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 20px; display: flex; justify-content: center; }
-        .container { max-width: 800px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        h1 { color: #1a2b3c; text-align: center; border-bottom: 2px solid #eaeef2; padding-bottom: 15px; }
-        h2 { color: #4a6a8a; margin-top: 20px; }
-        p { line-height: 1.8; color: #444; }
-        a { color: #4a6a8a; }
-        .footer { margin-top: 30px; text-align: center; font-size: 14px; color: #777; border-top: 1px solid #eaeef2; padding-top: 20px; }
-    </style>
-    </head>
-    <body>
-    <div class="container">
-        <h1>سياسة الخصوصية لتطبيق نبراس</h1>
-        <p>آخر تحديث: 13 أغسطس 2026</p>
-        
-        <h2>ما هي البيانات التي نجمعها؟</h2>
-        <p><strong>1. رسائل المحادثة:</strong> عندما تستخدم تطبيق نبراس، نقوم بحفظ نصوص المحادثات التي تجريها مع المساعد الذكي. هذا ضروري لكي تستطيع العودة لقراءة محادثاتك السابقة.</p>
-        <p><strong>2. البريد الإلكتروني:</strong> إذا قمت بتسجيل الدخول، نقوم بحفظ عنوان بريدك الإلكتروني فقط لتمييز حسابك وتخزين محادثاتك الخاصة بك.</p>
-        
-        <h2>كيف نستخدم بياناتك؟</h2>
-        <p><strong>1. عرض المحادثات:</strong> نستخدم بياناتك فقط لعرض تاريخ محادثاتك عندما تطلب ذلك داخل التطبيق.</p>
-        <p><strong>2. الذكاء الاصطناعي (OpenAI):</strong> عند سؤال المساعد، يتم إرسال رسالتك إلى خدمة OpenAI الخارجية لتوليد الرد. <strong>OpenAI لا تستخدم بياناتك لتدريب نماذجها</strong> (حسب سياسة استخدامها الحالية)، لكننا ننصح بقراءة سياسة الخصوصية الخاصة بهم.</p>
-        
-        <h2>هل نشارك بياناتك مع أي طرف ثالث؟</h2>
-        <p>نحن لا نبيع أو نؤجر أو نشارك بياناتك مع أي طرف ثالث، باستثناء خدمة OpenAI التي نستخدمها لتشغيل الذكاء الاصطناعي، وهي ضرورية لعمل التطبيق.</p>
-        
-        <h2>كيف نخزن بياناتك؟</h2>
-        <p>يتم تخزين جميع بيانات المحادثة وقاعدة المستخدمين بشكل آمن على خوادمنا الداخلية، ولا يتم الوصول إليها إلا لأغراض صيانة التطبيق.</p>
-        
-        <h2>حقوقك:</h2>
-        <p>لديك الحق في طلب حذف جميع بياناتك في أي وقت. يمكنك التواصل معنا عبر البريد الإلكتروني: <a href="mailto:abdullaha0569361@gmail.com">abdullaha0569361@gmail.com</a>.</p>
-        
-        <h2>تحديثات السياسة</h2>
-        <p>قد نقوم بتحديث هذه السياسة من وقت لآخر. سيتم نشر أي تغييرات هنا.</p>
-        
-        <div class="footer">شكراً لاستخدامك نبراس! 💙</div>
-    </div>
-    </body>
-    </html>
-    """)
-
 # ========== مسارات التطبيق ==========
 @app.route('/')
 def index():
@@ -1012,8 +964,8 @@ def chat():
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
             model = "gpt-4o"
-            use_web_search = False   # <-- تم التعديل: إيقاف البحث للتجريبي
-            allow_images = False     # <-- تم التعديل: إيقاف الصور للتجريبي
+            use_web_search = False   # <--- تم إيقاف البحث عن الضيوف والتجريبيين
+            allow_images = False      # <--- تم إيقاف الصور عن الضيوف والتجريبيين
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
             model = "gpt-4o"
