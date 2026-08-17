@@ -189,6 +189,9 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
     <meta http-equiv="Content-Language" content="ar" />
+    <!-- ===== هذا هو السطر الجديد (وصف الموقع للبحث) ===== -->
+    <meta name="description" content="نبراس GP، مساعد ذكي سعودي يتحدث باللهجة العامية البيضاء ويكتب بصوت بشري. جرب المحادثة الصوتية الآن!" />
+    <!-- ========================================================= -->
     <title>نبراس</title>
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" type="image/jpeg" href="/static/icon-512.jpeg" />
