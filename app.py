@@ -1012,8 +1012,8 @@ def chat():
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
             model = "gpt-4o"
-            use_web_search = True
-            allow_images = True
+            use_web_search = False   # <-- تم التعديل: إيقاف البحث للتجريبي
+            allow_images = False     # <-- تم التعديل: إيقاف الصور للتجريبي
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
             model = "gpt-4o"
