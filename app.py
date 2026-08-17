@@ -651,7 +651,7 @@ HTML_TEMPLATE = """
             }
         });
 
-        // ===== دالة sendMessage المعدلة (إزالة الفقاعة الحمراء) =====
+        // ===== دالة sendMessage =====
         async function sendMessage() {
             if (isWaiting) return;
 
@@ -670,7 +670,7 @@ HTML_TEMPLATE = """
             userInput.style.height = 'auto';
             isWaiting = true;
 
-            // ===== مؤشر "جاري التفكير" للمحاولة الأولى =====
+            // ===== مؤشر "جاري التفكير" =====
             const typingDiv = document.createElement('div');
             typingDiv.className = 'msg bot typing-indicator';
             typingDiv.innerHTML = '<span class="typing-dots">جاري التفكير</span>';
@@ -684,69 +684,43 @@ HTML_TEMPLATE = """
                 conv_id: currentConvId
             };
 
-            let retryCount = 0;
-            const maxRetries = 1;
-
-            async function attemptFetch() {
-                try {
-                    const res = await fetch('/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await res.json();
-                    
-                    if (typingDiv && typingDiv.parentNode) {
-                        typingDiv.remove();
-                    }
-
-                    if (res.ok) {
-                        addMessage(data.reply, 'bot');
-                        if (!isMuted && data.audio) {
-                            if (currentAudio) { 
-                                currentAudio.pause(); 
-                                currentAudio.currentTime = 0; 
-                            }
-                            const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                            currentAudio = new Audio(audioSrc);
-                            currentAudio.play();
-                        }
-                        if (data.conv_id) {
-                            currentConvId = data.conv_id;
-                        }
-                        return;
-                    } else {
-                        throw new Error('فشل السيرفر');
-                    }
-                } catch (e) {
-                    if (typingDiv && typingDiv.parentNode) {
-                        typingDiv.remove();
-                    }
-
-                    if (retryCount < maxRetries) {
-                        retryCount++;
-                        // ===== مؤشر إعادة المحاولة (جاري تجهيز الرد) =====
-                        const waitingDiv = document.createElement('div');
-                        waitingDiv.className = 'msg bot typing-indicator';
-                        waitingDiv.innerHTML = '<span class="typing-dots">جاري تجهيز الرد</span>';
-                        chatBox.appendChild(waitingDiv);
-                        chatBox.scrollTop = chatBox.scrollHeight;
-
-                        setTimeout(async () => {
-                            if (waitingDiv && waitingDiv.parentNode) {
-                                waitingDiv.remove();
-                            }
-                            await attemptFetch();
-                        }, 2000);
-                    } else {
-                        // ===== إذا فشل السيرفر تماماً (الفقاعة الحمراء اختفت) =====
-                        addMessage('جاري تجهيز الرد حاول ارسال رسالتك بعد ثواني.', 'bot');
-                        isWaiting = false;
-                    }
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                
+                if (typingDiv && typingDiv.parentNode) {
+                    typingDiv.remove();
                 }
-            }
 
-            await attemptFetch();
+                if (res.ok) {
+                    addMessage(data.reply, 'bot');
+                    if (!isMuted && data.audio) {
+                        if (currentAudio) { 
+                            currentAudio.pause(); 
+                            currentAudio.currentTime = 0; 
+                        }
+                        const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+                        currentAudio = new Audio(audioSrc);
+                        currentAudio.play();
+                    }
+                    if (data.conv_id) {
+                        currentConvId = data.conv_id;
+                    }
+                } else {
+                    addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
+                }
+            } catch (e) {
+                if (typingDiv && typingDiv.parentNode) {
+                    typingDiv.remove();
+                }
+                addMessage('تعذر الاتصال بالسيرفر، حاول مرة أخرى.', 'error');
+            } finally {
+                isWaiting = false;
+            }
         }
 
         sendBtn.addEventListener('click', sendMessage);
@@ -964,8 +938,8 @@ def chat():
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
             model = "gpt-4o"
-            use_web_search = False   # <--- تم إيقاف البحث عن الضيوف والتجريبيين
-            allow_images = False      # <--- تم إيقاف الصور عن الضيوف والتجريبيين
+            use_web_search = False   # التعديل: إيقاف البحث للتجريبي
+            allow_images = False     # التعديل: إيقاف الصور للتجريبي
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
             model = "gpt-4o"
