@@ -189,9 +189,8 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
     <meta http-equiv="Content-Language" content="ar" />
-    <!-- ===== هذا هو السطر الجديد (وصف الموقع للبحث) ===== -->
+    <!-- ===== وصف الموقع للبحث ===== -->
     <meta name="description" content="نبراس GP، مساعد ذكي سعودي يتحدث باللهجة العامية البيضاء ويكتب بصوت بشري. جرب المحادثة الصوتية الآن!" />
-    <!-- ========================================================= -->
     <title>نبراس</title>
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" type="image/jpeg" href="/static/icon-512.jpeg" />
@@ -652,6 +651,7 @@ HTML_TEMPLATE = """
             }
         });
 
+        // ===== دالة sendMessage المعدلة (إزالة الفقاعة الحمراء) =====
         async function sendMessage() {
             if (isWaiting) return;
 
@@ -670,6 +670,7 @@ HTML_TEMPLATE = """
             userInput.style.height = 'auto';
             isWaiting = true;
 
+            // ===== مؤشر "جاري التفكير" للمحاولة الأولى =====
             const typingDiv = document.createElement('div');
             typingDiv.className = 'msg bot typing-indicator';
             typingDiv.innerHTML = '<span class="typing-dots">جاري التفكير</span>';
@@ -683,42 +684,69 @@ HTML_TEMPLATE = """
                 conv_id: currentConvId
             };
 
-            try {
-                const res = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                if (typingDiv && typingDiv.parentNode) {
-                    typingDiv.remove();
-                }
+            let retryCount = 0;
+            const maxRetries = 1;
 
-                if (res.ok) {
-                    addMessage(data.reply, 'bot');
-                    if (!isMuted && data.audio) {
-                        if (currentAudio) { 
-                            currentAudio.pause(); 
-                            currentAudio.currentTime = 0; 
+            async function attemptFetch() {
+                try {
+                    const res = await fetch('/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    
+                    if (typingDiv && typingDiv.parentNode) {
+                        typingDiv.remove();
+                    }
+
+                    if (res.ok) {
+                        addMessage(data.reply, 'bot');
+                        if (!isMuted && data.audio) {
+                            if (currentAudio) { 
+                                currentAudio.pause(); 
+                                currentAudio.currentTime = 0; 
+                            }
+                            const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+                            currentAudio = new Audio(audioSrc);
+                            currentAudio.play();
                         }
-                        const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                        currentAudio = new Audio(audioSrc);
-                        currentAudio.play();
+                        if (data.conv_id) {
+                            currentConvId = data.conv_id;
+                        }
+                        return;
+                    } else {
+                        throw new Error('فشل السيرفر');
                     }
-                    if (data.conv_id) {
-                        currentConvId = data.conv_id;
+                } catch (e) {
+                    if (typingDiv && typingDiv.parentNode) {
+                        typingDiv.remove();
                     }
-                } else {
-                    addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
+
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        // ===== مؤشر إعادة المحاولة (جاري تجهيز الرد) =====
+                        const waitingDiv = document.createElement('div');
+                        waitingDiv.className = 'msg bot typing-indicator';
+                        waitingDiv.innerHTML = '<span class="typing-dots">جاري تجهيز الرد</span>';
+                        chatBox.appendChild(waitingDiv);
+                        chatBox.scrollTop = chatBox.scrollHeight;
+
+                        setTimeout(async () => {
+                            if (waitingDiv && waitingDiv.parentNode) {
+                                waitingDiv.remove();
+                            }
+                            await attemptFetch();
+                        }, 2000);
+                    } else {
+                        // ===== إذا فشل السيرفر تماماً (الفقاعة الحمراء اختفت) =====
+                        addMessage('جاري تجهيز الرد حاول ارسال رسالتك بعد ثواني.', 'bot');
+                        isWaiting = false;
+                    }
                 }
-            } catch (e) {
-                if (typingDiv && typingDiv.parentNode) {
-                    typingDiv.remove();
-                }
-                addMessage('تعذر الاتصال بالسيرفر.', 'error');
-            } finally {
-                isWaiting = false;
             }
+
+            await attemptFetch();
         }
 
         sendBtn.addEventListener('click', sendMessage);
