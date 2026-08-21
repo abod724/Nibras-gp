@@ -11,7 +11,8 @@ import base64
 import re
 import sqlite3
 
-app = Flask(__name__)
+# ===== تعريف التطبيق مع مجلد الملفات الثابتة =====
+app = Flask(__name__, static_folder='static')
 
 # إعداد المفاتيح السرية
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
@@ -22,15 +23,13 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ===== مسار لقراءة الصورة والملفات من مجلد static =====
-@app.route('/<path:filename>')
-def serve_static_files(filename):
-    return app.send_static_file(filename)
-
 # ===== مسار ملف robots.txt =====
 @app.route('/robots.txt')
 def serve_robots():
     return send_from_directory('static', 'robots.txt')
+
+# ===== تم حذف المسار العام الخطير =====
+# الآن أي ملف في مجلد static يمكن الوصول إليه عبر /static/اسم_الملف
 
 # ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
@@ -855,9 +854,23 @@ def index():
 def login():
     if request.method == 'POST':
         email = request.form.get('email')
-        if email == "abdullaha0569361@gmail.com":
-            session['admin_email'] = email
-            return redirect(url_for('index'))
+        password = request.form.get('password')  # استلام كلمة المرور
+
+        admin_email = "abdullaha0569361@gmail.com"
+        admin_password = os.environ.get("ADMIN_PASSWORD")
+
+        # التحقق من الأدمن
+        if email == admin_email:
+            if not admin_password:
+                return render_template_string(LOGIN_HTML, error="خطأ: لم يتم إعداد كلمة مرور الأدمن في الخادم.")
+            if secrets.compare_digest(password, admin_password):
+                session.clear()
+                session['admin_email'] = admin_email
+                return redirect(url_for('index'))
+            else:
+                return render_template_string(LOGIN_HTML, error="كلمة مرور الأدمن غير صحيحة.")
+
+        # المستخدم العادي (يسمح بأي بريد صالح بدون كلمة مرور)
         elif email and "@" in email:
             session['user_email'] = email
             session['trial_remaining'] = 5
@@ -865,6 +878,7 @@ def login():
             return redirect(url_for('index'))
         else:
             return render_template_string(LOGIN_HTML, error="يرجى إدخال بريد إلكتروني صحيح.")
+
     return render_template_string(LOGIN_HTML)
 
 @app.route('/logout')
@@ -938,8 +952,8 @@ def chat():
             limit_msg = None
         elif is_trial_user and trial_remaining > 0 and not session.get('is_trial_expired'):
             model = "gpt-4o"
-            use_web_search = False   # التعديل: إيقاف البحث للتجريبي
-            allow_images = False     # التعديل: إيقاف الصور للتجريبي
+            use_web_search = False
+            allow_images = False
             limit_msg = f"💎 تبقى لك {trial_remaining} محادثة تجريبية مميزة!"
         else:
             model = "gpt-4o"
