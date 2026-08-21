@@ -23,13 +23,18 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ===== مسار ملف robots.txt =====
+# ===== مسار ملف robots.txt (يعيد المحتوى مباشرة) =====
 @app.route('/robots.txt')
 def serve_robots():
-    return send_from_directory('static', 'robots.txt')
+    content = """User-agent: *
+Allow: /
 
-# ===== تم حذف المسار العام الخطير =====
-# الآن أي ملف في مجلد static يمكن الوصول إليه عبر /static/اسم_الملف
+# منع الزحف لصفحات معينة (اختياري)
+Disallow: /login
+Disallow: /logout
+Disallow: /plans
+"""
+    return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 # ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
@@ -854,12 +859,11 @@ def index():
 def login():
     if request.method == 'POST':
         email = request.form.get('email')
-        password = request.form.get('password')  # استلام كلمة المرور
+        password = request.form.get('password')
 
         admin_email = "abdullaha0569361@gmail.com"
         admin_password = os.environ.get("ADMIN_PASSWORD")
 
-        # التحقق من الأدمن
         if email == admin_email:
             if not admin_password:
                 return render_template_string(LOGIN_HTML, error="خطأ: لم يتم إعداد كلمة مرور الأدمن في الخادم.")
@@ -869,8 +873,6 @@ def login():
                 return redirect(url_for('index'))
             else:
                 return render_template_string(LOGIN_HTML, error="كلمة مرور الأدمن غير صحيحة.")
-
-        # المستخدم العادي (يسمح بأي بريد صالح بدون كلمة مرور)
         elif email and "@" in email:
             session['user_email'] = email
             session['trial_remaining'] = 5
@@ -878,7 +880,6 @@ def login():
             return redirect(url_for('index'))
         else:
             return render_template_string(LOGIN_HTML, error="يرجى إدخال بريد إلكتروني صحيح.")
-
     return render_template_string(LOGIN_HTML)
 
 @app.route('/logout')
