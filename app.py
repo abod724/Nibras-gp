@@ -11,10 +11,7 @@ import base64
 import re
 import sqlite3
 
-# ===== تعريف التطبيق مع مجلد الملفات الثابتة =====
 app = Flask(__name__, static_folder='static')
-
-# إعداد المفاتيح السرية
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
@@ -23,20 +20,10 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-# ===== مسار ملف robots.txt (يعيد المحتوى مباشرة) =====
 @app.route('/robots.txt')
 def serve_robots():
-    content = """User-agent: *
-Allow: /
+    return send_from_directory('static', 'robots.txt')
 
-# منع الزحف لصفحات معينة (اختياري)
-Disallow: /login
-Disallow: /logout
-Disallow: /plans
-"""
-    return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
-
-# ========== قاعدة البيانات (SQLite) ==========
 DB_FILE = "conversations.db"
 
 def init_db():
@@ -53,70 +40,47 @@ def get_user_conversations(user_id):
     c.execute("SELECT conv_id, messages, timestamp, title FROM conversations WHERE user_id=?", (user_id,))
     rows = c.fetchall()
     conn.close()
-    
     result = []
     for row in rows:
-        result.append({
-            "id": row[0],
-            "messages": json.loads(row[1]),
-            "timestamp": row[2],
-            "title": row[3]
-        })
+        result.append({"id": row[0], "messages": json.loads(row[1]), "timestamp": row[2], "title": row[3]})
     return result
 
 def save_user_conversation(user_id, conversation, conv_id=None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    
     if conv_id is None:
         title = conversation[0]["content"][:30] + "..." if len(conversation[0]["content"]) > 30 else conversation[0]["content"]
         new_conv_id = hashlib.md5(f"{user_id}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
-        
         messages_json = json.dumps(conversation)
         c.execute("INSERT INTO conversations (user_id, conv_id, messages, timestamp, title) VALUES (?, ?, ?, ?, ?)",
                   (user_id, new_conv_id, messages_json, datetime.now().isoformat(), title))
-        conn.commit()
-        conn.close()
-        return new_conv_id
+        conn.commit(); conn.close(); return new_conv_id
     else:
         messages_json = json.dumps(conversation)
         c.execute("UPDATE conversations SET messages=?, timestamp=? WHERE user_id=? AND conv_id=?",
                   (messages_json, datetime.now().isoformat(), user_id, conv_id))
-        conn.commit()
-        conn.close()
-        return conv_id
+        conn.commit(); conn.close(); return conv_id
 
 def load_conversation_by_id(user_id, conv_id):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT messages FROM conversations WHERE user_id=? AND conv_id=?", (user_id, conv_id))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        return json.loads(row[0])
+    row = c.fetchone(); conn.close()
+    if row: return json.loads(row[0])
     return None
 
 init_db()
-
-# ========== الذاكرة المؤقتة ==========
 session_memory = {}
-
-# ========== تحميل ملف المعرفة ==========
 knowledge_content = ""
 possible_names = ["Knowledge.md", "knowledge.md", "معرفة.md", "README.md", "ملف_المعرفة.md"]
 for filename in possible_names:
     if os.path.exists(filename):
         try:
-            with open(filename, "r", encoding="utf-8") as f:
-                knowledge_content = f.read()
-                break
-        except:
-            pass
+            with open(filename, "r", encoding="utf-8") as f: knowledge_content = f.read(); break
+        except: pass
+if not knowledge_content: knowledge_content = "أنت نبراس، مساعد ذكي."
 
-if not knowledge_content:
-    knowledge_content = "أنت نبراس، مساعد ذكي."
-
-# ========== تعليمات النظام ==========
+# ===== التعديل 1: تعليمات الكتابة (يطلب فقرات متصلة) =====
 SYSTEM_PROMPT = f"""
 أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
 
@@ -128,64 +92,43 @@ SYSTEM_PROMPT = f"""
 **ملف المعرفة الخاص بك:**
 {knowledge_content}
 
+**⚠️ قواعد التنسيق الإلزامية (يجب الالتزام بها):**
+- اكتب ردك في فقرات نصية عادية متصلة (مثل ChatGPT والمقالات).
+- **ممنوع** وضع كل جملة في سطر مستقل (ممنوع الشعر). اكتب جملة طويلة تكمل في السطر التالي.
+- اترك **سطراً فارغاً** بين كل فقرة وأخرى.
+- استخدم `**الخط العريض**` لعناوين الفقرات، و `-` للقوائم.
+
 **تعليمات مهمة:**
 - إذا سألك المستخدم عن أي شيء، حاول أولاً الإجابة من ملف المعرفة.
 - إذا لم تجد المعلومة في ملف المعرفة، استخدم البحث بالويب.
 - دائماً حافظ على لهجتك العامية البيضاء.
 - إذا لم تجد المعلومة في أي من المصادر، قل بصراحة "ما عندي علم".
-- **لا تكتب "لحظة" أو "انتظر" أو أي نص انتظار**، فقط انتظر النتيجة ورد مباشرة.
+- لا تكتب "لحظة" أو "انتظر"، فقط انتظر النتيجة ورد مباشرة.
 """
 
-# ========== دالة إزالة الإيموجي ==========
 def remove_emoji(text):
     emoji_pattern = re.compile("["
-        u"\U0001F600-\U0001F64F"  
-        u"\U0001F300-\U0001F5FF"  
-        u"\U0001F680-\U0001F6FF"  
-        u"\U0001F1E0-\U0001F1FF"  
-        u"\U00002500-\U00002BEF"  
-        u"\U00002702-\U000027B0"
-        u"\U000024C2-\U0001F251"
-        u"\U0001f926-\U0001f937"
-        u"\U00010000-\U0010ffff"
-        u"\u2640-\u2642"
-        u"\u2600-\u2B55"
-        u"\u200d"
-        u"\u23cf"
-        u"\u23e9"
-        u"\u231a"
-        u"\ufe0f"
-        u"\u3030"
+        u"\U0001F600-\U0001F64F" u"\U0001F300-\U0001F5FF" u"\U0001F680-\U0001F6FF" u"\U0001F1E0-\U0001F1FF" u"\U00002500-\U00002BEF" u"\U00002702-\U000027B0" u"\U000024C2-\U0001F251" u"\U0001f926-\U0001f937" u"\U00010000-\U0010ffff" u"\u2640-\u2642" u"\u2600-\u2B55" u"\u200d" u"\u23cf" u"\u23e9" u"\u231a" u"\ufe0f" u"\u3030"
     "]+", flags=re.UNICODE)
     return emoji_pattern.sub(r'', text)
 
-# ========== دالة إنشاء الصور ==========
 def generate_image(prompt):
     try:
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            n=1,
-            size="1024x1024"
-        )
+        response = client.images.generate(model="dall-e-3", prompt=prompt, n=1, size="1024x1024")
         return response.data[0].url
     except Exception as e:
-        print(f"❌ فشل توليد الصورة: {e}")
-        return None
+        print(f"❌ فشل توليد الصورة: {e}"); return None
 
-# ========== دالة توليد الصوت البشري (Edge TTS) ==========
 async def generate_speech(text, gender):
     voice_id = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariyahNeural"
-    clean_text = remove_emoji(text) 
-    communicate = edge_tts.Communicate(clean_text, voice_id, rate='-15%')
+    communicate = edge_tts.Communicate(remove_emoji(text), voice_id, rate='-15%')
     audio_data = b""
     async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_data += chunk["data"]
+        if chunk["type"] == "audio": audio_data += chunk["data"]
     return base64.b64encode(audio_data).decode('utf-8')
 
-# ========== واجهة الدردشة ==========
-HTML_TEMPLATE = """
+# إضافة r لإسكات تحذير بايثون (لا يغير الواجهة)
+HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -193,7 +136,6 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
     <meta http-equiv="Content-Language" content="ar" />
-    <!-- ===== وصف الموقع للبحث ===== -->
     <meta name="description" content="نبراس GP، مساعد ذكي سعودي يتحدث باللهجة العامية البيضاء ويكتب بصوت بشري. جرب المحادثة الصوتية الآن!" />
     <title>نبراس</title>
     <link rel="manifest" href="/static/manifest.json" />
@@ -209,12 +151,7 @@ HTML_TEMPLATE = """
         .menu-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; }
         .mute-btn { background: none; border: none; font-size: 20px; color: #5a6b7c; cursor: pointer; padding: 4px 8px; transition: color 0.2s; }
         .mute-btn:hover { color: #1a2b3c; }
-        .mute-btn.muted { 
-            color: #444444;
-            opacity: 0.4; 
-            transform: scale(0.9);
-            transition: all 0.2s ease;
-        }
+        .mute-btn.muted { color: #444444; opacity: 0.4; transform: scale(0.9); transition: all 0.2s ease; }
         .btn-group { display: flex; gap: 8px; }
         .btn { padding: 6px 16px; border-radius: 20px; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
         .btn-outline { background: transparent; border: 1px solid #4a6a8a; color: #4a6a8a; }
@@ -225,24 +162,14 @@ HTML_TEMPLATE = """
         .dropdown .item:last-child { border-bottom: none; }
         .dropdown .item i { width: 22px; font-size: 18px; color: #5a6b7c; }
         .dropdown .item:hover { background: #f5f7fa; }
-        .dropdown .conv-item {
-            display: block;
-            padding: 12px 18px;
-            border-bottom: 1px solid #f0f2f5;
-            cursor: pointer;
-            width: 100%;
-            background: none;
-            border: none;
-            text-align: right;
-            font-size: 16px;
-            color: #1a2b3c;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
+        .dropdown .conv-item { display: block; padding: 12px 18px; border-bottom: 1px solid #f0f2f5; cursor: pointer; width: 100%; background: none; border: none; text-align: right; font-size: 16px; color: #1a2b3c; font-weight: 500; transition: background 0.2s; }
         .dropdown .conv-item:hover { background: #f5f7fa; }
         .dropdown .conv-item:last-child { border-bottom: none; }
         #chat { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; background: #ffffff; font-size: 16px; }
-        .msg { max-width: 80%; padding: 12px 18px; border-radius: 20px; font-size: 16px; font-weight: 600; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; color: #111111; }
+        
+        # ===== التعديل 2: تغيير pre-wrap إلى normal ليمتد النص كفقرات =====
+        .msg { max-width: 80%; padding: 12px 18px; border-radius: 20px; font-size: 16px; font-weight: 600; line-height: 2; word-wrap: break-word; white-space: normal; color: #111111; }
+        
         .msg.user { align-self: flex-end; background: transparent; border-bottom-left-radius: 6px; }
         .msg.bot { align-self: flex-start; background: #ffffff; border-bottom-right-radius: 6px; }
         .msg .time { font-size: 10px; opacity: 0.35; display: block; margin-top: 4px; }
@@ -465,14 +392,14 @@ HTML_TEMPLATE = """
 
         async function loadConversation(convId) {
             try {
-                const res = await fetch(`/load_conversation/${convId}`);
+                const res = await fetch('/load_conversation/' + convId);
                 const data = await res.json();
                 if (data.messages) {
                     chatBox.innerHTML = '';
                     conversationHistory = data.messages;
                     currentConvId = convId;
-                    data.messages.forEach(msg => {
-                        const sender = msg.role === 'user' ? 'user' : 'bot';
+                    data.messages.forEach(function(msg) {
+                        var sender = msg.role === 'user' ? 'user' : 'bot';
                         addMessage(msg.content, sender, true);
                     });
                     dropdown.classList.remove('show');
@@ -492,23 +419,54 @@ HTML_TEMPLATE = """
             userInput.value = '';
         });
 
-        function addMessage(text, sender = 'bot', isSystem = false, imageData = null) {
-            const el = document.createElement('div');
-            el.className = `msg ${sender}`;
+        // ===== التعديل 3: إضافة دالة تحويل الماركداون (شكل ChatGPT) =====
+        function formatBotText(text) {
+            var safe = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // تحويل العناوين
+            safe = safe.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+            safe = safe.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+            safe = safe.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+            
+            // تحويل الخط العريض
+            safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            safe = safe.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+            // تحويل الأسطر الجديدة المفردة إلى مسافات لتكوين فقرة متصلة، مع ترك سطر فارغ بين الفقرات
+            var paragraphs = safe.split(/\n\s*\n/);
+            
+            return paragraphs.map(function(paragraph) {
+                paragraph = paragraph.trim();
+                if (!paragraph) return '';
+                paragraph = paragraph.replace(/\n/g, ' ');
+                return '<p>' + paragraph + '</p>';
+            }).join('');
+        }
+
+        function addMessage(text, sender, isSystem, imageData) {
+            sender = sender || 'bot';
+            isSystem = isSystem || false;
+            var el = document.createElement('div');
+            el.className = 'msg ' + sender;
             if (sender === 'error') el.classList.add('error');
-            const now = new Date();
-            const time = isSystem ? '' : now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
+            var now = new Date();
+            var time = isSystem ? '' : now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
             
             if (imageData) {
-                el.innerHTML = `<img src="${imageData}" class="image-upload" /><span class="file-label">${text || 'صورة'}</span>${time ? ' <span class="time">'+time+'</span>' : ''}`;
+                el.innerHTML = '<img src="' + imageData + '" class="image-upload" /><span class="file-label">' + (text || 'صورة') + '</span>' + (time ? ' <span class="time">'+time+'</span>' : '');
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
                 return el;
             }
 
-            const imageUrlMatch = text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
-            let displayText = text;
-            let generatedImageUrl = null;
+            var imageUrlMatch = text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
+            var displayText = text;
+            var generatedImageUrl = null;
+
             if (imageUrlMatch) {
                 generatedImageUrl = imageUrlMatch[0];
                 displayText = text.replace(imageUrlMatch[0], '').trim();
@@ -516,17 +474,20 @@ HTML_TEMPLATE = """
             }
 
             if (sender === 'bot' && !isSystem && !generatedImageUrl) {
-                el.innerHTML = `<span class="typing-text"></span>${time ? ' <span class="time">'+time+'</span>' : ''}`;
+                el.innerHTML = '<div class="bot-content"><span class="typing-text"></span></div>' + (time ? ' <span class="time">'+time+'</span>' : '');
                 chatBox.appendChild(el);
                 chatBox.scrollTop = chatBox.scrollHeight;
-                const typingSpan = el.querySelector('.typing-text');
-                let index = 0;
-                let userInteracted = false;
-                const onUserInteract = () => {
+
+                var typingSpan = el.querySelector('.typing-text');
+                var index = 0;
+                var userInteracted = false;
+
+                var onUserInteract = function() {
                     userInteracted = true;
                     chatBox.removeEventListener('touchstart', onUserInteract);
                     chatBox.removeEventListener('scroll', onUserInteract);
                 };
+
                 chatBox.addEventListener('touchstart', onUserInteract);
                 chatBox.addEventListener('scroll', onUserInteract);
 
@@ -534,29 +495,33 @@ HTML_TEMPLATE = """
                     if (index < displayText.length) {
                         typingSpan.textContent += displayText.charAt(index);
                         index++;
+
                         if (!userInteracted) {
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
+
                         setTimeout(typeChar, 20);
                     } else {
-                        if (generatedImageUrl) {
-                            const imgEl = document.createElement('img');
-                            imgEl.src = generatedImageUrl;
-                            imgEl.className = 'generated-image';
-                            el.appendChild(imgEl);
-                            chatBox.scrollTop = chatBox.scrollHeight;
-                        }
+                        typingSpan.innerHTML = formatBotText(displayText);
+                        chatBox.scrollTop = chatBox.scrollHeight;
                     }
                 }
+
                 typeChar();
                 return el;
             }
 
-            let content = displayText;
-            if (generatedImageUrl) {
-                content += `<br/><img src="${generatedImageUrl}" class="generated-image" />`;
+            var content = displayText;
+
+            if (sender === 'bot') {
+                content = '<div class="bot-content">' + formatBotText(displayText) + '</div>';
             }
-            el.innerHTML = `${content}${time ? ' <span class="time">'+time+'</span>' : ''}`;
+
+            if (generatedImageUrl) {
+                content += '<br/><img src="' + generatedImageUrl + '" class="generated-image" />';
+            }
+
+            el.innerHTML = content + (time ? ' <span class="time">'+time+'</span>' : '');
             chatBox.appendChild(el);
             chatBox.scrollTop = chatBox.scrollHeight;
             return el;
@@ -564,34 +529,35 @@ HTML_TEMPLATE = """
 
         function showWelcome() {
             if (!sessionStorage.getItem('welcomeShown')) {
-                const overlay = document.createElement('div');
+                var overlay = document.createElement('div');
                 overlay.className = 'welcome-overlay';
-                overlay.innerHTML = `
-                    <div class="welcome-box">
-                        <h2>👋 أهلاً بك في نبراس</h2>
-                        <p>نورتنا! كيف نقدر نساعدك اليوم؟</p>
-                    </div>
-                `;
+
+                overlay.innerHTML = '<div class="welcome-box"><h2>👋 أهلاً بك في نبراس</h2><p>نورتنا! كيف نقدر نساعدك اليوم؟</p></div>';
+
                 document.body.appendChild(overlay);
                 sessionStorage.setItem('welcomeShown', 'true');
-                setTimeout(() => {
+
+                setTimeout(function() {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
-                        setTimeout(() => {
+                        setTimeout(function() {
                             if (document.body.contains(overlay)) overlay.remove();
                         }, 500);
                     }
                 }, 5000);
-                const removeWelcome = function() {
+
+                var removeWelcome = function() {
                     if (document.body.contains(overlay)) {
                         overlay.classList.add('fade-out');
-                        setTimeout(() => {
+                        setTimeout(function() {
                             if (document.body.contains(overlay)) overlay.remove();
                         }, 500);
                     }
+
                     document.removeEventListener('click', removeWelcome);
                     userInput.removeEventListener('keydown', removeWelcome);
                 };
+
                 document.addEventListener('click', removeWelcome);
                 userInput.addEventListener('keydown', removeWelcome);
             }
@@ -615,12 +581,14 @@ HTML_TEMPLATE = """
             this.style.height = Math.min(this.scrollHeight, 80) + 'px';
         });
 
-        let plusOpen = false;
+        var plusOpen = false;
+
         plusBtn.addEventListener('click', function() {
             plusOpen = !plusOpen;
             plusOptions.classList.toggle('show', plusOpen);
             this.classList.toggle('rotate', plusOpen);
         });
+
         document.addEventListener('click', function(e) {
             if (!plusBtn.contains(e.target) && !plusOptions.contains(e.target)) {
                 plusOptions.classList.remove('show');
@@ -629,42 +597,54 @@ HTML_TEMPLATE = """
             }
         });
 
-        galleryBtn.addEventListener('click', function() { fileInput.click(); plusOptions.classList.remove('show'); });
+        galleryBtn.addEventListener('click', function() {
+            fileInput.click();
+            plusOptions.classList.remove('show');
+        });
+
         fileInput.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
-                const reader = new FileReader();
+                var reader = new FileReader();
+
                 reader.onload = function(ev) {
                     pendingImageData = ev.target.result;
                     showImagePreview(pendingImageData);
                     fileInput.value = '';
                 };
+
                 reader.readAsDataURL(this.files[0]);
             }
         });
 
-        cameraBtn.addEventListener('click', function() { cameraInput.click(); plusOptions.classList.remove('show'); });
+        cameraBtn.addEventListener('click', function() {
+            cameraInput.click();
+            plusOptions.classList.remove('show');
+        });
+
         cameraInput.addEventListener('change', function(e) {
             if (this.files && this.files.length > 0) {
-                const reader = new FileReader();
+                var reader = new FileReader();
+
                 reader.onload = function(ev) {
                     pendingImageData = ev.target.result;
                     showImagePreview(pendingImageData);
                     cameraInput.value = '';
                 };
+
                 reader.readAsDataURL(this.files[0]);
             }
         });
 
-        // ===== دالة sendMessage =====
         async function sendMessage() {
             if (isWaiting) return;
 
-            const text = userInput.value.trim();
-            const imageToSend = pendingImageData;
+            var text = userInput.value.trim();
+            var imageToSend = pendingImageData;
 
             if (!text && !imageToSend) return;
 
             if (text) addMessage(text, 'user');
+
             if (imageToSend) {
                 addMessage('🖼️ صورة مرفقة', 'user', false, imageToSend);
                 clearPendingImage();
@@ -674,14 +654,13 @@ HTML_TEMPLATE = """
             userInput.style.height = 'auto';
             isWaiting = true;
 
-            // ===== مؤشر "جاري التفكير" =====
-            const typingDiv = document.createElement('div');
+            var typingDiv = document.createElement('div');
             typingDiv.className = 'msg bot typing-indicator';
             typingDiv.innerHTML = '<span class="typing-dots">جاري التفكير</span>';
             chatBox.appendChild(typingDiv);
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            const payload = {
+            var payload = {
                 message: text || "📎 مرفق",
                 image: imageToSend || null,
                 history: conversationHistory,
@@ -689,12 +668,13 @@ HTML_TEMPLATE = """
             };
 
             try {
-                const res = await fetch('/chat', {
+                var res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                const data = await res.json();
+
+                var data = await res.json();
                 
                 if (typingDiv && typingDiv.parentNode) {
                     typingDiv.remove();
@@ -702,33 +682,40 @@ HTML_TEMPLATE = """
 
                 if (res.ok) {
                     addMessage(data.reply, 'bot');
+
                     if (!isMuted && data.audio) {
                         if (currentAudio) { 
                             currentAudio.pause(); 
                             currentAudio.currentTime = 0; 
                         }
-                        const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+
+                        var audioSrc = 'data:audio/mp3;base64,' + data.audio;
                         currentAudio = new Audio(audioSrc);
                         currentAudio.play();
                     }
+
                     if (data.conv_id) {
                         currentConvId = data.conv_id;
                     }
                 } else {
                     addMessage('خطأ: ' + (data.error || 'مشكلة في السيرفر'), 'error');
                 }
+
             } catch (e) {
                 if (typingDiv && typingDiv.parentNode) {
                     typingDiv.remove();
                 }
+
                 addMessage('تعذر الاتصال بالسيرفر، حاول مرة أخرى.', 'error');
+
             } finally {
                 isWaiting = false;
             }
         }
 
         sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keypress', (e) => { 
+
+        userInput.addEventListener('keypress', function(e) { 
             if (e.key === 'Enter') { 
                 e.preventDefault(); 
                 sendMessage(); 
@@ -741,29 +728,38 @@ HTML_TEMPLATE = """
             }
         });
 
-        let recognition = null;
+        var recognition = null;
+
         micBtn.addEventListener('click', function() {
             if (!('webkitSpeechRecognition' in window)) {
                 addMessage('المتصفح لا يدعم التعرف على الصوت.', 'bot', true);
                 return;
             }
+
             if (this.classList.contains('listening')) {
                 this.classList.remove('listening');
                 if (recognition) recognition.stop();
                 return;
             }
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SR();
             recognition.lang = 'ar-SA';
+
             this.classList.add('listening');
             addMessage('جاري الاستماع...', 'bot', true);
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
+
+            recognition.onresult = function(event) {
+                var transcript = event.results[0][0].transcript;
                 userInput.value = transcript;
                 micBtn.classList.remove('listening');
-                setTimeout(() => sendMessage(), 300);
+                setTimeout(function() { sendMessage(); }, 300);
             };
-            recognition.onerror = () => { micBtn.classList.remove('listening'); };
+
+            recognition.onerror = function() {
+                micBtn.classList.remove('listening');
+            };
+
             recognition.start();
         });
 
@@ -775,7 +771,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ========== صفحات الدخول والخطط ==========
 LOGIN_HTML = """
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -850,7 +845,6 @@ PLANS_HTML = """
 </div></body></html>
 """
 
-# ========== مسارات التطبيق ==========
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -860,7 +854,6 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
-
         admin_email = "abdullaha0569361@gmail.com"
         admin_password = os.environ.get("ADMIN_PASSWORD")
 
@@ -1065,6 +1058,14 @@ def chat():
     except Exception as e:
         print(f"❌ خطأ عام في /chat: {e}")
         return jsonify({"error": str(e)}), 500
+
+# =====================================================================
+# (الإضافة الوحيدة): مسار لقراءة أي ملف من مجلد static (مثل robots.txt, sitemap.xml, manifest.json, أي صورة أو ملف)
+# يجب وضع هذا المسار في النهاية حتى لا يعترض المسارات الخاصة بالدردشة
+# =====================================================================
+@app.route('/<path:filename>')
+def serve_static_files(filename):
+    return send_from_directory(app.static_folder, filename)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
