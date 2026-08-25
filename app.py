@@ -22,7 +22,7 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["500 per day", "20 per hour"])
+limiter = Limiter(key_func=get_remote_address, default_limits=["500 per day", "50 per hour"])
 limiter.init_app(app)
 
 @app.route('/robots.txt')
