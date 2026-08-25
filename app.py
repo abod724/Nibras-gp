@@ -10,6 +10,8 @@ import edge_tts
 import base64
 import re
 import sqlite3
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__, static_folder='static')
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
@@ -19,6 +21,10 @@ if not OPENAI_API_KEY:
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_ENABLED = True
+
+# ===== إعداد الحماية الخلفية (Flask-Limiter) - الطريقة الصحيحة للإصدارات الجديدة =====
+limiter = Limiter(key_func=get_remote_address, default_limits=["100 per day", "20 per hour"])
+limiter.init_app(app)
 
 @app.route('/robots.txt')
 def serve_robots():
@@ -136,7 +142,7 @@ HTML_TEMPLATE = r"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <meta name="google-site-verification" content="PyOhY3ZXN4LTBbK55EbrmeI5A5kqddF3cJeI_s1FwVc" />
     <meta http-equiv="Content-Language" content="ar" />
-    <meta name="description" content="نبراس GP، مساعد ذكي سعودي يتحدث باللهجة العامية البيضاء ويكتب بصوت بشري. جرب المحادثة الصوتية الآن!" />
+    <meta name="description" content="نبراس مساعد ذكي سعودي يكتب ويتحدث صوتي" />
     <title>نبراس</title>
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" type="image/jpeg" href="/static/icon-512.jpeg" />
@@ -849,7 +855,9 @@ PLANS_HTML = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+# ===== التعديل المطلوب: إضافة حد تسجيل الدخول =====
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("3 per minute")   # <-- هذا هو السطر المضاف فقط
 def login():
     if request.method == 'POST':
         email = request.form.get('email')
@@ -920,6 +928,7 @@ def set_gender():
     return jsonify({"status": "ok"})
 
 @app.route('/chat', methods=['POST'])
+@limiter.limit("5 per minute")  # <--- الحماية الخلفية: يسمح بـ 5 رسائل فقط لكل IP في الدقيقة
 def chat():
     try:
         data = request.get_json()
