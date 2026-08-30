@@ -4,4 +4,8 @@
       <loc>https://nibras-al.onrender.com/</loc>
       <priority>1.0</priority>
    </url>
+   <url>
+      <loc>https://abod724.github.io/nibras-privacy/</loc>
+      <priority>0.5</priority>
+   </url>
 </urlset>
