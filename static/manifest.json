@@ -1,15 +1,15 @@
 {
-  "name": "نبراس GP - مساعد ذكي سعودي",
-  "short_name": "نبراس",
-  "description": "إجابات فورية، صور إبداعية، وصوت واضح. مساعدك الذكي العربي الشامل.",
+  "name": "نبراس GP - مساعد ذكي، ذكاء اصطناعي، إنتاجية، تعلم آلي، مساعد صوتي",
+  "short_name": "نبراس GP",
+  "description": "مساعد ذكي بالعربية يعتمد على الذكاء الاصطناعي لتحسين الإنتاجية، تنظيم المهام، الأتمتة، والتعلم الآلي. تطبيق عربي سعودي متطور.",
   "start_url": "/",
   "display": "standalone",
   "dir": "rtl",
   "lang": "ar",
   "background_color": "#ffffff",
-  "theme_color": "#4a6a8a",
+  "theme_color": "#ffffff",
   "id": "com.nibras.app",
-  "categories": ["productivity", "utilities"],
+  "categories": ["productivity", "utilities", "personalization", "education"],
   "icons": [
     {
       "src": "/static/icon-192.png",
