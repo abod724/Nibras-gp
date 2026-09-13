@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /history
 Disallow: /m
+Sitemap: https://nibras-al.onrender.com/sitemap.xml
