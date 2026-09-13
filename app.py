@@ -13,7 +13,7 @@ OPENAI_MODEL=os.environ.get("OPENAI_MODEL")
 if not OPENAI_MODEL:raise Exception("OPENAI_MODEL غير موجود! أضفه في متغيرات البيئة.")
 
 client=openai.OpenAI(api_key=OPENAI_API_KEY)
-limiter=Limiter(key_func=get_remote_address,default_limits=["500 per day","20 per hour"])
+limiter=Limiter(key_func=get_remote_address,default_limits=["500 per day","50 per hour"])
 limiter.init_app(app)
 
 @app.route('/robots.txt')
