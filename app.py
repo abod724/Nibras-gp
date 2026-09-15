@@ -1,9 +1,9 @@
-
 from flask import Flask,request,jsonify,render_template_string,session,redirect,url_for,send_from_directory
 import openai,os,secrets,json,hashlib,asyncio,base64,re,sqlite3,requests,edge_tts
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app=Flask(__name__,static_folder='static')
 app.secret_key=os.environ.get("SECRET_KEY",secrets.token_hex(16))
@@ -14,7 +14,6 @@ OPENAI_MODEL=os.environ.get("OPENAI_MODEL")
 if not OPENAI_MODEL:raise Exception("OPENAI_MODEL غير موجود! أضفه في متغيرات البيئة.")
 
 client=openai.OpenAI(api_key=OPENAI_API_KEY)
-# --- تم التعديل: رفع الحد إلى 300 طلب في الساعة ---
 limiter=Limiter(key_func=get_remote_address,default_limits=["500 per day","300 per hour"])
 limiter.init_app(app)
 
@@ -36,7 +35,73 @@ def init_db():
     conn.execute('''CREATE TABLE IF NOT EXISTS conversations (user_id TEXT, conv_id TEXT PRIMARY KEY, messages TEXT, timestamp TEXT, title TEXT)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS cache (question TEXT PRIMARY KEY, answer TEXT, created TEXT)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS guest_usage (guest_id TEXT PRIMARY KEY, count INT DEFAULT 0, date TEXT)''')
-    conn.commit();conn.close()
+    
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+        email TEXT PRIMARY KEY,
+        role TEXT DEFAULT 'user',
+        voice_gender TEXT DEFAULT 'male',
+        password_hash TEXT,
+        created_at TEXT
+    )''')
+    
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+    except:
+        pass
+    
+    conn.execute('''CREATE TABLE IF NOT EXISTS invitations (
+        code TEXT PRIMARY KEY,
+        email TEXT,
+        role TEXT DEFAULT 'user',
+        expires_at TEXT,
+        used INTEGER DEFAULT 0,
+        created_at TEXT
+    )''')
+    
+    admin_email="abdullaha0569361@gmail.com"
+    conn.execute("INSERT OR IGNORE INTO users (email, role, voice_gender, created_at) VALUES (?, 'admin', 'male', ?)",(admin_email,datetime.now().isoformat()))
+    
+    conn.commit()
+    conn.close()
+
+def get_user_role(email):
+    if not email: return 'guest'
+    if email=="abdullaha0569361@gmail.com": return 'admin'
+    conn=get_db()
+    row=conn.execute("SELECT role FROM users WHERE email = ?",(email,)).fetchone()
+    conn.close()
+    return row[0] if row else 'user'
+
+def create_invitation(email,role='user'):
+    code=secrets.token_hex(4)
+    expires=(datetime.now()+timedelta(days=7)).isoformat()
+    conn=get_db()
+    conn.execute("INSERT INTO invitations (code, email, role, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",(code,email,role,expires,datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+    return code
+
+def use_invitation(code,email):
+    conn=get_db()
+    inv=conn.execute("SELECT email, role, expires_at, used FROM invitations WHERE code = ?",(code,)).fetchone()
+    if not inv:
+        conn.close()
+        return "الكود غير موجود"
+    if inv[3]==1:
+        conn.close()
+        return "هذا الكود مستخدم من قبل"
+    if datetime.fromisoformat(inv[2])<datetime.now():
+        conn.close()
+        return "هذا الكود منتهي الصلاحية"
+    if inv[0]!=email:
+        conn.close()
+        return "هذا الكود مخصص لبريد إلكتروني آخر"
+    
+    conn.execute("INSERT OR REPLACE INTO users (email, role, voice_gender, created_at) VALUES (?, ?, 'male', ?)",(email,inv[1],datetime.now().isoformat()))
+    conn.execute("UPDATE invitations SET used = 1 WHERE code = ?",(code,))
+    conn.commit()
+    conn.close()
+    return "تم التفعيل بنجاح"
 
 def check_guest_limit_safe(gid):
     try:
@@ -88,7 +153,43 @@ for fn in ["Knowledge.md","knowledge.md","معرفة.md","README.md","ملف_ا�
         except:pass
 if not kc:kc="أنت نبراس، مساعد ذكي."
 
-SP=f"""أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.\n\n**مصادر معرفتك:**\n\n1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.\n\n2. **معرفتك العامة**.\n\n3. **البحث بالويب** تستخدمه فقط عندما تكون أدمن ويسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.\n\n**ملف المعرفة الخاص بك:**\n\n{kc}\n\n**⚠️ قاعدة التنسيق الذهبية (الأهم):**\n\n- اكتب ردودك في **فقرات نصية متصلة**. كل فقرة تحتوي على **2 إلى 4 جمل** فقط.\n\n- **ممنوع** وضع كل جملة في سطر منفصل. استخدم النقاط والفواصل وعلامات الترقيم داخل الفقرة نفسها.\n\n- **ممنوع** وضع فواصل أسطر (`Enter`) بين الجمل. الفاصل الوحيد المسموح به هو سطر فارغ بين الفقرة والأخرى.\n\n- اجعل الجملة الواحدة بطول معتدل (حوالي 10-20 كلمة)، بحيث تكون واضحة ومختصرة لكنها تحمل فكرة كاملة."""
+# ✅ تم تعديل SP لمنع البوت من الكلام عن حفظ المحادثات
+SP=f"""أنت "نبراس"، مساعد شخصي ذكي تتحدث باللهجة العامية البيضاء.
+
+**مصادر معرفتك:**
+
+1. **ملف المعرفة** (أدناه) هو مرجعك الأساسي.
+
+2. **معرفتك العامة**.
+
+3. **البحث بالويب** تستخدمه فقط عندما تكون أدمن ويسألك عن أي شيء حديث أو غير موجود في ملف المعرفة.
+
+**ملف المعرفة الخاص بك:**
+
+{kc}
+
+**⚠️ قاعدة التنسيق الذهبية (الأهم):**
+
+- اكتب ردودك في **فقرات نصية متصلة**. كل فقرة تحتوي على **2 إلى 4 جمل** فقط.
+
+- **ممنوع** وضع كل جملة في سطر منفصل. استخدم النقاط والفواصل وعلامات الترقيم داخل الفقرة نفسها.
+
+- **ممنوع** وضع فواصل أسطر (`Enter`) بين الجمل. الفاصل الوحيد المسموح به هو سطر فارغ بين الفقرة والأخرى.
+
+- اجعل الجملة الواحدة بطول معتدل (حوالي 10-20 كلمة)، بحيث تكون واضحة ومختصرة لكنها تحمل فكرة كاملة.
+
+**⚠️ أسلوب الحديث:**
+
+- سولف مع المستخدم بشكل طبيعي وعفوي، كأنك صديق يرد في لحظته.
+
+- **لا تذكر أبداً** أي كلام عن حفظ المحادثات أو الذاكرة أو التسجيل. جمل مثل "سأحتفظ بمحادثتنا"، "سأتذكر ذلك"، "سجلت ملاحظاتي"، "سأحفظ هذا" **ممنوعة تماماً**.
+
+- لا تعتذر عن عدم معرفة اسم مطور معين أو معلومة غير موثقة بكلام مثل "سأحتفظ بها". قدم المعلومة المتاحة أو قل ببساطة "ما عندي معلومات موثوقة عن هذا" وخلاص.
+
+- لا تعلّق على نوع حساب المستخدم (ضيف / مسجل / أدمن) ولا تذكر ذلك في ردودك.
+
+- رد بشكل مباشر وطبيعي، بدون مقدمات فلسفية أو تعليقات على المحادثة نفسها.
+"""
 
 def remove_emoji(t):
     return re.compile("["+u"\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002500-\U00002BEF\U00002702-\U000027B0\U000024C2-\U0001F251\U0001f926-\U0001f937\U00010000-\U0010ffff\u2640-\u2642\u2600-\u2B55\u200d\u23cf\u23e9\u231a\ufe0f\u3030"+"]+",flags=re.UNICODE).sub('',t)
@@ -146,7 +247,6 @@ HT=r"""<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><me
 .code-block-wrapper{position:relative;margin:16px 0;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-input);overflow:hidden;display:block;width:100%;overflow-x:auto;box-shadow:0 2px 8px rgba(0,0,0,0.05)}.code-block-wrapper pre{margin:0;padding:20px 60px 20px 24px;background:transparent;border:none;border-radius:0;white-space:pre;word-break:normal;font-size:15px;line-height:1.8;font-family:'Courier New',Consolas,monospace;direction:ltr;text-align:left}.code-block-wrapper .copy-code-btn{position:absolute;top:12px;left:14px;background:var(--bg-hover);border:1px solid var(--border-color);color:var(--text-secondary);border-radius:10px;padding:8px 18px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s ease;z-index:5;display:flex;align-items:center;gap:6px}.code-block-wrapper .copy-code-btn:hover{background:var(--primary-color);color:#fff;border-color:var(--primary-color);transform:scale(1.02)}.code-block-wrapper .copy-code-btn.copied{background:#28a745;color:#fff;border-color:#28a745}
 
 </style></head><body>
-<!-- --- تم التعديل: إضافة النص الثابت المخفي ليتعرف عليه جوجل --- -->
 <div style="display:none;">نبراس هو مساعد ذكي عربي يقدم حلولاً فورية، توليد صور، وتحويل النص إلى صوت. يقدم الموقع أيضاً أدوات مجانية مثل حاسبة المعدل التراكمي GPA ومنشئ السيرة الذاتية.</div>
 <div class="app"><div class="header"><div class="header-right"><button class="mute-btn" id="muteBtn"><i class="fas fa-volume-up"></i></button><button class="menu-btn" id="menuToggle"><i class="fas fa-ellipsis-v"></i></button></div><div class="header-left"><div class="btn-group">{% if session.get('admin_email') or session.get('user_email') %}<a href="/logout" class="btn btn-outline">تسجيل خروج</a>{% else %}<a href="/login" class="btn btn-outline">دخول</a>{% endif %}</div></div></div><div class="dropdown" id="dropdown"><button class="item" data-action="new"><i class="fas fa-plus-circle"></i> محادثة جديدة</button><button class="item" onclick="window.location.href='/tools'"><i class="fas fa-tools"></i> 🧰 أدوات مجانية</button><button class="item" data-action="share"><i class="fas fa-share-alt"></i> مشاركة المحادثة</button><button class="item" onclick="deleteMyData()" style="color: #ff4d4d;"><i class="fas fa-trash-alt"></i> حذف حسابي</button><button class="item" data-action="theme-toggle"><i class="fas fa-moon"></i> <span id="themeLabel">الوضع الليلي</span></button><div class="item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default;border-bottom:1px solid var(--border-color)"><div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-primary)"><i class="fas fa-microphone" style="font-size:18px;color:var(--text-secondary)"></i><span>صوت المساعد</span></div><div style="display:flex;gap:8px"><button class="gender-option active" data-gender="male">👨 ذكر</button><button class="gender-option" data-gender="female">👩 أنثى</button></div></div><div id="historyList"></div></div><div id="chat"></div><div id="imagePreviewContainer"><img id="imagePreview" src=""/><span class="label">📎 صورة معلقة</span><button id="removeImageBtn">✕ إزالة</button></div><div class="input-area"><button class="btn-icon mic-btn" id="micBtn"><i class="fas fa-microphone"></i></button><button class="plus-btn" id="plusBtn"><i class="fas fa-plus"></i></button><div class="plus-options" id="plusOptions"><button class="option-btn camera" id="cameraBtn"><i class="fas fa-camera"></i></button><button class="option-btn gallery" id="galleryBtn"><i class="fas fa-images"></i></button><button class="option-btn files" id="filesBtn"><i class="fas fa-folder"></i></button></div><textarea id="userInput" placeholder="اكتب رسالتك..." autofocus rows="1"></textarea><button class="send" id="sendBtn"><i class="fas fa-arrow-left"></i></button></div><input type="file" id="fileInput" accept="image/*" style="display:none"/><input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none"/><input type="file" id="fileInputGeneric" style="display:none"/></div><div class="share-modal" id="shareModal"><div class="box"><h3><i class="fas fa-share-alt" style="color:var(--primary-color)"></i> شارك المحادثة</h3><div class="share-grid"><a href="#" id="shareWhatsapp" target="_blank" class="share-btn whatsapp"><i class="fab fa-whatsapp"></i> واتساب</a><a href="#" id="shareFacebook" target="_blank" class="share-btn facebook"><i class="fab fa-facebook"></i> فيسبوك</a><a href="#" id="shareTwitter" target="_blank" class="share-btn twitter"><i class="fab fa-x-twitter"></i> X</a><button id="shareSnapchat" class="share-btn snapchat"><i class="fab fa-snapchat"></i> سناب شات</button></div><button class="close-btn" onclick="document.getElementById('shareModal').classList.remove('show')">إلغاء</button></div></div><script>(function(){let ch=[],pid=null,iw=!1,cid=null,ca=null;const cb=document.getElementById('chat'),ui=document.getElementById('userInput'),sb=document.getElementById('sendBtn'),mb=document.getElementById('micBtn'),fi=document.getElementById('fileInput'),ci=document.getElementById('cameraInput'),mt=document.getElementById('menuToggle'),dd=document.getElementById('dropdown'),pb=document.getElementById('plusBtn'),po=document.getElementById('plusOptions'),cab=document.getElementById('cameraBtn'),gb=document.getElementById('galleryBtn'),fib=document.getElementById('filesBtn'),fig=document.getElementById('fileInputGeneric'),ipc=document.getElementById('imagePreviewContainer'),ip=document.getElementById('imagePreview'),rib=document.getElementById('removeImageBtn'),hl=document.getElementById('historyList'),sm=document.getElementById('shareModal');let im=!0;const mut=document.getElementById('muteBtn');mut.querySelector('i').className='fas fa-volume-mute';mut.classList.add('muted');mut.addEventListener('click',function(){im=!im;const ic=mut.querySelector('i');if(im){ic.className='fas fa-volume-mute';mut.classList.add('muted');if(ca){ca.pause();ca.currentTime=0}}else{ic.className='fas fa-volume-up';mut.classList.remove('muted')}});let isMale=!0;const gopts=document.querySelectorAll('.gender-option');mt.addEventListener('click',function(e){e.stopPropagation();dd.classList.toggle('show');if(dd.classList.contains('show')){loadHistory();gopts.forEach(b=>b.classList.remove('active'));if(isMale)document.querySelector('.gender-option[data-gender="male"]').classList.add('active');else document.querySelector('.gender-option[data-gender="female"]').classList.add('active')}});gopts.forEach(b=>{b.addEventListener('click',function(e){e.stopPropagation();const g=this.dataset.gender;isMale=g==='male';gopts.forEach(x=>x.classList.remove('active'));this.classList.add('active');fetch('/set_gender',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gender:g})});dd.classList.remove('show')})});async function loadHistory(){try{const r=await fetch('/history'),d=await r.json();hl.innerHTML='';if(d.conversations&&d.conversations.length>0){d.conversations.forEach(c=>{const b=document.createElement('button');b.className='conv-item';b.textContent=c.title;b.onclick=()=>loadConversation(c.id);hl.appendChild(b)})}else{const e=document.createElement('div');e.className='item';e.textContent='📭 لا توجد محادثات سابقة';hl.appendChild(e)}}catch(e){console.error('خطأ في تحميل المحادثات:',e)}}async function loadConversation(id){try{const r=await fetch('/load_conversation/'+id),d=await r.json();if(d.messages){cb.innerHTML='';ch=d.messages;cid=id;d.messages.forEach(function(m){const s=m.role==='user'?'user':'bot';addMessage(m.content,s,!0)});dd.classList.remove('show')}}catch(e){console.error('خطأ في تحميل المحادثة:',e)}}document.querySelector('[data-action="new"]').addEventListener('click',function(){cb.innerHTML='';ch=[];cid=null;dd.classList.remove('show');pid=null;ipc.style.display='none';ui.value=''});document.querySelector('[data-action="share"]').addEventListener('click',function(e){e.stopPropagation();if(!cid){alert('⚠️ لا توجد محادثة حالية للمشاركة! ابدأ محادثة أولاً.');dd.classList.remove('show');return}const url=window.location.origin+'/share/'+cid,text=encodeURIComponent('اطلع على محادثتي مع نبراس:');document.getElementById('shareWhatsapp').href='https://api.whatsapp.com/send?text='+text+'%20'+encodeURIComponent(url);document.getElementById('shareFacebook').href='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url);document.getElementById('shareTwitter').href='https://twitter.com/intent/tweet?url='+encodeURIComponent(url)+'&text='+text;const snap=document.getElementById('shareSnapchat');snap.onclick=function(ev){ev.stopPropagation();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>alert('✅ تم نسخ الرابط! افتح سناب شات والصقه.')).catch(()=>alert('❌ فشل النسخ، الرابط هو: '+url))}else alert('❌ فشل النسخ، الرابط هو: '+url);sm.classList.remove('show')};sm.classList.add('show');dd.classList.remove('show')});sm.addEventListener('click',function(e){if(e.target===sm)sm.classList.remove('show')});const ttb=document.querySelector('[data-action="theme-toggle"]'),tl=document.getElementById('themeLabel');function setTheme(t){const h=document.documentElement;if(t==='dark'){h.classList.add('dark-mode');tl.textContent='الوضع الليلي';ttb.querySelector('i').className='fas fa-moon';localStorage.setItem('nibras-theme','dark')}else{h.classList.remove('dark-mode');tl.textContent='الوضع النهاري';ttb.querySelector('i').className='fas fa-sun';localStorage.setItem('nibras-theme','light')}}const st=localStorage.getItem('nibras-theme')||'light';setTheme(st);if(ttb){ttb.addEventListener('click',function(e){e.stopPropagation();const cur=document.documentElement.classList.contains('dark-mode')?'dark':'light';const nw=cur==='dark'?'light':'dark';setTheme(nw);dd.classList.remove('show')})}
 
@@ -206,7 +306,7 @@ mb.addEventListener('click',function(){if(!('webkitSpeechRecognition' in window)
 
 window.deleteMyData=function(){if(!confirm('⚠️ هل أنت متأكد؟ سيتم حذف جميع محادثاتك وبياناتك نهائياً.'))return;fetch('/delete_my_data',{method:'POST',headers:{'Content-Type':'application/json'}}).then(response=>response.json()).then(data=>{if(data.status==='success'){alert('✅ تم حذف جميع بياناتك بنجاح.');window.location.href='/'}else{alert('❌ فشل الحذف: '+(data.message||'خطأ غير معروف'))}}).catch(err=>{alert('❌ حدث خطأ في الاتصال.');console.error(err)});};})();</script></body></html>"""
 
-LH="""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>دخول - نبراس</title><style>*{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}body{background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100dvh;margin:0;padding:15px}.box{background:#fff;padding:40px 30px;border-radius:20px;box-shadow:0 4px 20px rgba(0,0,0,0.08);width:100%;max-width:400px;text-align:center}h2{font-size:28px;color:#1a2b3c;margin-bottom:25px}input{width:100%;padding:14px 16px;margin:12px 0;border:1px solid #dce1e8;border-radius:12px;font-size:18px;background:#fafbfc;box-sizing:border-box}input:focus{outline:0;border-color:#4a6a8a;background:#fff}button{width:100%;padding:16px;background:#4a6a8a;color:#fff;border:none;border-radius:12px;font-size:20px;font-weight:700;cursor:pointer;margin-top:15px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none;font-size:16px;display:inline-block;margin-top:20px}.error{color:#d9534f;margin-bottom:15px}</style></head><body><div class="box"><h2>🔐 تسجيل الدخول</h2>{% if error %}<div class="error">{{ error }}</div>{% endif %}<form method="POST"><input type="email" name="email" placeholder="البريد الإلكتروني" required><input type="password" name="password" placeholder="كلمة المرور" required><button type="submit">دخول</button></form><a href="/">⬅ العودة للرئيسية</a><br><a href="https://abod724.github.io/nibras-privacy/" target="_blank" style="display:inline-block; margin-top:5px; font-size:12px; text-decoration:underline;">سياسة الخصوصية</a></div></body></html>"""
+LH="""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>دخول - نبراس</title><style>*{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}body{background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100dvh;margin:0;padding:15px}.box{background:#fff;padding:40px 30px;border-radius:20px;box-shadow:0 4px 20px rgba(0,0,0,0.08);width:100%;max-width:400px;text-align:center}h2{font-size:28px;color:#1a2b3c;margin-bottom:25px}input{width:100%;padding:14px 16px;margin:12px 0;border:1px solid #dce1e8;border-radius:12px;font-size:18px;background:#fafbfc;box-sizing:border-box}input:focus{outline:0;border-color:#4a6a8a;background:#fff}button{width:100%;padding:16px;background:#4a6a8a;color:#fff;border:none;border-radius:12px;font-size:20px;font-weight:700;cursor:pointer;margin-top:15px}button:hover{background:#3a5a7a}a{color:#4a6a8a;text-decoration:none;font-size:16px;display:inline-block;margin-top:20px}.error{color:#d9534f;margin-bottom:15px}</style></head><body><div class="box"><h2>🔐 تسجيل الدخول</h2>{% if error %}<div class="error">{{ error }}</div>{% endif %}<form method="POST"><input type="email" name="email" placeholder="البريد الإلكتروني" required><input type="password" name="password" placeholder="كلمة المرور" required><input type="text" name="invite_code" placeholder="كود الدعوة (للتسجيل الجديد فقط)"><p style="font-size:12px; color:#666; margin-top:-5px;">* التسجيل متاح فقط لأصحاب أكواد الدعوة، وبعدها تستطيع الدخول بكلمة المرور فقط.</p><button type="submit">دخول</button></form><a href="/">⬅ العودة للرئيسية</a><br><a href="https://abod724.github.io/nibras-privacy/" target="_blank" style="display:inline-block; margin-top:5px; font-size:12px; text-decoration:underline;">سياسة الخصوصية</a></div></body></html>"""
 
 @app.route('/')
 def index():return render_template_string(HT)
@@ -224,13 +324,54 @@ def shared_conversation(cid):
 @limiter.limit("3 per minute")
 def login():
     if request.method=='POST':
-        e=request.form.get('email');p=request.form.get('password');ae="abdullaha0569361@gmail.com";ap=os.environ.get("ADMIN_PASSWORD")
+        e=request.form.get('email')
+        p=request.form.get('password')
+        invite_code=request.form.get('invite_code','').strip()
+        ae="abdullaha0569361@gmail.com"
+        ap=os.environ.get("ADMIN_PASSWORD")
+        
+        if not e or "@" not in e:
+            return render_template_string(LH,error="يرجى إدخال بريد إلكتروني صحيح.")
+        
         if e==ae:
             if not ap:return render_template_string(LH,error="خطأ: لم يتم إعداد كلمة مرور الأدمن في الخادم.")
-            if secrets.compare_digest(p,ap):session.clear();session['admin_email']=ae;return redirect(url_for('index'))
-            else:return render_template_string(LH,error="كلمة مرور الأدمن غير صحيحة.")
-        elif e and "@" in e:session.clear();session['user_email']=e;return redirect(url_for('index'))
-        else:return render_template_string(LH,error="يرجى إدخال بريد إلكتروني صحيح.")
+            if secrets.compare_digest(p,ap):
+                session.clear()
+                session['user_email']=e
+                session['role']='admin'
+                return redirect(url_for('index'))
+            else:
+                return render_template_string(LH,error="كلمة مرور الأدمن غير صحيحة.")
+        
+        conn=get_db()
+        user=conn.execute("SELECT password_hash FROM users WHERE email = ?",(e,)).fetchone()
+        conn.close()
+        
+        if user and user['password_hash']:
+            if not check_password_hash(user['password_hash'],p):
+                return render_template_string(LH,error="❌ كلمة المرور غير صحيحة.")
+            session.clear()
+            session['user_email']=e
+            session['role']=get_user_role(e)
+            return redirect(url_for('index'))
+        
+        if not invite_code:
+            return render_template_string(LH,error="عذراً، هذا البريد غير مسجل. للتسجيل الجديد يجب إدخال كود الدعوة.")
+        
+        result=use_invitation(invite_code,e)
+        if result!="تم التفعيل بنجاح":
+            return render_template_string(LH,error=f"فشل التسجيل: {result}")
+        
+        conn=get_db()
+        conn.execute("UPDATE users SET password_hash = ? WHERE email = ?",(generate_password_hash(p),e))
+        conn.commit()
+        conn.close()
+        
+        session.clear()
+        session['user_email']=e
+        session['role']='user'
+        return redirect(url_for('index'))
+    
     return render_template_string(LH)
 
 @app.route('/logout')
@@ -256,25 +397,52 @@ def delete_message():
 @app.route('/delete_my_data',methods=['POST'])
 def delete_my_data():uid=get_user_id();conn=get_db();conn.execute("DELETE FROM conversations WHERE user_id=?",(uid,));conn.commit();conn.close();session.clear();return jsonify({"status":"success","message":"تم حذف جميع بياناتك ومحادثاتك بنجاح."})
 
+@app.route('/admin/invite/<email>')
+def admin_invite(email):
+    if session.get('role') != 'admin':
+        return "🚫 هذه الصفحة خاصة بالأدمن فقط.",403
+    code=create_invitation(email,'user')
+    return f"<body style='font-family:sans-serif; text-align:center; padding:50px;'><h2>✅ تم إنشاء كود دعوة</h2><p>البريد: <b>{email}</b></p><p>الكود: <b style='font-size:24px; color:#4a6a8a;'>{code}</b></p><p>ينتهي بعد 7 أيام.</p><p style='color:#666; font-size:14px;'>أرسل هذا الكود للمستخدم، وعند تسجيله لأول مرة سيضع كلمة مرور خاصة به ويحفظها.</p><br><a href='/admin'>العودة للوحة التحكم</a></body>"
+
 @app.route('/admin')
 def admin_dashboard():
-    if not session.get('admin_email')=="abdullaha0569361@gmail.com":return "🚫 هذه الصفحة خاصة بالأدمن فقط.",403
+    if session.get('role') != 'admin':return "🚫 هذه الصفحة خاصة بالأدمن فقط.",403
     conn=get_db();users_count=conn.execute("SELECT COUNT(DISTINCT user_id) FROM conversations").fetchone()[0];total_convs=conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0];today=datetime.now().strftime("%Y-%m-%d");today_convs=conn.execute("SELECT COUNT(*) FROM conversations WHERE timestamp LIKE ?",(today+'%',)).fetchone()[0];recent=conn.execute("SELECT user_id, title, timestamp FROM conversations ORDER BY timestamp DESC LIMIT 10").fetchall();conn.close()
     recent_html=""
     for row in recent:
         user=row[0][:15]+"..." if len(row[0])>15 else row[0];title=row[1] or "محادثة بدون عنوان";time=row[2][:16] if row[2] else "وقت غير معروف";recent_html+=f'<div class="conv-item"><b>{title}</b><small>👤 {user} | 🕒 {time}</small></div>'
     if not recent_html:recent_html="<p style='color:#8b949e;text-align:center;'>لا توجد محادثات بعد</p>"
-    return f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>لوحة تحكم نبراس</title><style>body{{font-family:'Segoe UI',Tahoma;background:#0d1117;color:#c9d1d9;padding:20px;margin:0}}.container{{max-width:600px;margin:auto}}h1{{color:#58a6ff;text-align:center}}.card{{background:#161b22;border-radius:15px;padding:15px;margin:15px 0;border:1px solid #30363d}}.stat{{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #21262d}}.stat:last-child{{border:none}}.num{{color:#58a6ff;font-weight:bold;font-size:18px}}.conv-item{{padding:10px 0;border-bottom:1px solid #21262d}}.conv-item small{{color:#8b949e;display:block;font-size:12px}}.back{{display:block;text-align:center;color:#58a6ff;text-decoration:none;margin-top:20px}}</style></head><body><div class="container"><h1>📊 لوحة تحكم نبراس</h1><div class="card"><div class="stat"><span>👥 إجمالي المستخدمين</span><span class="num">{users_count}</span></div><div class="stat"><span>💬 إجمالي المحادثات</span><span class="num">{total_convs}</span></div><div class="stat"><span>📅 محادثات اليوم</span><span class="num">{today_convs}</span></div></div><div class="card"><h3>🕒 آخر 10 محادثات</h3>{recent_html}</div><a href="/" class="back">⬅ العودة للرئيسية</a></div></body></html>"""
+    
+    invite_form = """
+    <div class="card">
+        <h3>✉️ توليد كود دعوة لمستخدم جديد</h3>
+        <form action="/admin/invite/" method="GET" onsubmit="event.preventDefault(); const email = document.getElementById('invite_email').value; if(email) window.location.href='/admin/invite/' + encodeURIComponent(email);">
+            <input type="email" id="invite_email" placeholder="البريد الإلكتروني للمستخدم" required style="width:100%; padding:10px; margin:10px 0; border-radius:8px; border:1px solid #30363d; background:#0d1117; color:#c9d1d9;">
+            <button type="submit" style="background:#58a6ff; color:#fff; border:none; padding:10px 20px; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">توليد الكود</button>
+        </form>
+    </div>
+    """
+    
+    return f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>لوحة تحكم نبراس</title><style>body{{font-family:'Segoe UI',Tahoma;background:#0d1117;color:#c9d1d9;padding:20px;margin:0}}.container{{max-width:600px;margin:auto}}h1{{color:#58a6ff;text-align:center}}.card{{background:#161b22;border-radius:15px;padding:15px;margin:15px 0;border:1px solid #30363d}}.stat{{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #21262d}}.stat:last-child{{border:none}}.num{{color:#58a6ff;font-weight:bold;font-size:18px}}.conv-item{{padding:10px 0;border-bottom:1px solid #21262d}}.conv-item small{{color:#8b949e;display:block;font-size:12px}}.back{{display:block;text-align:center;color:#58a6ff;text-decoration:none;margin-top:20px}}</style></head><body><div class="container"><h1>📊 لوحة تحكم نبراس</h1><div class="card"><div class="stat"><span>👥 إجمالي المستخدمين</span><span class="num">{users_count}</span></div><div class="stat"><span>💬 إجمالي المحادثات</span><span class="num">{total_convs}</span></div><div class="stat"><span>📅 محادثات اليوم</span><span class="num">{today_convs}</span></div></div>{invite_form}<div class="card"><h3>🕒 آخر 10 محادثات</h3>{recent_html}</div><a href="/" class="back">⬅ العودة للرئيسية</a></div></body></html>"""
 
 def get_user_id():
-    if 'admin_email' in session:return "admin_"+session['admin_email']
-    elif 'user_email' in session:return "user_"+session['user_email']
+    if 'user_email' in session:return "user_"+session['user_email']
+    elif 'admin_email' in session:return "admin_"+session['admin_email']
     else:
         if 'guest_id' not in session:session['guest_id']="guest_"+secrets.token_hex(8)
         return session['guest_id']
 
 @app.route('/set_gender',methods=['POST'])
-def set_gender():d=request.get_json();session['voice_gender']=d.get('gender','male');return jsonify({"status":"ok"})
+def set_gender():
+    d=request.get_json()
+    gender=d.get('gender','male')
+    session['voice_gender']=gender
+    if 'user_email' in session:
+        conn=get_db()
+        conn.execute("UPDATE users SET voice_gender = ? WHERE email = ?",(gender,session['user_email']))
+        conn.commit()
+        conn.close()
+    return jsonify({"status":"ok"})
 
 @app.route('/chat',methods=['POST'])
 @limiter.limit("20 per minute")
@@ -282,18 +450,27 @@ def chat():
     try:
         d=request.get_json();um=d.get("message","").strip();hist=d.get("history",[]);cid=d.get("conv_id",None)
         if not um:return jsonify({"reply":"اكتب شيء أساعدك فيه"})
-        is_admin='admin_email' in session and session['admin_email']=="abdullaha0569361@gmail.com";uid=get_user_id()
-        if not is_admin:
+        
+        current_role=session.get('role','guest')
+        is_admin=(current_role=='admin')
+        is_registered=(current_role in ('admin','user'))
+        is_guest=not is_registered
+        uid=get_user_id()
+        
+        if is_guest:
             if not check_guest_limit_safe(uid):
                 reply_limit="وصلت للحد المجاني اليوم (15 سؤال) 😊\n\n💡 عندك حلين بدون ما تدفع:\n\n1- جرب أدواتنا المجانية 100% (ما تستهلك رصيد):\nhttps://nibras-al.onrender.com/tools\n\n2- ارجع بكرة وتاخذ 15 سؤال جديدة مجاناً\n\nنظامنا مجاني للجميع لأنه بدون بوابة دفع."
                 if cid is None:sm[uid]=[]
                 sm[uid].append({"role":"user","content":um});sm[uid].append({"role":"assistant","content":reply_limit});nid=save_user_conversation(uid,sm[uid],cid)
                 return jsonify({"reply":reply_limit,"conv_id":nid,"audio":None})
+        
+        if not is_admin:
             cached=get_cached(um)
             if cached:
                 if cid is None:sm[uid]=[]
                 sm[uid].append({"role":"user","content":um});sm[uid].append({"role":"assistant","content":cached});nid=save_user_conversation(uid,sm[uid],cid)
                 return jsonify({"reply":cached+"\n\n⚡ جواب سريع من الذاكرة","conv_id":nid,"audio":None})
+        
         draw_phrases=["ارسم لي","ابي صورة","ابي صوره","ابي صورت","صوره لي","ارسم","أنشئ","انشئ","انشى","صمم","ولّد","generate","draw","فيديو","ابي فيديو","عرض فيديو"]
         def is_image_request(text):
             text_lower=text.lower().strip()
@@ -333,13 +510,18 @@ def chat():
                 reply="⚠️ عذراً، تعذر توليد الصورة بسبب خطأ غير معروف."
                 sm[uid].append({"role":"user","content":um});sm[uid].append({"role":"assistant","content":reply});nid=save_user_conversation(uid,sm[uid],cid)
                 return jsonify({"reply":reply,"conv_id":nid})
-        if has_image and not is_admin:
-            reply="عذراً، ميزة تحليل الصور المرفوعة والبحث المباشر متاحة لحساب الأدمن فقط حالياً للحفاظ على رصيد OpenAI.\n\n💡 لكن تقدر تطلب صور وفيديوهات مجانية بكلمة (ارسم لي) أو (ابي فيديو)."
+        
+        if has_image and not is_registered:
+            reply="عذراً، ميزة تحليل الصور المرفوعة والبحث المباشر متاحة للأعضاء المسجلين والأدمن فقط.\n\n💡 تقدر تطلب صور وفيديوهات مجانية بكلمة (ارسم لي) أو (ابي فيديو).\n\n🔐 للتسجيل اطلب كود دعوة من الأدمن."
             if cid is None:sm[uid]=[]
             sm[uid].append({"role":"user","content":um});sm[uid].append({"role":"assistant","content":reply});nid=save_user_conversation(uid,sm[uid],cid)
             return jsonify({"reply":reply,"conv_id":nid})
+        
         if cid is None:sm[uid]=[]
-        model=OPENAI_MODEL;use_web=True if is_admin else False;allow_img=True if is_admin else False
+        model=OPENAI_MODEL
+        use_web=is_registered
+        allow_img=is_registered
+        
         server_hist=load_conversation_by_id(uid,cid) if cid else []
         if not server_hist:server_hist=sm.get(uid,[])
         server_hist.append({"role":"user","content":um});sm[uid]=server_hist
@@ -347,7 +529,8 @@ def chat():
         msgs=[{"role":"system","content":SP}]
         for e in ch:msgs.append({"role":e["role"],"content":e["content"]})
         img_data=d.get("image",None)
-        if img_data and is_admin:msgs.append({"role":"user","content":[{"type":"text","text":um or "حلل هذه الصورة"},{"type":"image_url","image_url":{"url":img_data}}]})
+        if img_data and is_registered:
+            msgs.append({"role":"user","content":[{"type":"text","text":um or "حلل هذه الصورة"},{"type":"image_url","image_url":{"url":img_data}}]})
         if use_web:
             try:
                 fc=""
@@ -359,7 +542,7 @@ def chat():
                 if res:msgs.append({"role":"user","content":f"نتيجة البحث:\n{res}\n\nاستخدم هذه المعلومات."})
             except Exception as e:print(f"⚠️ فشل البحث: {e}")
         try:
-            reasoning_level="low" if not is_admin else "high"
+            reasoning_level="high" if is_registered else "low"
             r=client.chat.completions.create(model=model,messages=msgs,max_completion_tokens=8000,reasoning_effort=reasoning_level)
             reply=r.choices[0].message.content.strip()
             if not reply:reply="ما قدرت أجيب لك رد، حاول مرة أخرى."
@@ -373,11 +556,12 @@ def chat():
         if current_paragraph:merged_paragraphs.append(' '.join(current_paragraph))
         reply='\n\n'.join(merged_paragraphs)
         sm[uid].append({"role":"assistant","content":reply});nid=save_user_conversation(uid,sm[uid],cid)
+        
         if not is_admin:save_cache(um,reply)
+        
         try:gender=session.get('voice_gender','male');audio=generate_speech(reply,gender)
         except Exception as e:print(f"⚠️ فشل الصوت: {e}");audio=None
         return jsonify({"reply":reply,"audio":audio,"conv_id":nid})
     except Exception as e:print(f"❌ خطأ عام: {e}");return jsonify({"error":str(e)}),500
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
-
