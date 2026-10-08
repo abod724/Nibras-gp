@@ -782,7 +782,7 @@ function openSubPage(key){const titleMap={general:'عام',notifications:'الإ
 function closeSubPage(){document.getElementById('subPage').classList.remove('show');}
 async function loadStorageInfo(){try{const r1=await fetch('/history');const d1=await r1.json();document.getElementById('sp-conv-count').textContent=(d1.conversations||[]).length;const r2=await fetch('/library/images');const d2=await r2.json();document.getElementById('sp-img-count').textContent=(d2.images||[]).length;}catch(e){}}
 
-// ✅ دالة محدثة: تحقق من الاسم قبل الإرسال + تعرض تنبيه للتسجيل
+// حفظ الاسم — للأدمن والمسجل
 function saveGeneral(){
     const n=(document.getElementById('sp-name').value||'').trim();
     if(!n || n.length<2){showToast('اكتب اسم صحيح (حرفين على الأقل)');return;}
@@ -1104,7 +1104,7 @@ def update_profile():
         return jsonify({"status": "error", "message": "الاسم قصير جداً"}), 400
 
     email = session.get('user_email')
-    if not email or session.get('is_admin'):
+    if not email:
         return jsonify({"status": "error", "message": "سجّل دخولك أولاً"}), 401
 
     save_user_profile(email, name=name)
@@ -1621,11 +1621,6 @@ def chat():
                 inc_usage(uid, "chat_count")
                 return jsonify({"reply": reply, "conv_id": nid})
 
-        search_keywords = ["أحدث", "اليوم", "الآن", "2025", "2026", "جديد",
-                           "خبر", "أخبار", "سعر", "أسعار", "مباراة", "نتيجة",
-                           "طقس", "متى"]
-        need_search = any(kw in um for kw in search_keywords)
-
         user_memory = {}
         memory_context = ""
         if is_registered:
@@ -1686,7 +1681,8 @@ def chat():
                 ]
             })
 
-        if is_registered and need_search and can_search:
+        # ✅ بحث تلقائي حسب الصلاحية فقط — يستخدم OPENAI_MODEL (يقبل gpt-5.6-Luna و gpt-4o)
+        if is_registered and can_search:
             try:
                 fc = ""
                 for m in msgs[-6:]:
@@ -1701,19 +1697,29 @@ def chat():
                     input=f"ابحث عن أحدث المعلومات: {um}",
                     tools=[{"type": "web_search"}]
                 )
-                res = sr.output_text.strip()
+                res = ""
+                if hasattr(sr, "output_text") and sr.output_text:
+                    res = sr.output_text.strip()
+                elif getattr(sr, "output", None):
+                    try:
+                        res = sr.output[0].content[0].text
+                    except Exception:
+                        res = ""
                 if res:
                     msgs.append({"role": "user", "content": f"نتيجة البحث:\n{res}"})
+                    print(f"✅ بحث ناجح ({'أدمن' if is_admin else 'مستخدم'}) - {len(res)} حرف")
+                else:
+                    print("⚠️ رد البحث فاضي")
                 inc_usage(uid, "search_count")
             except Exception as e:
-                print(f"بحث: {e}")
+                print(f"❌ فشل البحث ({type(e).__name__}): {e}")
 
+        # ✅ تم حذف reasoning_effort — عشان يشتغل مع gpt-4o و gpt-5.6-Luna معاً
         try:
             r = client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=msgs,
-                max_completion_tokens=8000,
-                reasoning_effort="low"
+                max_completion_tokens=8000
             )
             reply = r.choices[0].message.content.strip()
             if not reply:
