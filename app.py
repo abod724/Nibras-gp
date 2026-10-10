@@ -1998,9 +1998,16 @@ def chat():
                 return jsonify({"reply": msg, "conv_id": cid})
             if not can_image:
                 msg = "وصلت للحد اليومي للصور." if user_lang == 'ar' else "You've reached the daily image limit."
-                nid = save_message(uid, um, msg, cid)
+                nid = save_message(uid, um, msg, cid) if is_registered else cid
                 inc_usage(uid, "chat_count")
-                return jsonify({"reply": msg, "conv_id": nid})
+                def limit_img_stream():
+                    yield f"data: {json.dumps({'token': msg}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'conv_id': nid or cid or ''}, ensure_ascii=False)}\n\n"
+                return Response(
+                    stream_with_context(limit_img_stream()),
+                    mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
+                )
         user_memory = get_user_memory(user_email) if user_email else {}
         memory_context = ""
         if user_memory.get('name'):
