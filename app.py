@@ -7,12 +7,14 @@ from flask import (
     session, redirect, url_for, send_from_directory,
     Response, stream_with_context
 )
-import openai, os, secrets, json, asyncio, base64, re, requests, edge_tts
+import openai, os, secrets, json, asyncio, base64, re, requests
 from datetime import datetime, timedelta, date as _date
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from supabase import create_client
 from markupsafe import escape
+from gtts import gTTS
+import io
 import urllib.parse
 
 
@@ -523,23 +525,19 @@ PERSONALITY_INSTRUCTIONS = {
 }
 
 
-async def _generate_speech_async(text, voice):
-    communicate = edge_tts.Communicate(text, voice)
-    audio_data = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_data += chunk["data"]
-    return audio_data
-
-
 def generate_speech(text, gender):
     try:
-        voice = "ar-SA-HamedNeural" if gender == "male" else "ar-SA-ZariahNeural"
-        audio = asyncio.run(_generate_speech_async(text, voice))
-        return base64.b64encode(audio).decode('utf-8')
+        tts = gTTS(text=text[:4000], lang='ar', slow=False)
+        buf = io.BytesIO()
+        tts.write_to_fp(buf)
+        audio = buf.getvalue()
+        if audio:
+            print(f"gTTS OK: {len(audio)} bytes")
+            return base64.b64encode(audio).decode('utf-8')
+        print("gTTS: رد فاضي")
     except Exception as e:
-        print(f"صوت: {e}")
-        return None
+        print(f"gTTS فشل: {type(e).__name__}: {e}")
+    return None
 
 
 SHARED_VIEW_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>محادثة نبراس</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}body{background:#f4f7fc;display:flex;justify-content:center;align-items:flex-start;min-height:100dvh;padding:20px}.container{max-width:700px;width:100%;background:#fff;border-radius:24px;box-shadow:0 10px 40px rgba(0,0,0,0.08);padding:30px 25px;margin-top:20px}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eaeef2;padding-bottom:15px;margin-bottom:25px}.header h1{font-size:22px;color:#1a2b3c}.header a{color:#4a6a8a;text-decoration:none;font-size:15px;font-weight:600}.msg{display:flex;margin-bottom:18px;gap:10px}.msg .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px}.msg.user .avatar{background:#eaeef2;color:#1a2b3c}.msg.bot .avatar{background:#4a6a8a;color:#fff}.msg .content{background:#f5f7fa;padding:12px 18px;border-radius:16px;border-top-right-radius:4px;max-width:85%;line-height:1.8;color:#111;word-wrap:break-word;white-space:pre-wrap}.msg.user .content{background:#eaeef2}.footer{text-align:center;margin-top:30px;padding-top:20px;border-top:1px solid #eaeef2;color:#8b949e;font-size:14px}.footer a{color:#4a6a8a;text-decoration:none;font-weight:700}.error{background:#ffe8e8;color:#c33;padding:20px;border-radius:14px;text-align:center;font-weight:600}</style></head><body><div class="container"><div class="header"><h1>محادثة نبراس</h1><a href="/">الرئيسية</a></div><div id="content"><div class="error">جاري التحميل...</div></div><div class="footer">تمت المشاركة من <a href="/">نبراس</a></div></div><script>
@@ -1927,7 +1925,11 @@ def admin_dashboard():
 
 @app.route('/set_gender', methods=['POST'])
 def set_gender():
-    session['voice_gender'] = request.get_json(silent=True) or {}.get('gender', 'male')
+    d = request.get_json(silent=True) or {}
+    gender = d.get('gender', 'male')
+    if gender not in ('male', 'female'):
+        gender = 'male'
+    session['voice_gender'] = gender
     return jsonify({"status": "ok"})
 
 
