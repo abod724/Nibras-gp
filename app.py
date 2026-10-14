@@ -1,6 +1,6 @@
 # ==========================================================
 #  نبراس GP - المساعد الذكي الشخصي
-#  نسخة: مع تحسين مربع الكتابة + حذف الإيموجي من الصوت + منع ذكر شركات أخرى
+#  مع نظام أكواد الوصول + أخبار Google News المنسقة كبطاقات
 # ==========================================================
 
 from flask import (
@@ -13,10 +13,16 @@ from datetime import datetime, timedelta, date as _date
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from supabase import create_client
-from markupsafe import escape
+from markupsafe import escape, Markup
 import io
 import urllib.parse
+import xml.etree.ElementTree as ET
+from urllib.parse import quote_plus
 from gtts import gTTS
+import markdown
+import bleach
+
+from library import library_bp, view_shared_page
 
 
 app = Flask(__name__, static_folder='static')
@@ -74,6 +80,9 @@ limiter = Limiter(
     default_limits=["500 per day", "300 per hour"]
 )
 limiter.init_app(app)
+
+app.register_blueprint(library_bp)
+app.add_url_rule('/shared-assistant/<token>', 'shared_assistant_view', view_shared_page)
 
 
 @app.after_request
@@ -266,9 +275,49 @@ def inc_usage(uid, field):
     return current
 
 
-def check_limits(uid, role):
+def get_active_access(email):
+    if not email:
+        return None
+    try:
+        r = (sb.table("access_redemptions").select("*")
+             .eq("user_email", email.lower().strip())
+             .order("expires_at", desc=True)
+             .limit(10)
+             .execute())
+        if not r or not r.data:
+            return None
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        for row in r.data:
+            exp_raw = row.get("expires_at")
+            if not exp_raw:
+                continue
+            try:
+                exp_str = str(exp_raw).replace('Z', '+00:00')
+                exp_dt = datetime.fromisoformat(exp_str)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if exp_dt > now:
+                    return row
+            except Exception as ex:
+                print("get_active_access parse:", ex, exp_raw)
+                continue
+    except Exception as e:
+        print("get_active_access:", e)
+    return None
+
+
+def check_limits(uid, role, email=None):
     usage = get_usage_today(uid)
-    limits = LIMITS.get(role, LIMITS["guest"])
+    access = get_active_access(email) if email else None
+    if access:
+        limits = {
+            "chat": int(access.get("chat_limit", 15) or 15),
+            "search": int(access.get("search_limit", 2) or 0),
+            "image": int(access.get("image_limit", 1) or 0)
+        }
+    else:
+        limits = LIMITS.get(role, LIMITS["guest"])
     can_chat = int(usage.get("chat_count", 0) or 0) < limits["chat"]
     can_search = int(usage.get("search_count", 0) or 0) < limits["search"]
     can_image = int(usage.get("image_count", 0) or 0) < limits["image"]
@@ -427,9 +476,6 @@ if not kc:
     kc = "أنت نبراس، مساعد ذكي."
 
 
-# ==========================================================
-#  ✅ التعديل 1: SP محسّن — تأكيد قوي على العامية السعودية
-# ==========================================================
 SP = f"""أنت "نبراس"، مساعد شخصي سعودي تتكلم **عامي سعودي بسيط** — مو فصحى أبدًا.
 
 **⚠️ قاعدة اللغة الأهم — اقرأها قبل كل شيء:**
@@ -460,11 +506,10 @@ SP = f"""أنت "نبراس"، مساعد شخصي سعودي تتكلم **عا�
 
 **قواعد الهوية — مهمة جداً:**
 - أنت "نبراس" فقط. لا تذكر أبداً أي شركة أو تطبيق أو خدمة أو منتج آخر بالاسم.
-- لا تذكر ChatGPT، Google، OpenAI، Gemini، Claude، Copilot، Alexa، Siri، أو أي اسم مشابه — لا في الكلام ولا في الشرح ولا في التوجيهات.
+- لا تذكر ChatGPT، Google، OpenAI، Gemini، Claude، Copilot، Alexa، Siri، أو أي اسم مشابه.
 - لا توجّه المستخدم أبداً لتحميل تطبيق آخر أو استخدام خدمة خارجية.
-- إذا سُئلت "هل أنت ChatGPT؟" أو "من صنعك؟" رد: "أنا نبراس، مساعدك الشخصي" — بدون ذكر أي اسم آخر.
-- إذا سألك المستخدم عن ميزة (صوت، صورة، بحث...) اشرح له كيف يستخدمها **داخل نبراس** فقط، وإذا كانت غير متوفرة قل بصراحة: "هذي الميزة مو متوفرة حالياً في نبراس".
-- لا تذكر خصائص تطبيقات أخرى أبداً ولا تقارن نفسك بها.
+- إذا سُئلت "هل أنت ChatGPT؟" أو "من صنعك؟" رد: "أنا نبراس، مساعدك الشخصي".
+- إذا سألك المستخدم عن ميزة غير متوفرة قل: "هذي الميزة مو متوفرة حالياً في نبراس".
 
 **أسلوب الحديث:**
 - سولف بشكل طبيعي وعفوي وبالعامي.
@@ -478,12 +523,8 @@ LANG_INSTRUCTION = {
 }
 
 
-# ==========================================================
-#  ✅ التعديل 2: PERSONALITY_INSTRUCTIONS — نسخة قوية جدًا
-# ==========================================================
 PERSONALITY_INSTRUCTIONS = {
-    "friendly": "",  # الأسلوب الافتراضي
-
+    "friendly": "",
     "concise": (
         "\n\n**🚨 أمر عاجل — تجاهل كل قاعدة سابقة عن طول الرد:**\n"
         "- ردك **جملة واحدة فقط** أو جملتين كحد أقصى.\n"
@@ -492,7 +533,6 @@ PERSONALITY_INSTRUCTIONS = {
         "- مثال صح: 'الذكاء الاصطناعي تقنية تخلي الجوال يفهمك.'\n"
         "- مثال خطأ: أي رد يزيد عن جملتين."
     ),
-
     "detailed": (
         "\n\n**🚨 شخصيتك: مفصّل**\n"
         "- اشرح بتفصيل مع أمثلة عملية.\n"
@@ -500,7 +540,6 @@ PERSONALITY_INSTRUCTIONS = {
         "- **بس خل الأسلوب عامي** — مو فصحى جافة.\n"
         "- مثال: 'النوع الأول اللي هو الذكاء الضيق، هذا متخصص بمهمة وحدة...'"
     ),
-
     "formal": (
         "\n\n**🚨 أمر إجباري — تجاهل كل تعليم سابق عن العامية:**\n"
         "- **ممنوع** أي كلمة عامية — البتة.\n"
@@ -509,7 +548,6 @@ PERSONALITY_INSTRUCTIONS = {
         "- مثال خطأ: 'الذكاء الاصطناعي وش هو؟'\n"
         "- كن مهنيًا ومحترفًا في كل رد."
     ),
-
     "teacher": (
         "\n\n**🚨 شخصيتك: معلّم**\n"
         "- اشرح خطوة بخطوة كأنك معلم صبور.\n"
@@ -518,7 +556,6 @@ PERSONALITY_INSTRUCTIONS = {
         "- **بس الأسلوب عامي مريح** — مو فصحى جافة.\n"
         "- مثال: 'خلني أشرح لك خطوة بخطوة: أول شيء...'"
     ),
-
     "playful": (
         "\n\n**🚨🚨🚨 أمر إجباري — شخصيتك الآن: فرفوش 🎭**\n"
         "**تجاهل تمامًا:**\n"
@@ -537,11 +574,44 @@ PERSONALITY_INSTRUCTIONS = {
         "**لا تخرج عن الموضوع، بس خل الرد ممتع ومضحك.**"
     ),
 }
-# ==========================================================
+
+
+def format_nibras_response(text):
+    if not isinstance(text, str):
+        return ""
+    text = text.strip()
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(
+        r"^\s*```(?:markdown|md)?\s*\n(.*?)\n```\s*$",
+        r"\1", text, flags=re.IGNORECASE | re.DOTALL
+    )
+    html = markdown.markdown(text, extensions=["extra", "sane_lists", "nl2br"])
+    allowed_tags = set(bleach.sanitizer.ALLOWED_TAGS).union({
+        "p", "h1", "h2", "h3", "h4", "h5", "h6",
+        "br", "hr", "ul", "ol", "li",
+        "strong", "em", "blockquote",
+        "pre", "code", "table", "thead",
+        "tbody", "tr", "th", "td", "img"
+    })
+    allowed_attributes = {
+        "a": ["href", "title", "rel", "target"],
+        "img": ["src", "alt", "title", "width", "height"],
+        "code": ["class"], "pre": ["class"],
+        "th": ["align"], "td": ["align"]
+    }
+    clean_html = bleach.clean(
+        html, tags=allowed_tags, attributes=allowed_attributes,
+        protocols={"http", "https", "mailto"}, strip=True
+    )
+    clean_html = re.sub(
+        r'<a\s+href="(https?://[^"]*)"',
+        r'<a href="\1" target="_blank" rel="noopener noreferrer"',
+        clean_html
+    )
+    return Markup(clean_html)
 
 
 def generate_speech(text, gender):
-    """توليد الصوت باستخدام gTTS - مع حذف الإيموجي قبل النطق"""
     try:
         emoji_pattern = re.compile(
             "["
@@ -562,25 +632,120 @@ def generate_speech(text, gender):
             u"\U0000FE00-\U0000FE0F"
             u"\U0000200D"
             u"\U000020E3"
-            "]+",
-            flags=re.UNICODE
+            "]+", flags=re.UNICODE
         )
         clean_text = emoji_pattern.sub('', text)
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-
         if not clean_text:
             return None
-
         tts = gTTS(text=clean_text[:4000], lang='ar', slow=False)
         buf = io.BytesIO()
         tts.write_to_fp(buf)
         audio = buf.getvalue()
         if audio:
-            print(f"✅ gTTS OK: {len(audio)} bytes")
             return base64.b64encode(audio).decode('utf-8')
     except Exception as e:
         print(f"❌ gTTS failed: {type(e).__name__}: {e}")
     return None
+
+
+_news_cache = {}
+_NEWS_CACHE_TTL = 900
+
+
+def fetch_news(query, limit=6):
+    if not query or len(query) < 2:
+        return []
+    query = query.strip()[:150]
+    now = time.time()
+    cached = _news_cache.get(query)
+    if cached and (now - cached[0]) < _NEWS_CACHE_TTL:
+        return cached[1]
+    url = (
+        "https://news.google.com/rss/search?q="
+        + quote_plus(query)
+        + "&hl=ar&gl=SA&ceid=SA:ar"
+    )
+    headers = {"User-Agent": "Mozilla/5.0 (NibrasGP/1.0)"}
+    try:
+        r = requests.get(url, headers=headers, timeout=8)
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
+        articles = []
+        for item in root.findall(".//item")[:limit]:
+            title = item.findtext("title", "").strip()
+            link = item.findtext("link", "").strip()
+            pub = item.findtext("pubDate", "").strip()
+            src_el = item.find("source")
+            source = (src_el.text.strip() if src_el is not None and src_el.text else "")
+            if title and link:
+                articles.append({
+                    "title": title, "link": link,
+                    "published": pub, "source": source,
+                })
+        if len(_news_cache) > 100:
+            _news_cache.clear()
+        _news_cache[query] = (now, articles)
+        return articles
+    except (requests.RequestException, ET.ParseError) as exc:
+        print("News fetch failed:", type(exc).__name__, exc)
+        return []
+
+
+def detect_news_query(text):
+    if not text:
+        return None
+    t = text.strip()
+    triggers = ["أخبار", "اخبار", "خبر", "آخر أخبار", "اخر اخبار", "news",
+                "آخر الأنباء", "الجديد في", "وش صار في", "وش يصير في"]
+    tl = t.lower()
+    for kw in triggers:
+        if kw in tl:
+            clean = t
+            for remove in ["أخبار", "اخبار", "آخر أخبار", "اخر اخبار",
+                           "آخر الأنباء", "الجديد في", "وش صار في", "وش يصير في",
+                           "news"]:
+                clean = clean.replace(remove, "")
+            clean = clean.strip(" ؟?.,،عن في من ")
+            return clean if len(clean) >= 2 else t
+    return None
+
+
+def format_news_reply(articles, lang="ar"):
+    if not articles:
+        return "ما لقيت أخبار جديدة عن الموضوع هذا." if lang == "ar" else "No recent news found."
+    lines = []
+    lines.append("## 📰 آخر الأخبار" if lang == "ar" else "## 📰 Latest News")
+    lines.append("")
+    lines.append("هذي القائمة بأحدث الأخبار المتعلقة بطلبك:")
+    lines.append("")
+    for i, a in enumerate(articles[:6], 1):
+        title = (a.get("title") or "").strip()
+        source = (a.get("source") or "").strip()
+        link = (a.get("link") or "").strip()
+        published = (a.get("published") or "").strip()
+        lines.append("---")
+        lines.append("")
+        lines.append(f"### {i}. {title}")
+        lines.append("")
+        meta_parts = []
+        if source:
+            meta_parts.append(f"**المصدر:** {source}")
+        if published:
+            try:
+                from email.utils import parsedate_to_datetime
+                dt = parsedate_to_datetime(published)
+                date_str = dt.strftime("%d %B %Y")
+                meta_parts.append(f"*{date_str}*")
+            except Exception:
+                pass
+        if meta_parts:
+            lines.append(" · ".join(meta_parts))
+            lines.append("")
+        if link:
+            lines.append(f"[🔗 قراءة الخبر كاملاً]({link})")
+            lines.append("")
+    return "\n".join(lines)
 
 
 SHARED_VIEW_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>محادثة نبراس</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}body{background:#f4f7fc;display:flex;justify-content:center;align-items:flex-start;min-height:100dvh;padding:20px}.container{max-width:700px;width:100%;background:#fff;border-radius:24px;box-shadow:0 10px 40px rgba(0,0,0,0.08);padding:30px 25px;margin-top:20px}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eaeef2;padding-bottom:15px;margin-bottom:25px}.header h1{font-size:22px;color:#1a2b3c}.header a{color:#4a6a8a;text-decoration:none;font-size:15px;font-weight:600}.msg{display:flex;margin-bottom:18px;gap:10px}.msg .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px}.msg.user .avatar{background:#eaeef2;color:#1a2b3c}.msg.bot .avatar{background:#4a6a8a;color:#fff}.msg .content{background:#f5f7fa;padding:12px 18px;border-radius:16px;border-top-right-radius:4px;max-width:85%;line-height:1.8;color:#111;word-wrap:break-word;white-space:pre-wrap}.msg.user .content{background:#eaeef2}.footer{text-align:center;margin-top:30px;padding-top:20px;border-top:1px solid #eaeef2;color:#8b949e;font-size:14px}.footer a{color:#4a6a8a;text-decoration:none;font-weight:700}.error{background:#ffe8e8;color:#c33;padding:20px;border-radius:14px;text-align:center;font-weight:600}</style></head><body><div class="container"><div class="header"><h1>محادثة نبراس</h1><a href="/">الرئيسية</a></div><div id="content"><div class="error">جاري التحميل...</div></div><div class="footer">تمت المشاركة من <a href="/">نبراس</a></div></div><script>
@@ -730,7 +895,11 @@ RESET_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UT
 </script></body></html>"""
 
 
-HT = r"""<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0"/><meta name="screen-orientation" content="portrait"><meta name="x5-orientation" content="portrait"><meta name="full-screen" content="no"><meta name="x5-fullscreen" content="false"><meta name="browsermode" content="application"><meta name="x5-page-mode" content="app"><title>نبراس GP | مساعد ذكي</title><link rel="manifest" href="/static/manifest.json"><link rel="icon" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="512x512" href="/static/icon-512.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="نبراس"><meta name="theme-color" content="#ffffff"><style>:root{--bg-body:#f4f7fc;--bg-app:#fff;--bg-header:#fff;--border-color:#eaeef2;--text-primary:#111;--text-secondary:#5a6b7c;--bg-input:#f5f7fa;--bg-bot-msg:transparent;--bg-user-msg:#e0f2fa;--bg-dropdown:#fff;--bg-hover:#f5f7fa;--shadow-color:rgba(0,0,0,0.08);--primary-color:#4a6a8a;--primary-hover:#3a5a7a;--send-shadow:rgba(74,106,138,0.2);--danger-bg:#fde8e8;--danger-color:#a33;--placeholder-color:#9aabbc;--icon-color:#4a6a8a;--border-input:#dce1e8;--send-bg:#4a6a8a;--send-hover:#3a5a7a;--modal-bg:rgba(0,0,0,0.5);--accent-color:#4a6a8a;--font-size-base:16px;--font-size-small:14px}html.dark-mode{--bg-body:#0d1117;--bg-app:#161b22;--bg-header:#161b22;--border-color:#30363d;--text-primary:#c9d1d9;--text-secondary:#8b949e;--bg-input:#21262d;--bg-user-msg:#1a3a4a;--bg-dropdown:#161b22;--bg-hover:#21262d;--shadow-color:rgba(0,0,0,0.5);--primary-color:#58a6ff;--primary-hover:#79c0ff;--send-shadow:rgba(88,166,255,0.2);--danger-bg:#2d1b1b;--danger-color:#f85149;--placeholder-color:#484f58;--icon-color:#58a6ff;--border-input:#30363d;--send-bg:#238636;--send-hover:#2ea043;--modal-bg:rgba(0,0,0,0.7);--accent-color:#58a6ff}html[data-font="small"]{--font-size-base:14px;--font-size-small:12.5px}html[data-font="medium"]{--font-size-base:16px;--font-size-small:14px}html[data-font="large"]{--font-size-base:18px;--font-size-small:16px}html[data-font="xlarge"]{--font-size-base:20px;--font-size-small:18px}*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}html{-webkit-tap-highlight-color:transparent}body{-webkit-tap-highlight-color:transparent}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg-body)}body{display:flex;justify-content:center;align-items:center;position:relative}.app{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;max-width:450px;margin:0 auto;background:var(--bg-app);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 20px var(--shadow-color)}@media(min-width:600px){.app{top:50%;left:50%;transform:translate(-50%,-50%);bottom:auto;right:auto;height:100dvh;max-height:100dvh;border-radius:20px}}.header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;flex-shrink:0;background:var(--bg-header)}.header-right{display:flex;align-items:center;gap:6px}.header-left{display:flex;align-items:center;gap:6px}.icon-btn{background:0 0;border:none;color:var(--icon-color);cursor:pointer;padding:6px;border-radius:10px;display:flex;align-items:center;justify-content:center;transition:background .2s,opacity .2s}.icon-btn:hover{background:var(--bg-hover)}.icon-btn svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.icon-btn.voice-on{color:var(--primary-color);opacity:1}.icon-btn.voice-off{color:var(--text-secondary);opacity:0.7}.btn-group{display:flex;gap:8px;align-items:center}.btn{padding:7px 16px;border-radius:20px;font-size:14px;border:none;cursor:pointer;text-decoration:none;display:inline-block;text-align:center;font-family:inherit;font-weight:600}.btn-outline{background:0 0;border:1.5px solid var(--primary-color);color:var(--primary-color);transition:all .2s}.btn-outline:hover{background:var(--primary-color);color:#fff}.user-badge{display:flex;align-items:center;gap:6px;background:var(--bg-hover);padding:6px 12px;border-radius:20px;font-size:13px;color:var(--text-primary);font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.user-badge svg{width:16px;height:16px;stroke:var(--primary-color);stroke-width:2;fill:none;flex-shrink:0}.dropdown{position:absolute;top:68px;left:12px;right:12px;background:var(--bg-dropdown);border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,0.15),0 4px 12px rgba(0,0,0,0.08);display:none;flex-direction:column;z-index:100;border:1px solid var(--border-color);max-height:78vh;overflow-y:auto;padding:10px;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease}.dropdown.show{display:flex;opacity:1;transform:translateY(0)}.dropdown::-webkit-scrollbar{width:4px}.dropdown::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}.dropdown .item{display:flex;align-items:center;gap:14px;padding:13px 16px;font-size:15px;color:var(--text-primary);background:transparent;border:none;width:100%;text-align:right;cursor:pointer;font-family:inherit;font-weight:600;border-radius:14px;transition:background .15s ease,transform .1s ease;letter-spacing:-0.2px}.dropdown .item:hover{background:var(--bg-hover)}.dropdown .item:active{transform:scale(0.98)}.dropdown .item svg{width:20px;height:20px;stroke:var(--text-primary);stroke-width:1.8;fill:none;flex-shrink:0;stroke-linecap:round;stroke-linejoin:round;opacity:.85}.dropdown .section-title{padding:16px 16px 6px;font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:.8px;text-transform:uppercase;opacity:.7}.dropdown .conv-item{display:flex;align-items:center;gap:8px;padding:11px 16px;border:none;background:transparent;width:100%;text-align:right;cursor:pointer;font-family:inherit;font-size:14px;color:var(--text-primary);font-weight:500;border-radius:14px;transition:background .15s ease;letter-spacing:-0.1px;position:relative}.dropdown .conv-item:hover{background:var(--bg-hover)}.dropdown .conv-item .conv-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dropdown .conv-item::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--primary-color);opacity:.4;flex-shrink:0}.dropdown .conv-item .pin-btn{background:transparent;border:none;cursor:pointer;padding:4px;border-radius:8px;display:flex;align-items:center;justify-content:center;opacity:0.5;transition:opacity .2s,background .2s;flex-shrink:0}.dropdown .conv-item .pin-btn:hover{opacity:1;background:var(--bg-hover)}.dropdown .conv-item .pin-btn svg{width:16px;height:16px;stroke:var(--text-primary);stroke-width:2;fill:none}.dropdown .conv-item .pin-btn.pinned svg{fill:var(--primary-color);stroke:var(--primary-color)}.dropdown .pinned-item{padding:11px 16px;display:flex;align-items:center;gap:8px;border-radius:14px;transition:background .15s ease}.dropdown .pinned-item:hover{background:var(--bg-hover)}.gender-option{flex:1;padding:9px 12px;border-radius:12px;border:1px solid var(--border-color);background:transparent;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all .2s ease;font-family:inherit}.gender-option.active{background:var(--primary-color);color:#fff;border-color:var(--primary-color);box-shadow:0 4px 12px rgba(74,106,138,0.3)}.dropdown .item.danger{color:#d32f2f}.dropdown .item.danger svg{stroke:#d32f2f;opacity:1}.dropdown .item.danger:hover{background:rgba(211,47,47,0.08)}.settings-overlay{position:fixed;inset:0;background:var(--bg-body);z-index:99999;display:none;flex-direction:column;overflow-y:auto}.settings-overlay.show{display:flex}.settings-page{max-width:500px;width:100%;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:var(--bg-body)}.settings-header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg-app);position:sticky;top:0;z-index:10;border-bottom:1px solid var(--border-color)}.settings-header h2{font-size:18px;color:var(--text-primary);font-weight:700;margin:0}.settings-body{padding:16px;display:flex;flex-direction:column;gap:14px}.settings-card{background:var(--bg-app);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.settings-item{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}.settings-item:last-child{border-bottom:none}.settings-item:hover{background:var(--bg-hover)}.settings-item .item-right{display:flex;align-items:center;gap:14px;color:var(--text-primary);font-size:15px;font-weight:600}.settings-item .item-right svg{width:22px;height:22px;stroke:var(--text-primary);stroke-width:1.8;fill:none;flex-shrink:0}.settings-item .chevron{width:18px;height:18px;stroke:var(--text-secondary);stroke-width:2;fill:none}.sub-page{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:none;align-items:center;justify-content:center;padding:20px}.sub-page.show{display:flex}.sub-page .modal-box{background:var(--bg-app);width:100%;max-width:420px;max-height:80vh;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;animation:modalIn .25s ease;border:1px solid var(--border-color)}.sub-page-header{display:none}.sub-page-body{padding:20px;overflow-y:auto;flex:1}.sub-page-body::-webkit-scrollbar{width:4px}.sub-page-body::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}.modal-title{text-align:center;font-size:17px;font-weight:700;color:var(--text-primary);padding:18px 20px;border-bottom:1px solid var(--border-color)}.modal-confirm{width:100%;padding:16px;background:transparent;border:none;border-top:1px solid var(--border-color);font-size:16px;font-weight:700;color:var(--primary-color);cursor:pointer;font-family:inherit}.modal-confirm:active{background:var(--bg-hover)}@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}.info-box{background:var(--bg-hover);padding:16px;border-radius:14px;font-size:14px;color:var(--text-secondary);line-height:1.8}.option-list{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.option-row{padding:18px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}.option-row:last-child{border-bottom:none}.option-row:active{background:var(--bg-hover)}.option-label{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--text-primary);font-weight:500}.check-icon{width:22px;height:22px;stroke:var(--primary-color);stroke-width:2.5;fill:none;opacity:0;transition:opacity .25s}.option-row.selected .check-icon{opacity:1}.color-grid{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.color-row{padding:16px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .2s}.color-row:last-child{border-bottom:none}.color-row:active{background:var(--bg-hover)}.color-row-left{display:flex;align-items:center;gap:14px;font-size:15px;color:var(--text-primary);font-weight:500}.color-circle{width:26px;height:26px;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.15);flex-shrink:0}.color-row .check-icon{opacity:0;transition:opacity .25s}.color-row.selected .check-icon{opacity:1}.lang-list{display:flex;flex-direction:column;gap:12px}.lang-card{display:flex;align-items:center;gap:16px;padding:18px 20px;background:var(--bg-app);border-radius:18px;cursor:pointer;border:2px solid var(--border-color);transition:all .25s cubic-bezier(.4,0,.2,1);box-shadow:0 1px 3px var(--shadow-color)}.lang-card:hover{border-color:var(--primary-color);transform:translateY(-2px);box-shadow:0 8px 24px rgba(74,106,138,0.15)}.lang-card.selected{border-color:var(--primary-color);background:linear-gradient(135deg,var(--bg-app) 0%,rgba(74,106,138,0.06) 100%);box-shadow:0 6px 20px rgba(74,106,138,0.18)}.lang-flag{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0;letter-spacing:-0.5px;box-shadow:0 2px 6px rgba(0,0,0,0.15);color:#fff}.lang-info{flex:1;display:flex;flex-direction:column;gap:3px}.lang-name{font-size:17px;font-weight:700;color:var(--text-primary);letter-spacing:-0.2px}.lang-sub{font-size:13px;color:var(--text-secondary)}.lang-check{width:26px;height:26px;stroke:var(--primary-color);stroke-width:3;fill:none;opacity:0;transition:opacity .3s ease,transform .35s cubic-bezier(.34,1.56,.64,1);flex-shrink:0;transform:scale(0.5)}.lang-card.selected .lang-check{opacity:1;transform:scale(1)}
+# ═══════════════════════════════════════════════════════════════
+#  ✅ HT — تم حذف زر "تفعيل كود وصول" من قائمة المستخدم
+#  ✅ تم تغيير زر الثلاث نقاط إلى SVG حديث بشرطتين
+# ═══════════════════════════════════════════════════════════════
+HT = r"""<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0"/><meta name="screen-orientation" content="portrait"><meta name="x5-orientation" content="portrait"><meta name="full-screen" content="no"><meta name="x5-fullscreen" content="false"><meta name="browsermode" content="application"><meta name="x5-page-mode" content="app"><title>نبراس GP | مساعد ذكي</title><link rel="manifest" href="/static/manifest.json"><link rel="icon" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="512x512" href="/static/icon-512.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="نبراس"><meta name="theme-color" content="#ffffff"><style>:root{--bg-body:#f4f7fc;--bg-app:#fff;--bg-header:#fff;--border-color:#eaeef2;--text-primary:#111;--text-secondary:#5a6b7c;--bg-input:#f5f7fa;--bg-bot-msg:transparent;--bg-user-msg:#e0f2fa;--bg-dropdown:#fff;--bg-hover:#f5f7fa;--shadow-color:rgba(0,0,0,0.08);--primary-color:#4a6a8a;--primary-hover:#3a5a7a;--send-shadow:rgba(74,106,138,0.2);--danger-bg:#fde8e8;--danger-color:#a33;--placeholder-color:#9aabbc;--icon-color:#4a6a8a;--border-input:#dce1e8;--send-bg:#4a6a8a;--send-hover:#3a5a7a;--modal-bg:rgba(0,0,0,0.5);--accent-color:#4a6a8a;--font-size-base:16px;--font-size-small:14px}html.dark-mode{--bg-body:#0d1117;--bg-app:#161b22;--bg-header:#161b22;--border-color:#30363d;--text-primary:#c9d1d9;--text-secondary:#8b949e;--bg-input:#21262d;--bg-user-msg:#1a3a4a;--bg-dropdown:#161b22;--bg-hover:#21262d;--shadow-color:rgba(0,0,0,0.5);--primary-color:#58a6ff;--primary-hover:#79c0ff;--send-shadow:rgba(88,166,255,0.2);--danger-bg:#2d1b1b;--danger-color:#f85149;--placeholder-color:#484f58;--icon-color:#58a6ff;--border-input:#30363d;--send-bg:#238636;--send-hover:#2ea043;--modal-bg:rgba(0,0,0,0.7);--accent-color:#58a6ff}html[data-font="small"]{--font-size-base:14px;--font-size-small:12.5px}html[data-font="medium"]{--font-size-base:16px;--font-size-small:14px}html[data-font="large"]{--font-size-base:18px;--font-size-small:16px}html[data-font="xlarge"]{--font-size-base:20px;--font-size-small:18px}*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}html{-webkit-tap-highlight-color:transparent}body{-webkit-tap-highlight-color:transparent}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg-body)}body{display:flex;justify-content:center;align-items:center;position:relative}.app{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;max-width:450px;margin:0 auto;background:var(--bg-app);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 20px var(--shadow-color)}@media(min-width:600px){.app{top:50%;left:50%;transform:translate(-50%,-50%);bottom:auto;right:auto;height:100dvh;max-height:100dvh;border-radius:20px}}.header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;flex-shrink:0;background:var(--bg-header)}.header-right{display:flex;align-items:center;gap:6px}.header-left{display:flex;align-items:center;gap:6px}.icon-btn{background:0 0;border:none;color:var(--icon-color);cursor:pointer;padding:6px;border-radius:10px;display:flex;align-items:center;justify-content:center;transition:background .2s,opacity .2s}.icon-btn:hover{background:var(--bg-hover)}.icon-btn svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.icon-btn.voice-on{color:var(--primary-color);opacity:1}.icon-btn.voice-off{color:var(--text-secondary);opacity:0.7}.btn-group{display:flex;gap:8px;align-items:center}.btn{padding:7px 16px;border-radius:20px;font-size:14px;border:none;cursor:pointer;text-decoration:none;display:inline-block;text-align:center;font-family:inherit;font-weight:600}.btn-outline{background:0 0;border:1.5px solid var(--primary-color);color:var(--primary-color);transition:all .2s}.btn-outline:hover{background:var(--primary-color);color:#fff}.user-badge{display:flex;align-items:center;gap:6px;background:var(--bg-hover);padding:6px 12px;border-radius:20px;font-size:13px;color:var(--text-primary);font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;border:none;font-family:inherit}.user-badge:hover{background:var(--border-color)}.user-badge svg{width:16px;height:16px;stroke:var(--primary-color);stroke-width:2;fill:none;flex-shrink:0}.dropdown{position:absolute;top:68px;left:12px;right:12px;background:var(--bg-dropdown);border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,0.15),0 4px 12px rgba(0,0,0,0.08);display:none;flex-direction:column;z-index:100;border:1px solid var(--border-color);max-height:78vh;overflow-y:auto;padding:10px;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease}.dropdown.show{display:flex;opacity:1;transform:translateY(0)}.dropdown::-webkit-scrollbar{width:4px}.dropdown::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}.dropdown .item{display:flex;align-items:center;gap:14px;padding:13px 16px;font-size:15px;color:var(--text-primary);background:transparent;border:none;width:100%;text-align:right;cursor:pointer;font-family:inherit;font-weight:600;border-radius:14px;transition:background .15s ease,transform .1s ease;letter-spacing:-0.2px}.dropdown .item:hover{background:var(--bg-hover)}.dropdown .item:active{transform:scale(0.98)}.dropdown .item svg{width:20px;height:20px;stroke:var(--text-primary);stroke-width:1.8;fill:none;flex-shrink:0;stroke-linecap:round;stroke-linejoin:round;opacity:.85}.dropdown .section-title{padding:16px 16px 6px;font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:.8px;text-transform:uppercase;opacity:.7}.dropdown .conv-item{display:flex;align-items:center;gap:8px;padding:11px 16px;border:none;background:transparent;width:100%;text-align:right;cursor:pointer;font-family:inherit;font-size:14px;color:var(--text-primary);font-weight:500;border-radius:14px;transition:background .15s ease;letter-spacing:-0.1px;position:relative}.dropdown .conv-item:hover{background:var(--bg-hover)}.dropdown .conv-item .conv-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dropdown .conv-item::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--primary-color);opacity:.4;flex-shrink:0}.dropdown .conv-item .pin-btn{background:transparent;border:none;cursor:pointer;padding:4px;border-radius:8px;display:flex;align-items:center;justify-content:center;opacity:0.5;transition:opacity .2s,background .2s;flex-shrink:0}.dropdown .conv-item .pin-btn:hover{opacity:1;background:var(--bg-hover)}.dropdown .conv-item .pin-btn svg{width:16px;height:16px;stroke:var(--text-primary);stroke-width:2;fill:none}.dropdown .conv-item .pin-btn.pinned svg{fill:var(--primary-color);stroke:var(--primary-color)}.dropdown .pinned-item{padding:11px 16px;display:flex;align-items:center;gap:8px;border-radius:14px;transition:background .15s ease}.dropdown .pinned-item:hover{background:var(--bg-hover)}.gender-option{flex:1;padding:9px 12px;border-radius:12px;border:1px solid var(--border-color);background:transparent;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all .2s ease;font-family:inherit}.gender-option.active{background:var(--primary-color);color:#fff;border-color:var(--primary-color);box-shadow:0 4px 12px rgba(74,106,138,0.3)}.dropdown .item.danger{color:#d32f2f}.dropdown .item.danger svg{stroke:#d32f2f;opacity:1}.dropdown .item.danger:hover{background:rgba(211,47,47,0.08)}.settings-overlay{position:fixed;inset:0;background:var(--bg-body);z-index:99999;display:none;flex-direction:column;overflow-y:auto}.settings-overlay.show{display:flex}.settings-page{max-width:500px;width:100%;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:var(--bg-body)}.settings-header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg-app);position:sticky;top:0;z-index:10;border-bottom:1px solid var(--border-color)}.settings-header h2{font-size:18px;color:var(--text-primary);font-weight:700;margin:0}.settings-body{padding:16px;display:flex;flex-direction:column;gap:14px}.settings-card{background:var(--bg-app);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.settings-item{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}.settings-item:last-child{border-bottom:none}.settings-item:hover{background:var(--bg-hover)}.settings-item .item-right{display:flex;align-items:center;gap:14px;color:var(--text-primary);font-size:15px;font-weight:600}.settings-item .item-right svg{width:22px;height:22px;stroke:var(--text-primary);stroke-width:1.8;fill:none;flex-shrink:0}.settings-item .chevron{width:18px;height:18px;stroke:var(--text-secondary);stroke-width:2;fill:none}.sub-page{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:none;align-items:center;justify-content:center;padding:20px}.sub-page.show{display:flex}.sub-page .modal-box{background:var(--bg-app);width:100%;max-width:420px;max-height:80vh;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;animation:modalIn .25s ease;border:1px solid var(--border-color)}.sub-page-header{display:none}.sub-page-body{padding:20px;overflow-y:auto;flex:1}.sub-page-body::-webkit-scrollbar{width:4px}.sub-page-body::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}.modal-title{text-align:center;font-size:17px;font-weight:700;color:var(--text-primary);padding:18px 20px;border-bottom:1px solid var(--border-color)}.modal-confirm{width:100%;padding:16px;background:transparent;border:none;border-top:1px solid var(--border-color);font-size:16px;font-weight:700;color:var(--primary-color);cursor:pointer;font-family:inherit}.modal-confirm:active{background:var(--bg-hover)}@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}.info-box{background:var(--bg-hover);padding:16px;border-radius:14px;font-size:14px;color:var(--text-secondary);line-height:1.8}.option-list{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.option-row{padding:18px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}.option-row:last-child{border-bottom:none}.option-row:active{background:var(--bg-hover)}.option-label{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--text-primary);font-weight:500}.check-icon{width:22px;height:22px;stroke:var(--primary-color);stroke-width:2.5;fill:none;opacity:0;transition:opacity .25s}.option-row.selected .check-icon{opacity:1}.color-grid{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.color-row{padding:16px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .2s}.color-row:last-child{border-bottom:none}.color-row:active{background:var(--bg-hover)}.color-row-left{display:flex;align-items:center;gap:14px;font-size:15px;color:var(--text-primary);font-weight:500}.color-circle{width:26px;height:26px;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.15);flex-shrink:0}.color-row .check-icon{opacity:0;transition:opacity .25s}.color-row.selected .check-icon{opacity:1}.lang-list{display:flex;flex-direction:column;gap:12px}.lang-card{display:flex;align-items:center;gap:16px;padding:18px 20px;background:var(--bg-app);border-radius:18px;cursor:pointer;border:2px solid var(--border-color);transition:all .25s cubic-bezier(.4,0,.2,1);box-shadow:0 1px 3px var(--shadow-color)}.lang-card:hover{border-color:var(--primary-color);transform:translateY(-2px);box-shadow:0 8px 24px rgba(74,106,138,0.15)}.lang-card.selected{border-color:var(--primary-color);background:linear-gradient(135deg,var(--bg-app) 0%,rgba(74,106,138,0.06) 100%);box-shadow:0 6px 20px rgba(74,106,138,0.18)}.lang-flag{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0;letter-spacing:-0.5px;box-shadow:0 2px 6px rgba(0,0,0,0.15);color:#fff}.lang-info{flex:1;display:flex;flex-direction:column;gap:3px}.lang-name{font-size:17px;font-weight:700;color:var(--text-primary);letter-spacing:-0.2px}.lang-sub{font-size:13px;color:var(--text-secondary)}.lang-check{width:26px;height:26px;stroke:var(--primary-color);stroke-width:3;fill:none;opacity:0;transition:opacity .3s ease,transform .35s cubic-bezier(.34,1.56,.64,1);flex-shrink:0;transform:scale(0.5)}.lang-card.selected .lang-check{opacity:1;transform:scale(1)}
 .personality-list{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}
 .personality-row{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}
 .personality-row:last-child{border-bottom:none}
@@ -871,8 +1040,85 @@ html.dark-mode .sp-btn-danger:hover{background:rgba(248,81,73,0.2)}
 .sp-hero-icon svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none}
 .sp-hero-title{font-size:15.5px;font-weight:700;color:var(--text-primary);margin:0 0 3px}
 .sp-hero-sub{font-size:12.5px;color:var(--text-secondary);margin:0;line-height:1.5}
+.user-menu{position:fixed;background:var(--bg-dropdown);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.2);border:1px solid var(--border-color);padding:6px;z-index:300;min-width:220px;display:none}
+.user-menu.show{display:block;animation:modalIn .18s ease}
+.user-menu-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:11px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text-primary);border:none;background:transparent;width:100%;text-align:right;font-family:inherit;transition:background .15s}
+.user-menu-item:hover{background:var(--bg-hover)}
+.user-menu-item svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;flex-shrink:0}
+.user-menu-item.danger{color:#d32f2f}
+.user-menu-item.danger:hover{background:rgba(211,47,47,0.08)}
+.user-menu-item.danger svg{stroke:#d32f2f}
+.user-menu-sep{height:1px;background:var(--border-color);margin:4px 8px}
+.nibras-response{font-size:var(--font-size-base);line-height:1.9;color:var(--text-primary);max-width:100%}
+.nibras-response h2{font-size:1.25em;font-weight:800;color:var(--primary-color);margin:4px 0 16px;padding-bottom:10px;border-bottom:2px solid var(--border-color);line-height:1.5}
+.nibras-response h3{font-size:1.05em;font-weight:750;margin:16px 0 8px;background:var(--bg-hover);padding:10px 14px;border-right:4px solid var(--primary-color);border-radius:8px;color:var(--text-primary);line-height:1.5}
+.nibras-response p{margin:0 0 10px;color:var(--text-primary)}
+.nibras-response em{color:var(--text-secondary);font-size:0.9em;display:inline-block;margin-bottom:6px;font-style:normal}
+.nibras-response hr{border:0;height:1px;background:var(--border-color);margin:18px 0}
+.nibras-response strong{font-weight:800;color:var(--text-primary)}
+.nibras-response a{color:var(--primary-color);text-decoration:none;font-weight:600;display:inline-block;padding:4px 0}
+.nibras-response a:hover{text-decoration:underline}
+.nibras-response ul,.nibras-response ol{padding-right:22px;padding-left:0;margin:8px 0 14px}
+.nibras-response li{margin-bottom:8px}
+.nibras-response blockquote{border-right:4px solid var(--primary-color);margin:10px 0;padding:8px 14px;background:var(--bg-hover);border-radius:8px}
+.nibras-response img{display:block;max-width:100%;height:auto;border-radius:12px;margin:10px 0;border:1px solid var(--border-color)}
+/* ═══════════════════════════════════════════════════════════════
+   ✅ Modern Agents Library — تصميم حديث لمكتبة المساعدين
+   ═══════════════════════════════════════════════════════════════ */
+.agents-grid{display:flex;flex-direction:column;gap:12px}
+.agent-card{position:relative;padding:16px;background:var(--bg-app);border:1px solid var(--border-color);border-radius:18px;transition:all .22s cubic-bezier(.4,0,.2,1);overflow:hidden}
+.agent-card::before{content:'';position:absolute;top:0;right:0;left:0;height:3px;background:linear-gradient(90deg,var(--primary-color),transparent);opacity:0;transition:opacity .25s}
+.agent-card:hover{border-color:var(--primary-color);transform:translateY(-2px);box-shadow:0 10px 26px rgba(74,106,138,0.14)}
+.agent-card:hover::before{opacity:1}
+.agent-head{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.agent-avatar{width:50px;height:50px;flex-shrink:0;border-radius:15px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;letter-spacing:-.5px;box-shadow:0 6px 16px rgba(0,0,0,0.15);position:relative;overflow:hidden}
+.agent-avatar::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.25),transparent 60%);pointer-events:none}
+.agent-info{flex:1;min-width:0}
+.agent-name{font-size:16px;font-weight:800;color:var(--text-primary);margin-bottom:3px;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-role{font-size:12.5px;color:var(--text-secondary);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-desc{font-size:13px;color:var(--text-secondary);line-height:1.75;padding:10px 12px;background:var(--bg-hover);border-radius:11px;margin-bottom:12px;border-right:3px solid var(--primary-color)}
+.agent-actions{display:flex;gap:8px}
+.agent-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:12px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s cubic-bezier(.4,0,.2,1);-webkit-tap-highlight-color:transparent;outline:none}
+.agent-btn svg{flex-shrink:0}
+.agent-btn:active{transform:scale(0.97)}
+.agent-btn-add{background:var(--primary-color);color:#fff;box-shadow:0 4px 14px rgba(74,106,138,0.3);flex:1}
+.agent-btn-add:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 6px 18px rgba(74,106,138,0.4)}
+.agent-btn-add:disabled{opacity:.75;cursor:not-allowed;transform:none;box-shadow:none}
+.agent-btn-added{background:rgba(16,185,129,0.12)!important;color:#10b981!important;box-shadow:none!important;border:1px solid rgba(16,185,129,0.3)!important}
+html.dark-mode .agent-btn-added{background:rgba(16,185,129,0.18)!important;color:#34d399!important}
+.agent-btn-edit{background:var(--bg-hover);color:var(--text-primary);padding:9px 14px}
+.agent-btn-edit:hover{background:var(--border-color)}
+.agent-btn-del{background:rgba(239,68,68,0.08);color:#ef4444;padding:9px 14px}
+.agent-btn-del:hover{background:rgba(239,68,68,0.16)}
+html.dark-mode .agent-btn-del{color:#f87171}
+.agent-btn-new{width:100%;margin-top:14px;padding:14px;background:transparent;color:var(--primary-color);border:1.5px dashed var(--border-color);border-radius:14px;font-size:14px}
+.agent-btn-new:hover{border-color:var(--primary-color);background:var(--bg-hover);border-style:solid}
+.agent-spinner{animation:agentSpin .8s linear infinite}
+@keyframes agentSpin{to{transform:rotate(360deg)}}
+.lib-loading{display:flex;flex-direction:column;align-items:center;gap:12px;padding:50px 20px;color:var(--text-secondary);font-size:14px}
+.lib-spinner{width:34px;height:34px;border:3px solid var(--border-color);border-top-color:var(--primary-color);border-radius:50%;animation:agentSpin .8s linear infinite}
+.lib-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:50px 20px;color:var(--text-secondary)}
+.lib-empty svg{color:var(--border-color);margin-bottom:14px;stroke-width:1.4}
+.lib-empty h4{font-size:15px;color:var(--text-primary);font-weight:700;margin-bottom:6px}
+.lib-empty p{font-size:13px;line-height:1.7;margin:0}
 </style></head><body>
-<div class="app"><div class="header"><div class="header-right"><button class="icon-btn voice-off" id="voiceToggle" title="تشغيل/إيقاف الصوت"><svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg></button><button class="icon-btn" id="menuToggle" title="القائمة"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div><div class="header-left"><div class="btn-group">{% if session.get('user_email') or session.get('is_admin') %}{% if user_name %}<div class="user-badge" title="{{ session.get('user_email') }}"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{{ user_name }}</div>{% endif %}<a href="/logout" class="btn btn-outline">خروج</a>{% else %}<a href="/login" class="btn btn-outline">دخول</a>{% endif %}</div></div></div>
+<div class="app"><div class="header"><div class="header-right"><button class="icon-btn voice-off" id="voiceToggle" title="تشغيل/إيقاف الصوت"><svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg></button><button class="icon-btn" id="menuToggle" title="القائمة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="14" y2="15"/></svg></button></div><div class="header-left"><div class="btn-group">{% if session.get('user_email') or session.get('is_admin') %}{% if user_name %}<button type="button" class="user-badge" id="userBadge" onclick="toggleUserMenu(event)" title="{{ session.get('user_email') }}"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{{ user_name }}</button>{% endif %}<a href="/logout" class="btn btn-outline">خروج</a>{% else %}<a href="/login" class="btn btn-outline">دخول</a>{% endif %}</div></div></div>
+
+<div class="user-menu" id="userMenu">
+    <button class="user-menu-item" onclick="openSubPage('general');toggleUserMenu(null)">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="3"/><path d="M6.5 20a5.5 5.5 0 0 1 11 0"/></svg>
+        <span>حسابي</span>
+    </button>
+    <div class="user-menu-sep"></div>
+    <button class="user-menu-item danger" onclick="deleteMyAccount();toggleUserMenu(null)">
+        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/></svg>
+        <span>حذف حسابي</span>
+    </button>
+    <button class="user-menu-item danger" onclick="window.location.href='/logout'">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>تسجيل الخروج</span>
+    </button>
+</div>
 
 <div class="dropdown" id="dropdown">
     <button class="item" data-action="new"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>محادثة جديدة</button>
@@ -883,7 +1129,6 @@ html.dark-mode .sp-btn-danger:hover{background:rgba(248,81,73,0.2)}
     <div id="pinnedList"><div class="item" style="color:var(--text-secondary);font-size:13px;cursor:default;justify-content:center;padding:12px;font-weight:500;">لا توجد محادثات مثبتة</div></div>
     <div class="section-title">المحادثات الأخيرة</div>
     <div id="historyList"></div>
-    {% if session.get('user_email') and not session.get('is_admin') %}<button class="item danger" onclick="deleteMyAccount()"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/></svg>حذف حسابي</button>{% endif %}
 </div>
 
 <div id="settingsModal" class="settings-overlay">
@@ -891,59 +1136,17 @@ html.dark-mode .sp-btn-danger:hover{background:rgba(248,81,73,0.2)}
         <div class="settings-header"><button class="icon-btn" onclick="closeSettings()"><svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button><h2>الإعدادات</h2><div style="width:32px;"></div></div>
         <div class="settings-body">
             <div class="settings-card">
-                <div class="settings-item" onclick="openSubPage('theme')">
-                    <div class="item-right">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                        <span>المظهر</span>
-                    </div>
-                    <svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-                <div class="settings-item" onclick="openSubPage('color')">
-                    <div class="item-right">
-                        <svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-                        <span>لون التمييز</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span id="currentColorLabel" style="font-size:14px;color:var(--text-secondary);">أزرق داكن</span>
-                        <span id="currentColorDot" style="width:14px;height:14px;border-radius:50%;background:#4a6a8a;display:inline-block;"></span>
-                        <svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                </div>
-                <div class="settings-item" onclick="openSubPage('fontSize')">
-                    <div class="item-right">
-                        <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-                        <span>حجم الخط</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span id="currentFontSizeLabel" style="font-size:14px;color:var(--text-secondary);">متوسط</span>
-                        <svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                </div>
-                <div class="settings-item" onclick="openSubPage('personality')">
-                    <div class="item-right">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                        <span>شخصية المساعد</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span id="currentPersonalityLabel" style="font-size:14px;color:var(--text-secondary);">ودود</span>
-                        <svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                </div>
-                <div class="settings-item" onclick="openSubPage('language')">
-                    <div class="item-right">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                        <span>اللغة / Language</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span id="currentLangLabel" style="font-size:14px;color:var(--text-secondary);">العربية</span>
-                        <svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                    </div>
-                </div>
+                <div class="settings-item" onclick="openSubPage('theme')"><div class="item-right"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><span>المظهر</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+                <div class="settings-item" onclick="openSubPage('color')"><div class="item-right"><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><span>لون التمييز</span></div><div style="display:flex;align-items:center;gap:8px;"><span id="currentColorLabel" style="font-size:14px;color:var(--text-secondary);">أزرق داكن</span><span id="currentColorDot" style="width:14px;height:14px;border-radius:50%;background:#4a6a8a;display:inline-block;"></span><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></div>
+                <div class="settings-item" onclick="openSubPage('fontSize')"><div class="item-right"><svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg><span>حجم الخط</span></div><div style="display:flex;align-items:center;gap:8px;"><span id="currentFontSizeLabel" style="font-size:14px;color:var(--text-secondary);">متوسط</span><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></div>
+                <div class="settings-item" onclick="openSubPage('personality')"><div class="item-right"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg><span>شخصية المساعد</span></div><div style="display:flex;align-items:center;gap:8px;"><span id="currentPersonalityLabel" style="font-size:14px;color:var(--text-secondary);">ودود</span><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></div>
+                <div class="settings-item" onclick="openSubPage('language')"><div class="item-right"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>اللغة / Language</span></div><div style="display:flex;align-items:center;gap:8px;"><span id="currentLangLabel" style="font-size:14px;color:var(--text-secondary);">العربية</span><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></div>
             </div>
             <div class="settings-card">
                 <div class="settings-item" onclick="openSubPage('general')"><div class="item-right"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>عام</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
                 <div class="settings-item" onclick="openSubPage('memory')"><div class="item-right"><svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 0-5 5c0 1.5.7 2.8 1.8 3.7A5 5 0 0 0 7 15a5 5 0 0 0 5 5 5 5 0 0 0 5-5 5 5 0 0 0-1.8-4.3A5 5 0 0 0 17 7a5 5 0 0 0-5-5z"/><path d="M12 8v8"/><path d="M8 12h8"/></svg><span>الذاكرة</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
                 <div class="settings-item" onclick="openSubPage('assistants')"><div class="item-right"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg><span>مساعدي الخاص</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+                <div class="settings-item" onclick="openSubPage('library')"><div class="item-right"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>مكتبة المساعدين</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
                 <div class="settings-item" onclick="openSubPage('voice')"><div class="item-right"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg><span>الصوت</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
                 <div class="settings-item" onclick="openSubPage('safety')"><div class="item-right"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>السلامة</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
                 <div class="settings-item" onclick="openSubPage('security')"><div class="item-right"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>الأمان وتسجيل الدخول</span></div><svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
@@ -1032,13 +1235,11 @@ html.dark-mode .sp-btn-danger:hover{background:rgba(248,81,73,0.2)}
         if(at || codeP){
             var rt = params.get('refresh_token') || '';
             try{ history.replaceState(null, '', window.location.pathname); }catch(e){}
-
             var overlay = document.createElement('div');
             overlay.id = 'oauth-overlay';
             overlay.classList.add('show');
             overlay.innerHTML = '<div class="oauth-spinner" id="oauth-spin"></div><div class="oauth-title" id="oauth-title">جاري تسجيل الدخول</div><div class="oauth-msg" id="oauth-msg">لحظة من فضلك...</div>';
             document.body.appendChild(overlay);
-
             function done(msg, isOk){
                 var spin = document.getElementById('oauth-spin');
                 var title = document.getElementById('oauth-title');
@@ -1048,20 +1249,14 @@ html.dark-mode .sp-btn-danger:hover{background:rgba(248,81,73,0.2)}
                 if(msgEl) msgEl.textContent = msg;
                 setTimeout(function(){ window.location.replace(isOk ? '/' : '/login'); }, isOk ? 700 : 2500);
             }
-
             fetch('/auth/session', {
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({access_token: at || '', refresh_token: rt, code: codeP || ''})
             }).then(function(r){return r.json();}).then(function(d){
-                if(d && d.status === 'ok'){
-                    done('جاري تحويلك...', true);
-                } else {
-                    done((d && d.message) || 'فشل إنشاء الجلسة', false);
-                }
-            }).catch(function(){
-                done('تعذر الاتصال بالسيرفر', false);
-            });
+                if(d && d.status === 'ok'){ done('جاري تحويلك...', true); }
+                else { done((d && d.message) || 'فشل إنشاء الجلسة', false); }
+            }).catch(function(){ done('تعذر الاتصال بالسيرفر', false); });
             return;
         }
     }catch(e){}
@@ -1074,65 +1269,9 @@ let audioCtx = null;
 let allSources = [];
 let ca = null;
 let voiceSessionId = 0;
-
-function getAudioContext(){
-    if(!audioCtx){
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if(audioCtx.state === 'suspended'){
-        audioCtx.resume();
-    }
-    return audioCtx;
-}
-
-function stopAllAudio(){
-    allSources.forEach(function(src){
-        try{ src.stop(0); }catch(e){}
-    });
-    allSources = [];
-    ca = null;
-    voiceSessionId++;
-}
-
-function playAudioWithSpeed(base64Audio, onEnd){
-    try{
-        stopAllAudio();
-        const mySession = voiceSessionId;
-        const ctx = getAudioContext();
-        const binary = atob(base64Audio);
-        const bytes = new Uint8Array(binary.length);
-        for(let i = 0; i < binary.length; i++){ bytes[i] = binary.charCodeAt(i); }
-        ctx.decodeAudioData(bytes.buffer, function(buffer){
-            if(mySession !== voiceSessionId){
-                console.log('⏭️ Audio skipped (new session)');
-                if(typeof onEnd === 'function') onEnd();
-                return;
-            }
-            const source = ctx.createBufferSource();
-            source.buffer = buffer;
-            source.playbackRate.value = voiceSpeed;
-            const gainNode = ctx.createGain();
-            const savedLvl = localStorage.getItem('nibras-voice-level');
-            gainNode.gain.value = savedLvl ? savedLvl/100 : 1;
-            source.connect(gainNode);
-            gainNode.connect(ctx.destination);
-            source.onended = function(){
-                const idx = allSources.indexOf(source);
-                if(idx >= 0) allSources.splice(idx, 1);
-                if(typeof onEnd === 'function') onEnd();
-            };
-            source.start(0);
-            allSources.push(source);
-            ca = { pause: function(){ try{source.stop(0);}catch(e){} }, currentTime: 0 };
-        }, function(err){
-            console.error('Audio decode error:', err);
-            if(typeof onEnd === 'function') onEnd();
-        });
-    }catch(e){
-        console.error('Web Audio API error:', e);
-        if(typeof onEnd === 'function') onEnd();
-    }
-}
+function getAudioContext(){ if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } if(audioCtx.state === 'suspended'){ audioCtx.resume(); } return audioCtx; }
+function stopAllAudio(){ allSources.forEach(function(src){ try{ src.stop(0); }catch(e){} }); allSources = []; ca = null; voiceSessionId++; }
+function playAudioWithSpeed(base64Audio, onEnd){ try{ stopAllAudio(); const mySession = voiceSessionId; const ctx = getAudioContext(); const binary = atob(base64Audio); const bytes = new Uint8Array(binary.length); for(let i = 0; i < binary.length; i++){ bytes[i] = binary.charCodeAt(i); } ctx.decodeAudioData(bytes.buffer, function(buffer){ if(mySession !== voiceSessionId){ if(typeof onEnd === 'function') onEnd(); return; } const source = ctx.createBufferSource(); source.buffer = buffer; source.playbackRate.value = voiceSpeed; const gainNode = ctx.createGain(); const savedLvl = localStorage.getItem('nibras-voice-level'); gainNode.gain.value = savedLvl ? savedLvl/100 : 1; source.connect(gainNode); gainNode.connect(ctx.destination); source.onended = function(){ const idx = allSources.indexOf(source); if(idx >= 0) allSources.splice(idx, 1); if(typeof onEnd === 'function') onEnd(); }; source.start(0); allSources.push(source); ca = { pause: function(){ try{source.stop(0);}catch(e){} }, currentTime: 0 }; }, function(err){ console.error('Audio decode error:', err); if(typeof onEnd === 'function') onEnd(); }); }catch(e){ console.error('Web Audio API error:', e); if(typeof onEnd === 'function') onEnd(); } }
 
 function tr(key){const d={thinking:{ar:'جاري التفكير',en:'Thinking'},listening:{ar:'جاري الاستماع...',en:'Listening...'},inputPlaceholder:{ar:'اكتب رسالتك...',en:'Type your message...'},micUnsupported:{ar:'المتصفح لا يدعم التعرف على الصوت.',en:'Browser does not support voice recognition.'}};return (d[key]||{})[userLang]||(d[key]||{}).ar||key;}
 function applyLang(){ui.placeholder=tr('inputPlaceholder');document.documentElement.lang=userLang==='en'?'en':'ar';const lbl=document.getElementById('currentLangLabel');if(lbl)lbl.textContent=userLang==='en'?'English':'العربية';}
@@ -1144,6 +1283,35 @@ function getPinnedLocal(){try{return JSON.parse(localStorage.getItem('nibras_pin
 function savePinnedLocal(arr){try{localStorage.setItem('nibras_pinned',JSON.stringify(arr));}catch(e){}}
 async function togglePin(cid,wasPinned,btnEl){if(IS_REGISTERED){const url=wasPinned?'/unpin_conversation':'/pin_conversation';try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conv_id:cid})});if(r.ok){btnEl.classList.toggle('pinned',!wasPinned);showToast(wasPinned?(userLang==='en'?'Unpinned':'تم إلغاء التثبيت'):(userLang==='en'?'Pinned':'تم التثبيت'));loadPinned();}}catch(e){showToast(userLang==='en'?'Connection failed':'فشل الاتصال');}}else{let arr=getPinnedLocal();if(wasPinned){arr=arr.filter(x=>x!==cid);showToast(userLang==='en'?'Unpinned':'تم إلغاء التثبيت');}else{if(!arr.includes(cid))arr.push(cid);showToast(userLang==='en'?'Pinned locally':'تم التثبيت محلياً');}savePinnedLocal(arr);btnEl.classList.toggle('pinned',!wasPinned);loadPinned();}}
 mt.addEventListener('click',function(e){e.stopPropagation();dd.classList.toggle('show');if(dd.classList.contains('show')){loadHistory();loadPinned();}});
+
+function toggleUserMenu(e){
+    if(e) e.stopPropagation();
+    const menu = document.getElementById('userMenu');
+    const badge = document.getElementById('userBadge');
+    if(!menu || !badge) return;
+    if(menu.classList.contains('show')){
+        menu.classList.remove('show');
+        return;
+    }
+    const rect = badge.getBoundingClientRect();
+    const menuW = 220;
+    let left = rect.left;
+    if(left + menuW > window.innerWidth - 8){
+        left = window.innerWidth - menuW - 8;
+    }
+    menu.style.left = Math.max(8, left) + 'px';
+    menu.style.top = (rect.bottom + 8) + 'px';
+    menu.classList.add('show');
+}
+document.addEventListener('click', function(e){
+    const menu = document.getElementById('userMenu');
+    const badge = document.getElementById('userBadge');
+    if(!menu || !badge) return;
+    if(!menu.contains(e.target) && !badge.contains(e.target)){
+        menu.classList.remove('show');
+    }
+});
+
 function openSettings(){document.getElementById('settingsModal').classList.add('show');document.getElementById('dropdown').classList.remove('show');}
 function closeSettings(){document.getElementById('settingsModal').classList.remove('show');}
 function setTheme(t){const h=document.documentElement;if(t==='dark'){h.classList.add('dark-mode');localStorage.setItem('nibras-theme','dark')}else{h.classList.remove('dark-mode');localStorage.setItem('nibras-theme','light')}}
@@ -1161,6 +1329,7 @@ const subPagesContent={
     general:'<div class="sp-field"><label class="sp-label">الاسم الكامل</label><input type="text" id="sp-name" class="sp-input" value="{{ user_name or '' }}" placeholder="اكتب اسمك"></div>',
     memory:'<div id="memoryContent"><div class="sp-note" style="text-align:center;">جاري تحميل الذاكرة...</div></div>',
     assistants:'<div class="sp-note" style="text-align:center;">جاري التحميل...</div>',
+    library:'<div id="libraryContent"><div class="sp-note" style="text-align:center;">جاري التحميل...</div></div>',
     voice:'<div style="display:flex;flex-direction:column;gap:16px;"><div><div class="sp-label" style="padding:0 4px 8px;letter-spacing:.5px;">جنس الصوت</div><div class="personality-list"><div class="personality-row" data-vg="male" onclick="selectVoiceGender(\'male\')"><div class="personality-text"><div class="personality-name">ذكر</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vg="female" onclick="selectVoiceGender(\'female\')"><div class="personality-text"><div class="personality-name">أنثى</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div></div><div><div class="sp-label" style="padding:0 4px 8px;letter-spacing:.5px;">سرعة الصوت</div><div class="personality-list"><div class="personality-row" data-vs="0.75" onclick="selectVoiceSpeed(0.75)"><div class="personality-text"><div class="personality-name">بطيء</div><div class="personality-sub">0.75×</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vs="1" onclick="selectVoiceSpeed(1)"><div class="personality-text"><div class="personality-name">عادي</div><div class="personality-sub">1×</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vs="1.25" onclick="selectVoiceSpeed(1.25)"><div class="personality-text"><div class="personality-name">سريع</div><div class="personality-sub">1.25×</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vs="1.5" onclick="selectVoiceSpeed(1.5)"><div class="personality-text"><div class="personality-name">سريع جداً</div><div class="personality-sub">1.5×</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div></div><div><div class="sp-label" style="padding:0 4px 8px;letter-spacing:.5px;">مستوى الصوت</div><div class="personality-list"><div class="personality-row" data-vl="25" onclick="selectVoiceLevel(25)"><div class="personality-text"><div class="personality-name">هادئ</div><div class="personality-sub">25%</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vl="50" onclick="selectVoiceLevel(50)"><div class="personality-text"><div class="personality-name">متوسط</div><div class="personality-sub">50%</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vl="75" onclick="selectVoiceLevel(75)"><div class="personality-text"><div class="personality-name">عالي</div><div class="personality-sub">75%</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="personality-row" data-vl="100" onclick="selectVoiceLevel(100)"><div class="personality-text"><div class="personality-name">كامل</div><div class="personality-sub">100%</div></div><svg class="check-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div></div></div>',
     safety:'<div class="sp-note"><b>إرشادات السلامة</b>• لا تشارك معلوماتك الشخصية الحساسة.<br>• نبراس مساعد ذكي، وليس بديلاً عن الاستشارة المتخصصة.<br>• أبلغ عن أي محتوى غير لائق.</div>',
     security:'<div class="sp-field"><label class="sp-label">البريد الإلكتروني</label><input type="email" class="sp-input" value="{{ session.get('user_email','') }}" disabled></div><div class="sp-field"><label class="sp-label">كلمة المرور الحالية</label><input type="password" id="sp-old-pass" class="sp-input" placeholder="••••••••"></div><div class="sp-field"><label class="sp-label">كلمة المرور الجديدة</label><input type="password" id="sp-new-pass" class="sp-input" placeholder="••••••••"></div>',
@@ -1175,7 +1344,7 @@ const subPagesContent={
 let currentSubKey=null;
 function openSubPage(key){
     currentSubKey=key;
-    const titleMap={general:'عام',voice:'الصوت',safety:'السلامة',security:'الأمان وتسجيل الدخول',remote:'التحكم عن بُعد',storage:'التخزين',privacy:'مركز الخصوصية',data:'التحكم في البيانات',ads:'التحكم في الإعلانات',report:'الإبلاغ عن خطأ',about:'حول',theme:'المظهر',color:'لون التمييز',language:'اللغة / Language',personality:'شخصية المساعد',fontSize:'حجم الخط',memory:'الذاكرة',assistants:'مساعدي الخاص'};
+    const titleMap={general:'عام',voice:'الصوت',safety:'السلامة',security:'الأمان وتسجيل الدخول',remote:'التحكم عن بُعد',storage:'التخزين',privacy:'مركز الخصوصية',data:'التحكم في البيانات',ads:'التحكم في الإعلانات',report:'الإبلاغ عن خطأ',about:'حول',theme:'المظهر',color:'لون التمييز',language:'اللغة / Language',personality:'شخصية المساعد',fontSize:'حجم الخط',memory:'الذاكرة',assistants:'مساعدي الخاص',library:'مكتبة المساعدين'};
     document.getElementById('subPageTitle').textContent=titleMap[key]||'إعدادات';
     document.getElementById('subPageBody').innerHTML=subPagesContent[key]||'<div class="sp-note">قريباً</div>';
     document.getElementById('subPage').classList.add('show');
@@ -1188,18 +1357,22 @@ function openSubPage(key){
         if(key==='voice'){markVoiceSelections();}
         if(key==='memory'){loadMemory();}
         if(key==='assistants'){loadAssistants().then(loadAssistantsPage);}
+        if(key==='library'){loadLibraryStore();}
         if(key==='storage'){loadStorageInfo();}
     },60);
 }
 function closeSubPage(){
     document.getElementById('subPage').classList.remove('show');
     currentSubKey=null;
+    const btn = document.querySelector('#subPage .modal-confirm');
+    if(btn){ btn.onclick = confirmSubPage; btn.disabled = false; btn.textContent = 'تأكيد'; }
 }
 function confirmSubPage(){
     if(currentSubKey==='voice'){saveVoice();}
     else if(currentSubKey==='general'){saveGeneral();}
     else if(currentSubKey==='security'){changePassword();}
     else if(currentSubKey==='ads'){saveAds();}
+    else if(currentSubKey==='report'){sendReport();}
     else{closeSubPage();}
 }
 function pickVoiceGender(g){isMale=(g==='male');}
@@ -1257,35 +1430,276 @@ let editingAssistantId=null;
 let selectedAsstColor='#4a6a8a';
 async function loadAssistants(){if(!IS_REGISTERED)return;try{const r=await fetch('/my_assistants');const d=await r.json();myAssistants=d.assistants||[];renderAssistantMenu();const saved=localStorage.getItem('nibras_assistant_id');if(saved){const id=parseInt(saved);const found=myAssistants.find(a=>a.id===id);if(found){selectAssistant(id,false);}else{selectAssistant(null,false);}}else{selectAssistant(null,false);}}catch(e){console.error(e);}}
 function toggleAssistantMenu(e){if(e)e.stopPropagation();const menu=document.getElementById('assistantMenu');if(menu.classList.contains('show')){menu.classList.remove('show');return;}renderAssistantMenu();const pill=document.getElementById('assistantPill');const rect=pill.getBoundingClientRect();menu.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-260))+'px';menu.style.bottom=(window.innerHeight-rect.top+6)+'px';menu.classList.add('show');}
-function renderAssistantMenu(){const menu=document.getElementById('assistantMenu');if(!menu)return;let html='';const isDefault=currentAssistantId===null;html+=`<button class="assistant-menu-item${isDefault?' selected':''}" onclick="selectAssistant(null)"><span class="a-dot" style="background:#4a6a8a">ن</span><span class="a-name">نبراس</span><svg class="a-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>`;if(myAssistants.length>0){html+='<div class="assistant-menu-sep"></div>';myAssistants.forEach(a=>{const sel=currentAssistantId===a.id;html+=`<button class="assistant-menu-item${sel?' selected':''}" onclick="selectAssistant(${a.id})"><span class="a-dot" style="background:${a.color}">${escapeHtml(a.name.charAt(0))}</span><span class="a-name">${escapeHtml(a.name)}</span><svg class="a-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>`;});}html+='<div class="assistant-menu-sep"></div>';html+=`<button class="assistant-menu-add" onclick="openNewAssistantForm()"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>إضافة مساعد جديد</button>`;menu.innerHTML=html;}
+function renderAssistantMenu(){const menu=document.getElementById('assistantMenu');if(!menu)return;let html='';const isDefault=currentAssistantId===null;html+='<button class="assistant-menu-item'+(isDefault?' selected':'')+'" onclick="selectAssistant(null)"><span class="a-dot" style="background:#4a6a8a">ن</span><span class="a-name">نبراس</span><svg class="a-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>';if(myAssistants.length>0){html+='<div class="assistant-menu-sep"></div>';myAssistants.forEach(a=>{const sel=currentAssistantId===a.id;html+='<button class="assistant-menu-item'+(sel?' selected':'')+'" onclick="selectAssistant('+a.id+')"><span class="a-dot" style="background:'+a.color+'">'+escapeHtml(a.name.charAt(0))+'</span><span class="a-name">'+escapeHtml(a.name)+'</span><svg class="a-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>';});}html+='<div class="assistant-menu-sep"></div>';html+='<button class="assistant-menu-add" onclick="openNewAssistantForm()"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>إضافة مساعد جديد</button>';menu.innerHTML=html;}
 function selectAssistant(id,closeMenu){currentAssistantId=id;if(id===null){currentAssistantData={name:'نبراس',color:'#4a6a8a'};localStorage.removeItem('nibras_assistant_id');}else{const a=myAssistants.find(x=>x.id===id);if(a){currentAssistantData={name:a.name,color:a.color};localStorage.setItem('nibras_assistant_id',String(id));}}const dot=document.getElementById('assistantPillDot');const name=document.getElementById('assistantPillName');if(dot){dot.style.background=currentAssistantData.color;dot.textContent=currentAssistantData.name.charAt(0);}if(name){name.textContent=currentAssistantData.name;}if(closeMenu!==false){document.getElementById('assistantMenu').classList.remove('show');}}
 function openNewAssistantForm(){document.getElementById('assistantMenu').classList.remove('show');closeSettings();openAssistantForm(null);}
-function openAssistantForm(id){editingAssistantId=id;const a=id?myAssistants.find(x=>x.id===id):null;selectedAsstColor=a?a.color:'#4a6a8a';const colors=['#4a6a8a','#1a1a1a','#10b981','#fbbf24','#ec4899','#f97316','#8b5cf6','#ef4444'];const colorDots=colors.map(c=>`<button type="button" class="assistant-color-dot${c===selectedAsstColor?' selected':''}" data-color="${c}" style="background:${c}" onclick="pickAssistantColor('${c}')"></button>`).join('');const body=document.getElementById('subPageBody');document.getElementById('subPageTitle').textContent=id?'تعديل المساعد':'مساعد جديد';body.innerHTML=`<div class="assistant-form-field"><label>اسم المساعد</label><input type="text" id="asst-name" placeholder="مثلاً: أستاذ الرياضيات" maxlength="40" value="${a?escapeHtml(a.name):''}"></div><div class="assistant-form-field"><label>وصف المساعد وأسلوبه</label><textarea id="asst-persona" placeholder="اكتب كيف تريد المساعد يتصرف... مثلاً: أنت أستاذ رياضيات صبور، تشرح خطوة بخطوة وتستخدم أمثلة من الحياة اليومية..." maxlength="1000">${a?escapeHtml(a.persona):''}</textarea><div class="assistant-form-hint">هذا الوصف يحدد شخصية المساعد وطريقة ردوده</div></div><div class="assistant-form-field"><label>اللون</label><div class="assistant-color-picker">${colorDots}</div></div><div class="assistant-form-actions"><button type="button" class="btn-cancel" onclick="loadAssistantsPage()">إلغاء</button><button type="button" class="btn-save" id="asst-save-btn" onclick="saveAssistant()">حفظ</button></div>`;document.getElementById('subPage').classList.add('show');currentSubKey=null;setTimeout(()=>{const inp=document.getElementById('asst-name');if(inp)inp.focus();},100);}
+function openAssistantForm(id){editingAssistantId=id;const a=id?myAssistants.find(x=>x.id===id):null;selectedAsstColor=a?a.color:'#4a6a8a';const colors=['#4a6a8a','#1a1a1a','#10b981','#fbbf24','#ec4899','#f97316','#8b5cf6','#ef4444'];const colorDots=colors.map(c=>'<button type="button" class="assistant-color-dot'+(c===selectedAsstColor?' selected':'')+'" data-color="'+c+'" style="background:'+c+'" onclick="pickAssistantColor(\''+c+'\')"></button>').join('');const body=document.getElementById('subPageBody');document.getElementById('subPageTitle').textContent=id?'تعديل المساعد':'مساعد جديد';body.innerHTML='<div class="assistant-form-field"><label>اسم المساعد</label><input type="text" id="asst-name" placeholder="مثلاً: أستاذ الرياضيات" maxlength="40" value="'+(a?escapeHtml(a.name):'')+'"></div><div class="assistant-form-field"><label>وصف المساعد وأسلوبه</label><textarea id="asst-persona" placeholder="اكتب كيف تريد المساعد يتصرف..." maxlength="1000">'+(a?escapeHtml(a.persona):'')+'</textarea><div class="assistant-form-hint">هذا الوصف يحدد شخصية المساعد وطريقة ردوده</div></div><div class="assistant-form-field"><label>اللون</label><div class="assistant-color-picker">'+colorDots+'</div></div><div class="assistant-form-actions"><button type="button" class="btn-cancel" onclick="loadAssistantsPage()">إلغاء</button><button type="button" class="btn-save" id="asst-save-btn" onclick="saveAssistant()">حفظ</button></div>';document.getElementById('subPage').classList.add('show');currentSubKey=null;setTimeout(()=>{const inp=document.getElementById('asst-name');if(inp)inp.focus();},100);}
 function pickAssistantColor(c){selectedAsstColor=c;document.querySelectorAll('.assistant-color-dot').forEach(el=>{el.classList.toggle('selected',el.dataset.color===c);});}
 async function saveAssistant(){const nameEl=document.getElementById('asst-name');const personaEl=document.getElementById('asst-persona');const name=(nameEl.value||'').trim();const persona=(personaEl.value||'').trim();if(name.length<2){showToast('اسم المساعد قصير جداً');return;}if(persona.length<10){showToast('اكتب وصفاً أطول للمساعد');return;}const btn=document.getElementById('asst-save-btn');btn.disabled=true;btn.textContent='جاري الحفظ...';try{const url=editingAssistantId?'/update_assistant':'/create_assistant';const body={name,persona,color:selectedAsstColor};if(editingAssistantId)body.id=editingAssistantId;const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(d.status==='ok'){showToast(editingAssistantId?'تم التعديل':'تم إنشاء المساعد');if(d.assistant&&!editingAssistantId){myAssistants.push(d.assistant);}else if(d.assistant&&editingAssistantId){const idx=myAssistants.findIndex(x=>x.id===editingAssistantId);if(idx>=0)myAssistants[idx]=d.assistant;}else{await loadAssistants();}renderAssistantMenu();loadAssistantsPage();}else{showToast(d.message||'فشل الحفظ');btn.disabled=false;btn.textContent='حفظ';}}catch(e){showToast('خطأ في الاتصال');btn.disabled=false;btn.textContent='حفظ';}}
 async function deleteAssistant(id){if(!confirm('حذف هذا المساعد؟'))return;try{const r=await fetch('/delete_assistant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const d=await r.json();if(d.status==='ok'){myAssistants=myAssistants.filter(x=>x.id!==id);if(currentAssistantId===id)selectAssistant(null,false);showToast('تم الحذف');renderAssistantMenu();loadAssistantsPage();}else{showToast('فشل الحذف');}}catch(e){showToast('خطأ في الاتصال');}}
-function loadAssistantsPage(){currentSubKey='assistants';document.getElementById('subPageTitle').textContent='مساعدي الخاص';let html='';if(myAssistants.length===0){html='<div class="sp-note" style="text-align:center;padding:30px;font-size:14px;">لا يوجد مساعدون حتى الآن.<br>أنشئ مساعداً خاصاً بك</div>';}else{html='<div class="assistants-list">';myAssistants.forEach(a=>{html+=`<div class="assistant-card"><div class="a-dot" style="background:${a.color}">${escapeHtml(a.name.charAt(0))}</div><div class="assistant-card-info"><div class="assistant-card-name">${escapeHtml(a.name)}</div><div class="assistant-card-sub">${escapeHtml(a.persona.substring(0,60))}${a.persona.length>60?'...':''}</div></div><button type="button" class="assistant-card-del" onclick="deleteAssistant(${a.id})" title="حذف"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`;});html+='</div>';}html+=`<button type="button" class="assistant-add-btn" onclick="openAssistantForm(null)"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>إنشاء مساعد جديد</button>`;document.getElementById('subPageBody').innerHTML=html;document.getElementById('subPage').classList.add('show');}
-document.addEventListener('click',function(e){const menu=document.getElementById('assistantMenu');const pill=document.getElementById('assistantPill');if(!menu||!pill)return;if(!menu.contains(e.target)&&!pill.contains(e.target)){menu.classList.remove('show');}});
-if(IS_REGISTERED){document.getElementById('assistantBar').classList.add('show');setTimeout(loadAssistants,300);}
-async function sendMessage(){if(iw)return;const msgText=ui.value.trim(),img=pid;if(!msgText&&!img)return;let userMsgEl=null;if(msgText){userMsgEl=addMessage(msgText,'user');ch.push({role:'user',content:msgText});}if(img){userMsgEl=addMessage(userLang==='en'?'Image attached':'صورة مرفقة','user',false,img);ch.push({role:'user',content:userLang==='en'?'[Image attached]':'[صورة مرفقة]'});clearPending()}ui.value='';ui.style.height='auto';iw=true;const botEl=document.createElement('div');botEl.className='msg bot';botEl.innerHTML='<span class="typing-dots">'+tr('thinking')+'</span>';cb.appendChild(botEl);if(userMsgEl)scrollMsgToTop(userMsgEl);const payload={message:msgText||"مرفق",image:img||null,history:ch,conv_id:cid,lang:userLang,personality:userPersonality,assistant_id:currentAssistantId};let displayText='';let bufferText='';let streamDone=false;let typingTimer=null;function tick(){if(bufferText.length>0){displayText+=bufferText.slice(0,1);bufferText=bufferText.slice(1);botEl.innerHTML=formatBotText(displayText);}if(bufferText.length===0&&streamDone){clearInterval(typingTimer);typingTimer=null;botEl.innerHTML=formatBotText(displayText);if(displayText&&displayText.trim().length>0){attachBotActions(botEl,displayText);ch.push({role:'assistant',content:displayText});}iw=false;if(voiceOn===true && displayText && displayText.trim().length>10){fetch('/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:displayText})}).then(r=>r.json()).then(v=>{if(v && v.audio){playAudioWithSpeed(v.audio, function(){});}}).catch(function(){});}}}typingTimer=setInterval(tick,15);try{const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok){let errMsg='مشكلة';try{const d=await r.json();errMsg=d.error||d.message||'مشكلة';}catch(e){}clearInterval(typingTimer);botEl.remove();addMessage('خطأ: '+errMsg,'error');iw=false;return;}const reader=r.body.getReader();const decoder=new TextDecoder();let sseBuffer='';let firstToken=true;while(true){const {done,value}=await reader.read();if(done)break;sseBuffer+=decoder.decode(value,{stream:true});const parts=sseBuffer.split('\n\n');sseBuffer=parts.pop();for(const line of parts){if(!line.startsWith('data: '))continue;try{const data=JSON.parse(line.slice(6));if(data.token){if(firstToken){botEl.innerHTML='';firstToken=false;}bufferText+=data.token;}else if(data.done){if(data.conv_id)cid=data.conv_id;streamDone=true;}else if(data.error){bufferText+='\n\nخطأ: '+data.error;}}catch(e){}}}streamDone=true;}catch(e){clearInterval(typingTimer);if(botEl.parentNode)botEl.remove();addMessage(userLang==='en'?'Connection failed':'تعذر الاتصال','error');iw=false;}}
-sb.addEventListener('click',sendMessage);
-ui.addEventListener('keydown',function(e){
-    if(e.key==='Enter'){
-        const isMobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-        if(isMobile && !e.shiftKey){
+
+function loadAssistantsPage(){
+    currentSubKey='assistants';
+    document.getElementById('subPageTitle').textContent='مساعدي الخاص';
+
+    let html='';
+    if(myAssistants.length===0){
+        html = '<div class="lib-empty">'
+             + '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>'
+             + '<h4>لا يوجد مساعدون بعد</h4><p>أنشئ مساعدك الأول بضغطة زر</p></div>';
+    } else {
+        html = '<div class="agents-grid">';
+        myAssistants.forEach(a=>{
+            const color = (a.color && /^#[0-9a-fA-F]{3,8}$/.test(a.color)) ? a.color : '#4a6a8a';
+            const name  = String(a.name || 'مساعد');
+            const persona = String(a.persona || '');
+            const short = persona.length > 140 ? persona.slice(0,140)+'…' : persona;
+            html += ''
+              + '<div class="agent-card" data-id="' + escapeHtml(String(a.id)) + '">'
+              +   '<div class="agent-head">'
+              +     '<div class="agent-avatar" style="background:' + escapeHtml(color) + '">' + escapeHtml(name.charAt(0).toUpperCase()) + '</div>'
+              +     '<div class="agent-info">'
+              +       '<div class="agent-name">' + escapeHtml(name) + '</div>'
+              +       '<div class="agent-role">مساعدك المخصص</div>'
+              +     '</div>'
+              +   '</div>'
+              +   (short ? '<div class="agent-desc">' + escapeHtml(short) + '</div>' : '')
+              +   '<div class="agent-actions">'
+              +     '<button type="button" class="agent-btn agent-btn-edit" data-action="edit">'
+              +       '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+              +       '<span>تعديل</span>'
+              +     '</button>'
+              +     '<button type="button" class="agent-btn agent-btn-del" data-action="delete">'
+              +       '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>'
+              +       '<span>حذف</span>'
+              +     '</button>'
+              +   '</div>'
+              + '</div>';
+        });
+        html += '</div>';
+    }
+
+    html += ''
+      + '<button type="button" class="agent-btn agent-btn-add agent-btn-new" onclick="openAssistantForm(null)">'
+      +   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+      +   '<span>إنشاء مساعد جديد</span>'
+      + '</button>';
+
+    document.getElementById('subPageBody').innerHTML = html;
+    document.getElementById('subPage').classList.add('show');
+}
+
+async function loadLibraryStore(){
+    currentSubKey='library';
+    document.getElementById('subPageTitle').textContent='مكتبة المساعدين';
+    const c=document.getElementById('libraryContent');
+    if(!c)return;
+    c.innerHTML='<div class="lib-loading"><div class="lib-spinner"></div><span>جاري التحميل...</span></div>';
+    try{
+        const r=await fetch('/api/library/list',{credentials:'same-origin'});
+        const d=await r.json();
+        const list=d.assistants||[];
+        if(!list.length){
+            c.innerHTML='<div class="lib-empty">'
+                +'<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>'
+                +'<h4>المكتبة فاضية</h4><p>لا يوجد مساعدون متاحون حالياً</p></div>';
             return;
         }
-        if(!isMobile && !e.shiftKey){
-            e.preventDefault();
-            sendMessage();
+        let html='<div class="agents-grid">';
+        list.forEach(a=>{
+            const color = (a.color && /^#[0-9a-fA-F]{3,8}$/.test(a.color)) ? a.color : '#4a6a8a';
+            const name  = String(a.name || 'مساعد');
+            const persona = String(a.persona || '');
+            const short = persona.length > 120 ? persona.slice(0,120)+'…' : persona;
+            html += ''
+              + '<div class="agent-card" data-id="' + escapeHtml(String(a.id)) + '">'
+              +   '<div class="agent-head">'
+              +     '<div class="agent-avatar" style="background:' + escapeHtml(color) + '">' + escapeHtml(name.charAt(0).toUpperCase()) + '</div>'
+              +     '<div class="agent-info">'
+              +       '<div class="agent-name">' + escapeHtml(name) + '</div>'
+              +       '<div class="agent-role">مساعد جاهز للاستخدام</div>'
+              +     '</div>'
+              +   '</div>'
+              +   (short ? '<div class="agent-desc">' + escapeHtml(short) + '</div>' : '')
+              +   '<div class="agent-actions">'
+              +     '<button type="button" class="agent-btn agent-btn-add" data-action="add">'
+              +       '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+              +       '<span>إضافة</span>'
+              +     '</button>'
+              +   '</div>'
+              + '</div>';
+        });
+        html += '</div>';
+        c.innerHTML = html;
+    }catch(e){
+        console.error('loadLibraryStore:', e);
+        c.innerHTML='<div class="lib-empty"><p>تعذر التحميل، حاول مرة أخرى.</p></div>';
+    }
+}
+
+async function addFromLibrary(id, btn){
+    if(!btn || btn.disabled) return;
+    const payloadId = /^\d+$/.test(String(id)) ? parseInt(id, 10) : String(id);
+
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="agent-spinner" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg><span>جاري...</span>';
+
+    try{
+        const r = await fetch('/api/library/add', {
+            method:'POST',
+            credentials:'same-origin',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ assistant_id: payloadId })
+        });
+        let d = {};
+        try { d = await r.json(); } catch(_) {}
+
+        if(r.ok && d.status === 'ok'){
+            showToast('✅ تمت إضافة المساعد');
+            btn.classList.add('agent-btn-added');
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>تمت الإضافة</span>';
+            try { await loadAssistants(); } catch(_) {}
+        } else {
+            showToast(d.message || 'فشل الإضافة');
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
         }
+    }catch(e){
+        console.error('addFromLibrary:', e);
+        showToast('تعذر الاتصال بالسيرفر');
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
+document.addEventListener('click', function(e){
+    const actionBtn = e.target.closest('.agent-card [data-action]');
+    if(!actionBtn) return;
+    const card = actionBtn.closest('.agent-card');
+    if(!card || !card.dataset.id) return;
+    const rawId  = card.dataset.id;
+    const action = actionBtn.dataset.action;
+    const idNum  = /^\d+$/.test(rawId) ? parseInt(rawId, 10) : rawId;
+
+    if(action === 'add'){
+        addFromLibrary(rawId, actionBtn);
+    } else if(action === 'delete'){
+        deleteAssistant(idNum);
+    } else if(action === 'edit'){
+        openAssistantForm(idNum);
     }
 });
+
+document.addEventListener('click',function(e){const menu=document.getElementById('assistantMenu');const pill=document.getElementById('assistantPill');if(!menu||!pill)return;if(!menu.contains(e.target)&&!pill.contains(e.target)){menu.classList.remove('show');}});
+if(IS_REGISTERED){document.getElementById('assistantBar').classList.add('show');setTimeout(loadAssistants,300);}
+
+async function sendMessage(){
+    if(iw)return;
+    const msgText=ui.value.trim(),img=pid;
+    if(!msgText&&!img)return;
+    let userMsgEl=null;
+    if(msgText){userMsgEl=addMessage(msgText,'user');ch.push({role:'user',content:msgText});}
+    if(img){userMsgEl=addMessage(userLang==='en'?'Image attached':'صورة مرفقة','user',false,img);ch.push({role:'user',content:userLang==='en'?'[Image attached]':'[صورة مرفقة]'});clearPending()}
+    ui.value='';ui.style.height='auto';iw=true;
+    const botEl=document.createElement('div');
+    botEl.className='msg bot';
+    botEl.innerHTML='<span class="typing-dots">'+tr('thinking')+'</span>';
+    cb.appendChild(botEl);
+    if(userMsgEl)scrollMsgToTop(userMsgEl);
+    const payload={message:msgText||"مرفق",image:img||null,history:ch,conv_id:cid,lang:userLang,personality:userPersonality,assistant_id:currentAssistantId};
+    let displayText='';
+    let bufferText='';
+    let streamDone=false;
+    let isFormatted=false;
+    let typingTimer=null;
+    function tick(){
+        if(isFormatted)return;
+        if(bufferText.length>0){
+            displayText+=bufferText.slice(0,1);
+            bufferText=bufferText.slice(1);
+            botEl.innerHTML=formatBotText(displayText);
+        }
+        if(bufferText.length===0&&streamDone){
+            clearInterval(typingTimer);
+            typingTimer=null;
+            botEl.innerHTML=formatBotText(displayText);
+            if(displayText&&displayText.trim().length>0){
+                attachBotActions(botEl,displayText);
+                ch.push({role:'assistant',content:displayText});
+            }
+            iw=false;
+            if(voiceOn===true && displayText && displayText.trim().length>10){
+                fetch('/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:displayText})}).then(r=>r.json()).then(v=>{if(v && v.audio){playAudioWithSpeed(v.audio, function(){});}}).catch(function(){});
+            }
+        }
+    }
+    typingTimer=setInterval(tick,15);
+    try{
+        const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(!r.ok){
+            let errMsg='مشكلة';
+            try{const d=await r.json();errMsg=d.error||d.message||'مشكلة';}catch(e){}
+            clearInterval(typingTimer);
+            botEl.remove();
+            addMessage('خطأ: '+errMsg,'error');
+            iw=false;
+            return;
+        }
+        const reader=r.body.getReader();
+        const decoder=new TextDecoder();
+        let sseBuffer='';
+        let firstToken=true;
+        while(true){
+            const {done,value}=await reader.read();
+            if(done)break;
+            sseBuffer+=decoder.decode(value,{stream:true});
+            const parts=sseBuffer.split('\n\n');
+            sseBuffer=parts.pop();
+            for(const line of parts){
+                if(!line.startsWith('data: '))continue;
+                try{
+                    const data=JSON.parse(line.slice(6));
+                    if(data.formatted_html){
+                        isFormatted=true;
+                        clearInterval(typingTimer);
+                        typingTimer=null;
+                        if(firstToken){botEl.innerHTML='';firstToken=false;}
+                        botEl.classList.add('nibras-response');
+                        botEl.innerHTML=data.formatted_html;
+                        displayText='[تم عرض الأخبار]';
+                        streamDone=true;
+                        iw=false;
+                    } else if(data.token){
+                        if(!isFormatted){
+                            if(firstToken){botEl.innerHTML='';firstToken=false;}
+                            bufferText+=data.token;
+                        }
+                    } else if(data.done){
+                        if(data.conv_id)cid=data.conv_id;
+                        streamDone=true;
+                    } else if(data.error){
+                        bufferText+='\n\nخطأ: '+data.error;
+                    }
+                }catch(e){}
+            }
+        }
+        streamDone=true;
+    }catch(e){
+        clearInterval(typingTimer);
+        if(botEl.parentNode)botEl.remove();
+        addMessage(userLang==='en'?'Connection failed':'تعذر الاتصال','error');
+        iw=false;
+    }
+}
+sb.addEventListener('click',sendMessage);
+ui.addEventListener('keydown',function(e){if(e.key==='Enter'){const isMobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);if(isMobile && !e.shiftKey){return;}if(!isMobile && !e.shiftKey){e.preventDefault();sendMessage();}}});
 document.addEventListener('click',function(e){if(!mt.contains(e.target)&&!dd.contains(e.target))dd.classList.remove('show')});
 let recog=null;
 mb.addEventListener('click',function(){if(!('webkitSpeechRecognition' in window)){addMessage(tr('micUnsupported'),'bot',true);return}if(this.classList.contains('listening')){this.classList.remove('listening');if(recog)recog.stop();return}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;recog=new SR();recog.lang=userLang==='en'?'en-US':'ar-SA';this.classList.add('listening');addMessage(tr('listening'),'bot',true);recog.onresult=function(e){const tr2=e.results[0][0].transcript;ui.value=tr2;mb.classList.remove('listening');setTimeout(function(){sendMessage()},300)};recog.onerror=function(){mb.classList.remove('listening')};recog.start()});
 window.deleteMyAccount=function(){if(!confirm('حذف حسابك بالكامل؟'))return;fetch('/delete_my_account',{method:'POST'}).then(r=>r.json()).then(d=>{if(d.status==='success'){alert('تم الحذف');window.location.href='/'}});};
-window.openSettings=openSettings;window.closeSettings=closeSettings;window.setTheme=setTheme;window.setAccentColor=setAccentColor;window.openSubPage=openSubPage;window.closeSubPage=closeSubPage;window.confirmSubPage=confirmSubPage;window.selectTheme=selectTheme;window.selectColor=selectColor;window.selectLanguage=selectLanguage;window.selectPersonality=selectPersonality;window.selectFontSize=selectFontSize;window.saveGeneral=saveGeneral;window.saveVoice=saveVoice;window.pickVoiceGender=pickVoiceGender;window.selectVoiceGender=selectVoiceGender;window.selectVoiceSpeed=selectVoiceSpeed;window.selectVoiceLevel=selectVoiceLevel;window.changePassword=changePassword;window.logoutAll=logoutAll;window.clearCache=clearCache;window.exportData=exportData;window.saveAds=saveAds;window.sendReport=sendReport;window.loadPinned=loadPinned;window.loadHistory=loadHistory;window.loadConversation=loadConversation;window.loadStorageInfo=loadStorageInfo;window.loadMemory=loadMemory;window.getContrastColor=getContrastColor;window.toggleAssistantMenu=toggleAssistantMenu;window.selectAssistant=selectAssistant;window.openNewAssistantForm=openNewAssistantForm;window.openAssistantForm=openAssistantForm;window.pickAssistantColor=pickAssistantColor;window.saveAssistant=saveAssistant;window.deleteAssistant=deleteAssistant;window.loadAssistantsPage=loadAssistantsPage;
+window.toggleUserMenu=toggleUserMenu;
+window.openSettings=openSettings;window.closeSettings=closeSettings;window.setTheme=setTheme;window.setAccentColor=setAccentColor;window.openSubPage=openSubPage;window.closeSubPage=closeSubPage;window.confirmSubPage=confirmSubPage;window.selectTheme=selectTheme;window.selectColor=selectColor;window.selectLanguage=selectLanguage;window.selectPersonality=selectPersonality;window.selectFontSize=selectFontSize;window.saveGeneral=saveGeneral;window.saveVoice=saveVoice;window.pickVoiceGender=pickVoiceGender;window.selectVoiceGender=selectVoiceGender;window.selectVoiceSpeed=selectVoiceSpeed;window.selectVoiceLevel=selectVoiceLevel;window.changePassword=changePassword;window.logoutAll=logoutAll;window.clearCache=clearCache;window.exportData=exportData;window.saveAds=saveAds;window.sendReport=sendReport;window.loadPinned=loadPinned;window.loadHistory=loadHistory;window.loadConversation=loadConversation;window.loadStorageInfo=loadStorageInfo;window.loadMemory=loadMemory;window.getContrastColor=getContrastColor;window.toggleAssistantMenu=toggleAssistantMenu;window.selectAssistant=selectAssistant;window.openNewAssistantForm=openNewAssistantForm;window.openAssistantForm=openAssistantForm;window.pickAssistantColor=pickAssistantColor;window.saveAssistant=saveAssistant;window.deleteAssistant=deleteAssistant;window.loadAssistantsPage=loadAssistantsPage;window.loadLibraryStore=loadLibraryStore;window.addFromLibrary=addFromLibrary;
 applyLang();
 (function initPersonality(){var map={friendly:'ودود',concise:'مختصر',detailed:'مفصّل',formal:'رسمي',teacher:'معلّم',playful:'فرفوش'};var lbl=document.getElementById('currentPersonalityLabel');if(lbl)lbl.textContent=map[userPersonality]||'ودود';})();
 })();</script></body></html>"""
@@ -1535,6 +1949,186 @@ def get_memory_route():
         return jsonify({"status": "error"}), 500
 
 
+@app.route('/admin/codes/list')
+def admin_codes_list():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error"}), 401
+    try:
+        r = (sb.table("access_codes").select("*")
+             .order("created_at", desc=True).limit(100).execute())
+        return jsonify({"codes": r.data or []})
+    except Exception as e:
+        print("admin_codes_list:", e)
+        return jsonify({"codes": [], "error": str(e)})
+
+
+@app.route('/admin/codes/generate', methods=['POST'])
+def admin_codes_generate():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error"}), 401
+    d = request.get_json(silent=True) or {}
+    try:
+        chat_lim = max(1, min(99999, int(d.get('chat', 15))))
+        search_lim = max(0, min(99999, int(d.get('search', 2))))
+        image_lim = max(0, min(99999, int(d.get('image', 1))))
+        max_uses = max(1, min(1000, int(d.get('max_uses', 1))))
+        days = max(1, min(365, int(d.get('days', 7))))
+        note = (d.get('note') or '').strip()[:200]
+    except (ValueError, TypeError):
+        return jsonify({"status": "error", "message": "أرقام غير صحيحة"}), 400
+    from datetime import timezone
+    code = "NBRAS-" + secrets.token_hex(3).upper() + "-" + secrets.token_hex(2).upper()
+    expires = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    try:
+        r = sb.table("access_codes").insert({
+            "code": code,
+            "chat_limit": chat_lim,
+            "search_limit": search_lim,
+            "image_limit": image_lim,
+            "max_uses": max_uses,
+            "duration_days": days,
+            "note": note,
+            "expires_at": expires
+        }).execute()
+        return jsonify({"status": "ok", "code": r.data[0] if r.data else {"code": code}})
+    except Exception as e:
+        print("admin_codes_generate:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/admin/codes/delete', methods=['POST'])
+def admin_codes_delete():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error"}), 401
+    d = request.get_json(silent=True) or {}
+    cid = d.get('id')
+    if not cid:
+        return jsonify({"status": "error"}), 400
+    try:
+        sb.table("access_codes").delete().eq("id", cid).execute()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/admin/codes/toggle', methods=['POST'])
+def admin_codes_toggle():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error"}), 401
+    d = request.get_json(silent=True) or {}
+    cid = d.get('id')
+    if not cid:
+        return jsonify({"status": "error"}), 400
+    try:
+        r = sb.table("access_codes").select("active").eq("id", cid).limit(1).execute()
+        if not r.data:
+            return jsonify({"status": "error", "message": "الكود غير موجود"}), 404
+        new_state = not r.data[0].get("active", True)
+        sb.table("access_codes").update({"active": new_state}).eq("id", cid).execute()
+        return jsonify({"status": "ok", "active": new_state})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/redeem_code', methods=['POST'])
+@limiter.limit("10 per hour")
+def redeem_code():
+    email = session.get('user_email')
+    if not email:
+        return jsonify({"status": "error", "message": "سجّل دخولك أولاً"}), 401
+    d = request.get_json(silent=True) or {}
+    code = (d.get('code') or '').strip().upper()
+    if not code or len(code) < 5:
+        return jsonify({"status": "error", "message": "كود غير صالح"}), 400
+
+    email_lc = email.lower().strip()
+    uid = get_user_id()
+    from datetime import timezone
+
+    try:
+        r = (sb.table("access_codes").select("*")
+             .eq("code", code).eq("active", True).limit(1).execute())
+    except Exception as e:
+        print("redeem_code select:", e)
+        return jsonify({"status": "error", "message": "خطأ في البحث"}), 500
+    if not r.data:
+        return jsonify({"status": "error", "message": "الكود غير صحيح أو موقوف"}), 404
+    row = r.data[0]
+
+    try:
+        ex = (sb.table("access_redemptions").select("id")
+              .eq("code", code).eq("user_email", email_lc).limit(1).execute())
+        if ex.data:
+            return jsonify({"status": "error", "message": "سبق استخدامك لهذا الكود"}), 400
+    except Exception as ex:
+        print("redeem_code dup check:", ex)
+
+    if row.get('expires_at'):
+        try:
+            exp_str = str(row['expires_at']).replace('Z', '+00:00')
+            exp = datetime.fromisoformat(exp_str)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                return jsonify({"status": "error", "message": "انتهت صلاحية الكود"}), 400
+        except Exception as ex:
+            print("redeem_code exp check:", ex)
+
+    if int(row.get('used_count', 0) or 0) >= int(row.get('max_uses', 1) or 1):
+        return jsonify({"status": "error", "message": "الكود استُنفد الحد الأقصى"}), 400
+
+    days = int(row.get('duration_days', 7) or 7)
+    expires_user = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    chat_lim = int(row.get('chat_limit', 15) or 15)
+    search_lim = int(row.get('search_limit', 2) or 0)
+    image_lim = int(row.get('image_limit', 1) or 0)
+
+    try:
+        sb.table("access_redemptions").insert({
+            "code": code,
+            "user_email": email_lc,
+            "chat_limit": chat_lim,
+            "search_limit": search_lim,
+            "image_limit": image_lim,
+            "expires_at": expires_user
+        }).execute()
+        sb.table("access_codes").update({
+            "used_count": int(row.get('used_count', 0) or 0) + 1
+        }).eq("id", row['id']).execute()
+    except Exception as ex:
+        print("redeem_code insert:", ex)
+        return jsonify({"status": "error", "message": f"تعذر تفعيل الكود: {ex}"}), 500
+
+    try:
+        today = _date.today().isoformat()
+        sb.table("assistant_usage").update({
+            "chat_count": 0,
+            "search_count": 0,
+            "image_count": 0
+        }).eq("user_id", uid).eq("date", today).execute()
+        print(f"♻️ Reset daily counter for {uid}")
+    except Exception as ex:
+        print("reset usage:", ex)
+
+    print(f"✅ CODE REDEEMED: {email_lc} → chat={chat_lim}, search={search_lim}, image={image_lim}")
+    return jsonify({
+        "status": "ok",
+        "chat": chat_lim,
+        "search": search_lim,
+        "image": image_lim,
+        "expires_at": expires_user
+    })
+
+
+@app.route('/my_access')
+def my_access():
+    email = session.get('user_email')
+    if not email:
+        return jsonify({"access": None})
+    access = get_active_access(email)
+    return jsonify({"access": access})
+
+
 @app.route('/delete_my_account', methods=['POST'])
 def delete_my_account():
     email = session.get('user_email')
@@ -1567,6 +2161,7 @@ def delete_my_account():
         sb.table("assistant_usage").delete().eq("user_id", uid).execute()
         sb.table("image_library").delete().eq("user_id", uid).execute()
         sb.table("custom_assistants").delete().eq("user_id", uid).execute()
+        sb.table("access_redemptions").delete().eq("user_email", email.lower()).execute()
         sb.table("profiles").delete().eq("email", email.lower()).execute()
         dr = requests.delete(
             f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
@@ -2069,6 +2664,111 @@ def admin_dashboard():
         <div class="stat"><span>إعجابات</span><span class="num" style="color:#27ae60;">{likes_count}</span></div>
         <div class="stat"><span>رفض</span><span class="num" style="color:#e74c3c;">{dislikes_count}</span></div>
     </div>
+
+    <div class="card">
+        <h3>🎟️ توليد كود وصول</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <label style="font-size:13px;">محادثات
+                <input type="number" id="code-chat" value="4" min="1" max="99999" style="width:100%;padding:10px;border:1px solid #dce1e8;border-radius:10px;margin-top:4px;box-sizing:border-box;">
+            </label>
+            <label style="font-size:13px;">بحث
+                <input type="number" id="code-search" value="4" min="0" max="99999" style="width:100%;padding:10px;border:1px solid #dce1e8;border-radius:10px;margin-top:4px;box-sizing:border-box;">
+            </label>
+            <label style="font-size:13px;">صور
+                <input type="number" id="code-image" value="4" min="0" max="99999" style="width:100%;padding:10px;border:1px solid #dce1e8;border-radius:10px;margin-top:4px;box-sizing:border-box;">
+            </label>
+            <label style="font-size:13px;">عدد المستخدمين
+                <input type="number" id="code-uses" value="1" min="1" max="1000" style="width:100%;padding:10px;border:1px solid #dce1e8;border-radius:10px;margin-top:4px;box-sizing:border-box;">
+            </label>
+            <label style="font-size:13px;">المدة (أيام)
+                <input type="number" id="code-days" value="7" min="1" max="365" style="width:100%;padding:10px;border:1px solid #dce1e8;border-radius:10px;margin-top:4px;box-sizing:border-box;">
+            </label>
+            <label style="font-size:13px;">ملاحظة
+                <input type="text" id="code-note" placeholder="مثلاً: لأختي" maxlength="200" style="width:100%;padding:10px;border:1px solid #dce1e8;border-radius:10px;margin-top:4px;box-sizing:border-box;">
+            </label>
+        </div>
+        <button onclick="generateCode()" style="width:100%;padding:14px;background:#4a6a8a;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;">توليد الكود</button>
+        <div id="generated-code" style="margin-top:14px;display:none;padding:14px;background:#f0fdf4;border-radius:12px;text-align:center;border:1px solid #86efac;">
+            <div style="font-size:12px;color:#166534;margin-bottom:6px;">✅ الكود الجديد — اضغط للنسخ:</div>
+            <div id="generated-code-text" onclick="navigator.clipboard.writeText(this.textContent);this.style.background='#bbf7d0';setTimeout(()=>this.style.background='transparent',300);" style="font-size:22px;font-weight:800;letter-spacing:3px;color:#166534;cursor:pointer;padding:8px;border-radius:8px;user-select:all;transition:background .2s;"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>📋 الأكواد السابقة</h3>
+        <div id="codes-list"><p style="color:#8b949e;">جاري التحميل...</p></div>
+    </div>
+
+    <script>
+    async function generateCode(){{
+        const body = {{
+            chat: parseInt(document.getElementById('code-chat').value) || 15,
+            search: parseInt(document.getElementById('code-search').value) || 2,
+            image: parseInt(document.getElementById('code-image').value) || 1,
+            max_uses: parseInt(document.getElementById('code-uses').value) || 1,
+            days: parseInt(document.getElementById('code-days').value) || 7,
+            note: document.getElementById('code-note').value || ''
+        }};
+        try{{
+            const r = await fetch('/admin/codes/generate', {{
+                method:'POST', headers:{{'Content-Type':'application/json'}},
+                body: JSON.stringify(body)
+            }});
+            const d = await r.json();
+            if(d.status === 'ok'){{
+                const codeData = d.code;
+                document.getElementById('generated-code-text').textContent = codeData.code || codeData;
+                document.getElementById('generated-code').style.display = 'block';
+                loadCodes();
+            }} else {{
+                alert(d.message || 'فشل التوليد');
+            }}
+        }}catch(e){{ alert('خطأ في الاتصال'); }}
+    }}
+    async function loadCodes(){{
+        const list = document.getElementById('codes-list');
+        try{{
+            const r = await fetch('/admin/codes/list');
+            const d = await r.json();
+            if(!d.codes || d.codes.length === 0){{
+                list.innerHTML = '<p style="color:#8b949e;">لا توجد أكواد بعد</p>';
+                return;
+            }}
+            list.innerHTML = d.codes.map(c => {{
+                const expired = c.expires_at && new Date(c.expires_at) < new Date();
+                const status = !c.active ? 'موقوف' : (expired ? 'منتهي' : 'نشط');
+                const statusColor = !c.active ? '#8b949e' : (expired ? '#e74c3c' : '#16a34a');
+                return '<div style="padding:12px;border:1px solid #eef1f6;border-radius:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
+                    +'<div>'
+                    +'<b style="letter-spacing:1px;font-size:14px;">'+c.code+'</b>'
+                    +'<span style="color:'+statusColor+';font-size:12px;margin-right:6px;">● '+status+'</span>'
+                    +'<div style="font-size:11px;color:#666;margin-top:4px;">'
+                    +c.chat_limit+' محادثة · '+c.search_limit+' بحث · '+c.image_limit+' صورة'
+                    +' · استُخدم '+c.used_count+'/'+c.max_uses
+                    +(c.note ? ' · '+c.note : '')
+                    +'</div></div>'
+                    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+                    +'<button onclick="navigator.clipboard.writeText(\\''+c.code+'\\');this.textContent=\\'✓\\';setTimeout(()=>this.textContent=\\'نسخ\\',800);" style="padding:6px 10px;border:1px solid #4a6a8a;background:#fff;color:#4a6a8a;border-radius:8px;cursor:pointer;font-size:12px;">نسخ</button>'
+                    +'<button onclick="toggleCode('+c.id+')" style="padding:6px 10px;border:1px solid #f59e0b;background:#fff;color:#f59e0b;border-radius:8px;cursor:pointer;font-size:12px;">'+(c.active?'إيقاف':'تشغيل')+'</button>'
+                    +'<button onclick="deleteCode('+c.id+')" style="padding:6px 10px;border:1px solid #e74c3c;background:#fff;color:#e74c3c;border-radius:8px;cursor:pointer;font-size:12px;">حذف</button>'
+                    +'</div></div>';
+            }}).join('');
+        }}catch(e){{
+            list.innerHTML = '<p style="color:#e74c3c;">تعذر التحميل</p>';
+        }}
+    }}
+    async function toggleCode(id){{
+        await fetch('/admin/codes/toggle', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id}})}});
+        loadCodes();
+    }}
+    async function deleteCode(id){{
+        if(!confirm('حذف الكود؟')) return;
+        await fetch('/admin/codes/delete', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id}})}});
+        loadCodes();
+    }}
+    loadCodes();
+    </script>
+
     <div class="card"><h3>تقييمات الردود ({likes_count + dislikes_count})</h3>{feedback_html}</div>
     <div class="card"><h3>البلاغات</h3>{reports_html}</div>
     <div class="card"><h3>المستخدمون</h3>{users_html}</div>
@@ -2148,7 +2848,11 @@ def chat():
             except Exception as e:
                 print(f"assistant load: {e}")
 
-        usage, limits, can_chat, can_search, can_image = check_limits(uid, user_role if not is_admin else 'admin')
+        usage, limits, can_chat, can_search, can_image = check_limits(
+            uid,
+            user_role if not is_admin else 'admin',
+            email=user_email or None
+        )
         if not can_chat:
             reply_limit = "وصل محادثاتك للحد اليومي المسموح به، شكراً لك، غداً نلتقي" if user_lang == 'ar' else "You've reached the daily limit. Thank you, see you tomorrow"
             nid = save_message(uid, um, reply_limit, cid) if is_registered else cid
@@ -2225,14 +2929,49 @@ def chat():
         if personality not in PERSONALITY_INSTRUCTIONS:
             personality = 'friendly'
         personality_inst = PERSONALITY_INSTRUCTIONS.get(personality, "")
-
-        # ==========================================================
-        #  ✅ التعديل 3: الشخصية مغلّفة حول SP (أول وآخر)
-        # ==========================================================
         msgs = [{"role": "system", "content": 
-            personality_inst + "\n\n" + SP + memory_context + lang_inst + assistant_persona_extra + "\n\n" + personality_inst
+            personality_inst + "\n\n" + SP + memory_context + lang_inst + assistant_persona_extra
         }] + server_hist[-15:]
-        # ==========================================================
+
+        news_articles = None
+        if is_registered and um and not has_image:
+            try:
+                news_query = detect_news_query(um)
+                if news_query:
+                    news_articles = fetch_news(news_query, limit=6)
+                    if news_articles:
+                        inc_usage(uid, "search_count")
+                        print(f"📰 News found for '{news_query}': {len(news_articles)} articles")
+            except Exception as e:
+                print(f"news error: {e}")
+
+        if news_articles:
+            news_md = format_news_reply(news_articles, user_lang)
+            news_html = str(format_nibras_response(news_md))
+
+            def news_stream():
+                try:
+                    yield f"data: {json.dumps({'formatted_html': news_html}, ensure_ascii=False)}\n\n"
+                    nid = cid
+                    if is_registered:
+                        nid = save_message(uid, um, news_md, cid)
+                    else:
+                        if not nid:
+                            nid = "guest_conv_" + secrets.token_hex(5)
+                    inc_usage(uid, "chat_count")
+                    yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    print("news error:", e)
+                    nid = cid or ("guest_conv_" + secrets.token_hex(5))
+                    inc_usage(uid, "chat_count")
+                    yield f"data: {json.dumps({'token': news_md}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
+
+            return Response(
+                stream_with_context(news_stream()),
+                mimetype='text/event-stream',
+                headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
+            )
 
         if is_registered and can_search:
             inc_usage(uid, "search_count")
