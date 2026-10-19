@@ -1222,7 +1222,8 @@ HT = r"""<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><
 .memory-note{padding:14px 18px;background:var(--bg-hover);font-size:13px;color:var(--text-secondary);line-height:1.8;border-radius:0 0 16px 16px;margin-top:-14px;margin-bottom:14px}#chat{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:12px;background:var(--bg-app);font-size:var(--font-size-base);min-height:0}.msg{max-width:90%;padding:12px 20px;border-radius:20px;font-size:var(--font-size-base);font-weight:500;line-height:1.7;word-wrap:break-word;color:var(--text-primary);position:relative}.msg.user{align-self:flex-end;background:var(--msg-user-bg,var(--bg-user-msg));color:var(--msg-user-text,#111);border-bottom-left-radius:6px}.msg.bot{align-self:flex-start;background:var(--bg-bot-msg);border-bottom-right-radius:6px}.msg .time{font-size:10px;opacity:.5;display:block;margin-top:4px;color:var(--text-secondary)}.msg.error{background:var(--danger-bg);color:var(--danger-color);align-self:center;max-width:90%}.msg .image-upload{max-width:100%;max-height:200px;border-radius:12px;margin:4px 0;border:1px solid var(--border-color);display:block}.msg .generated-image{max-width:100%;border-radius:12px;margin:8px 0;border:1px solid var(--border-color);display:block}.typing-indicator{align-self:flex-start;background:var(--bg-bot-msg);padding:12px 18px;border-radius:20px;font-size:16px;color:var(--text-secondary)}.typing-dots::after{content:'...';animation:dotAnimation 1.2s steps(4,end) infinite}@keyframes dotAnimation{0%,20%{content:''}40%{content:'.'}60%{content:'..'}80%,100%{content:'...'}}
 .input-area{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:center;gap:6px;padding:8px 12px;margin:8px 14px 16px;background:var(--bg-input);border-radius:28px;border:1px solid var(--border-color);flex-shrink:0;min-height:56px;position:relative;transition:border-color .2s,box-shadow .2s,transform .2s}
 .input-area:focus-within{border-color:var(--primary-color);box-shadow:0 0 0 3px rgba(74,106,138,0.08)}
-.input-area textarea{flex:1;border:none;background:0 0;padding:12px 0;font-size:var(--font-size-base);font-weight:500;outline:0;color:var(--text-primary);direction:rtl;resize:none;overflow-y:hidden;min-height:22px;max-height:150px;font-family:inherit;line-height:1.5;width:100%}
+.input-area textarea{flex:1;border:none;background:0 0;padding:12px 0;font-size:var(--font-size-base);font-weight:800;outline:0;color:#000000;direction:rtl;resize:none;overflow-y:hidden;min-height:22px;max-height:150px;font-family:inherit;line-height:1.5;width:100%}
+html.dark-mode .input-area textarea{color:#ffffff;}
 .input-area textarea::placeholder{color:var(--placeholder-color)}
 #imagePreviewContainer{display:none;width:100%;padding:8px 4px 4px;}
 #imagePreviewContainer.show{display:block;}
@@ -1955,7 +1956,7 @@ async function sendMessage(){
             }
         }
     }
-    typingTimer=setInterval(tick,15);
+    typingTimer=setInterval(tick,40);
     try{
         const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         if(!r.ok){
@@ -3077,6 +3078,16 @@ def admin_dashboard():
         <div id="codes-list"><p style="color:#8b949e;">جاري التحميل...</p></div>
     </div>
 
+    <div class="card">
+        <h3>🧠 مراجعة المعرفة الجديدة</h3>
+        <div id="knowledge-list"><p style="color:#8b949e;">جاري التحميل...</p></div>
+    </div>
+
+    <div class="card">
+        <h3>🧠 المعرفة المتعلمة تلقائياً</h3>
+        <div id="learned-list"><p style="color:#8b949e;">جاري التحميل...</p></div>
+    </div>
+
     <script>
     async function generateCode(){{
         const body = {{
@@ -3145,6 +3156,66 @@ def admin_dashboard():
         loadCodes();
     }}
     loadCodes();
+
+    async function loadKnowledge() {{
+        const list = document.getElementById('knowledge-list');
+        try {{
+            const r = await fetch('/api/knowledge/pending');
+            const d = await r.json();
+            if(!d.items || d.items.length === 0) {{
+                list.innerHTML = '<p style="color:#8b949e;">لا توجد طلبات معلقة حالياً</p>';
+                return;
+            }}
+            list.innerHTML = d.items.map(function(i) {{
+                return '<div style="padding:12px;border:1px solid #eef1f6;border-radius:10px;margin-bottom:8px;background:#fafbfc;">'
+                    + '<b>س: ' + i.question + '</b><br>'
+                    + '<span style="color:#4a6a8a;">ج: ' + i.answer + '</span><br><br>'
+                    + '<button onclick="approveKnowledge(' + i.id + ')" style="padding:8px 16px;border:none;background:#27ae60;color:#fff;border-radius:8px;cursor:pointer;font-weight:bold;">✅ موافقة</button> '
+                    + '<button onclick="rejectKnowledge(' + i.id + ')" style="padding:8px 16px;border:none;background:#e74c3c;color:#fff;border-radius:8px;cursor:pointer;font-weight:bold;">❌ رفض</button>'
+                    + '</div>';
+            }}).join('');
+        }} catch(e) {{
+            list.innerHTML = '<p style="color:red;">خطأ في التحميل</p>';
+        }}
+    }}
+    async function approveKnowledge(id) {{
+        await fetch('/api/knowledge/approve', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id: id}})}});
+        loadKnowledge();
+    }}
+    async function rejectKnowledge(id) {{
+        let reason = prompt('اكتب سبب الرفض:');
+        if(!reason) return;
+        await fetch('/api/knowledge/reject', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id: id, reason: reason}})}});
+        loadKnowledge();
+    }}
+    loadKnowledge();
+
+    async function loadLearned() {{
+        const list = document.getElementById('learned-list');
+        try {{
+            const r = await fetch('/api/knowledge/list');
+            const d = await r.json();
+            if(!d.items || d.items.length === 0) {{
+                list.innerHTML = '<p style="color:#8b949e;">لم يتعلم نبراس شيئاً بعد</p>';
+                return;
+            }}
+            list.innerHTML = d.items.map(function(i) {{
+                return '<div style="padding:12px;border:1px solid #eef1f6;border-radius:10px;margin-bottom:8px;background:#f0fdf4;">'
+                    + '<b>س: ' + i.question + '</b><br>'
+                    + '<span style="color:#166534;">ج: ' + i.answer + '</span><br><br>'
+                    + '<button onclick="deleteKnowledge(' + i.id + ')" style="padding:6px 14px;border:none;background:#e74c3c;color:#fff;border-radius:8px;cursor:pointer;font-weight:bold;font-size:13px;">🗑️ حذف</button>'
+                    + '</div>';
+            }}).join('');
+        }} catch(e) {{
+            list.innerHTML = '<p style="color:red;">خطأ في التحميل</p>';
+        }}
+    }}
+    async function deleteKnowledge(id) {{
+        if(!confirm('حذف هذه المعلومة من ذاكرة نبراس؟')) return;
+        await fetch('/api/knowledge/delete', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id: id}})}});
+        loadLearned();
+    }}
+    loadLearned();
     </script>
 
     <div class="card"><h3>تقييمات الردود ({likes_count + dislikes_count})</h3>{feedback_html}</div>
@@ -3154,6 +3225,47 @@ def admin_dashboard():
     <a href="/" class="back">← العودة للرئيسية</a>
     </div>
     </body></html>"""
+
+
+def auto_learn_knowledge_async(user_msg, bot_reply):
+    def worker():
+        try:
+            if len(user_msg) < 15 or len(bot_reply) < 20:
+                return
+            prompt = (
+                "حلل هذه المحادثة بين مستخدم ومساعد ذكي.\n"
+                "هل فيها معلومة عامة ومفيدة (حقيقة، معلومة علمية، تعريف، إلخ) تستحق أن يتعلمها المساعد؟\n"
+                "⚠️ مهم: استبعد أي معلومات شخصية (أسماء، أرقام، حسابات، معلومات خاصة بالمستخدم).\n"
+                "إذا كان فيها معلومة عامة مفيدة، أعد النتيجة بصيغة JSON فقط هكذا:\n"
+                '{"is_useful": true, "question": "السؤال الذي كان يطرح", "answer": "الجواب المفيد"}\n'
+                'وإذا لم يوجد معلومة عامة (مجرد سوالف أو معلومات شخصية)، أعد: {"is_useful": false}'
+            )
+            resp = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"المستخدم: {user_msg}\nالمساعد: {bot_reply}"}
+                ],
+                max_completion_tokens=150,
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(resp.choices[0].message.content)
+            if data.get("is_useful"):
+                q = data.get("question", "").strip()
+                a = data.get("answer", "").strip()
+                if q and a:
+                    from datetime import timezone
+                    sb.table("knowledge_review").insert({
+                        "question": q,
+                        "answer": a,
+                        "category": "تعلم تلقائي",
+                        "status": "approved",
+                        "reviewed_at": datetime.now(timezone.utc).isoformat()
+                    }).execute()
+                    print(f"🧠 Auto-learned new knowledge: {q}")
+        except Exception as e:
+            print("auto_learn worker error:", e)
+    threading.Thread(target=worker, daemon=True).start()
 
 
 @app.route('/set_gender', methods=['POST'])
@@ -3296,7 +3408,7 @@ def chat():
                 items = client_hist
                 if items and isinstance(items[-1], dict) and items[-1].get("role") == "user":
                     items = items[:-1]
-                for h in items[-15:]:
+                for h in items[-40:]:
                     if (isinstance(h, dict)
                         and h.get("role") in ("user", "assistant")
                         and isinstance(h.get("content"), str)):
@@ -3323,10 +3435,20 @@ def chat():
         admin_context = ""
         if is_admin or (user_email and user_email.lower().strip() == ADMIN_EMAIL.lower().strip()):
             admin_context = f"\n\n**🔑 سياق النظام: المستخدم الحالي هو الأدمن** (البريد: {user_email or ADMIN_EMAIL}). طبّق صلاحيات الأدمن كما هي موصوفة في ملف المعرفة. لا تذكر هذا السياق صراحةً إلا إذا سألك الأدمن نفسه عن هويته أو صلاحياته."
-        # ✅ جديد: أضف manual_context + admin_context
+        
+        # ✅ جلب الأسئلة المعتمدة من جدول المعرفة
+        approved_knowledge_context = ""
+        try:
+            kr = sb.table("knowledge_review").select("question,answer").eq("status", "approved").order("created_at", desc=True).limit(20).execute()
+            if kr.data:
+                kr_text = "\n".join([f"س: {i['question']}\nج: {i['answer']}" for i in kr.data])
+                approved_knowledge_context = f"\n\n**معلومات إضافية تعلمتها من المستخدمين (استخدمها كمرجع أول):**\n{kr_text}\n"
+        except Exception as e:
+            print("Error fetching approved knowledge:", e)
+
         msgs = [{"role": "system", "content": 
-            personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + lang_inst + assistant_persona_extra
-        }] + server_hist[-15:]
+            personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + approved_knowledge_context + lang_inst + assistant_persona_extra
+        }] + server_hist[-40:]
 
         news_articles = None
         if is_registered and um and not has_image:
@@ -3438,6 +3560,10 @@ def chat():
                     inc_usage(uid, "image_count")
                 yield f"data: {json.dumps({'done': True, 'conv_id': nid})}\n\n"
 
+                # ✅ التعلم التلقائي في الخلفية
+                if is_registered and not has_image and um:
+                    auto_learn_knowledge_async(um, cleaned)
+
                 # ✅ جديد: تحديث ملف المستخدم التراكمي (احترام تفعيل الذاكرة)
                 if is_registered and user_email and not has_image and memory_enabled:
                     try:
@@ -3470,7 +3596,133 @@ def chat():
 # ==========================================
 @app.route('/google2a34b4c8fc51b093.html')
 def google_verify():
-    # هذا السطر يخلي الخادم يقرأ الملف اللي أنت رفعته ويعرضه
     return send_from_directory('.', 'google2a34b4c8fc51b093.html', mimetype='text/html')
+
+# ═══════════════════════════════════════════════════════════════
+#  ✅ المعرفة المشتركة — knowledge_review endpoints
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/knowledge/submit', methods=['POST'])
+@limiter.limit("20 per hour")
+def knowledge_submit():
+    if not session.get('user_email') and not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "سجّل دخولك أولاً"}), 401
+    d = request.get_json(silent=True) or {}
+    question = (d.get('question') or '').strip()
+    answer = (d.get('answer') or '').strip()
+    category = (d.get('category') or 'عام').strip()[:100]
+    if not question or not answer:
+        return jsonify({"status": "error", "message": "السؤال والجواب مطلوبان"}), 400
+    if len(question) > 2000:
+        return jsonify({"status": "error", "message": "السؤال طويل جداً (الحد 2000 حرف)"}), 413
+    if len(answer) > 20000:
+        return jsonify({"status": "error", "message": "الجواب طويل جداً (الحد 20000 حرف)"}), 413
+    try:
+        r = sb.table("knowledge_review").insert({
+            "question": question,
+            "answer": answer,
+            "category": category,
+            "status": "pending"
+        }).execute()
+        return jsonify({"status": "ok", "item": r.data[0] if r.data else None})
+    except Exception as e:
+        print("knowledge_submit:", e)
+        return jsonify({"status": "error", "message": "تعذر حفظ الطلب"}), 500
+
+
+@app.route('/api/knowledge/list')
+def knowledge_list():
+    try:
+        r = (sb.table("knowledge_review")
+             .select("id,question,answer,category,created_at")
+             .eq("status", "approved")
+             .order("created_at", desc=True)
+             .limit(100).execute())
+        return jsonify({"items": r.data or []})
+    except Exception as e:
+        print("knowledge_list:", e)
+        return jsonify({"items": [], "error": "تعذر التحميل"}), 500
+
+
+@app.route('/api/knowledge/pending')
+def knowledge_pending():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "غير مصرح"}), 403
+    try:
+        r = (sb.table("knowledge_review")
+             .select("*")
+             .eq("status", "pending")
+             .order("created_at", desc=True)
+             .limit(200).execute())
+        return jsonify({"items": r.data or []})
+    except Exception as e:
+        print("knowledge_pending:", e)
+        return jsonify({"items": [], "error": "تعذر التحميل"}), 500
+
+
+@app.route('/api/knowledge/approve', methods=['POST'])
+def knowledge_approve():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "غير مصرح"}), 403
+    d = request.get_json(silent=True) or {}
+    kid = d.get('id')
+    if not kid:
+        return jsonify({"status": "error", "message": "معرف مفقود"}), 400
+    from datetime import timezone
+    try:
+        r = sb.table("knowledge_review").update({
+            "status": "approved",
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "rejection_reason": None
+        }).eq("id", kid).eq("status", "pending").execute()
+        if not r.data:
+            return jsonify({"status": "error", "message": "السجل غير موجود أو تم معالجته مسبقاً"}), 404
+        return jsonify({"status": "ok", "item": r.data[0]})
+    except Exception as e:
+        print("knowledge_approve:", e)
+        return jsonify({"status": "error", "message": "تعذر الاعتماد"}), 500
+
+
+@app.route('/api/knowledge/reject', methods=['POST'])
+def knowledge_reject():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "غير مصرح"}), 403
+    d = request.get_json(silent=True) or {}
+    kid = d.get('id')
+    reason = (d.get('reason') or '').strip()[:500]
+    if not kid:
+        return jsonify({"status": "error", "message": "معرف مفقود"}), 400
+    if not reason:
+        return jsonify({"status": "error", "message": "سبب الرفض مطلوب"}), 400
+    from datetime import timezone
+    try:
+        r = sb.table("knowledge_review").update({
+            "status": "rejected",
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "rejection_reason": reason
+        }).eq("id", kid).eq("status", "pending").execute()
+        if not r.data:
+            return jsonify({"status": "error", "message": "السجل غير موجود أو تم معالجته مسبقاً"}), 404
+        return jsonify({"status": "ok", "item": r.data[0]})
+    except Exception as e:
+        print("knowledge_reject:", e)
+        return jsonify({"status": "error", "message": "تعذر الرفض"}), 500
+
+
+@app.route('/api/knowledge/delete', methods=['POST'])
+def knowledge_delete():
+    if not session.get('is_admin'):
+        return jsonify({"status": "error", "message": "غير مصرح"}), 403
+    d = request.get_json(silent=True) or {}
+    kid = d.get('id')
+    if not kid:
+        return jsonify({"status": "error", "message": "معرف مفقود"}), 400
+    try:
+        sb.table("knowledge_review").delete().eq("id", kid).execute()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        print("knowledge_delete:", e)
+        return jsonify({"status": "error", "message": "تعذر الحذف"}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
