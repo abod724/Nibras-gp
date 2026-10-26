@@ -48,6 +48,7 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL")
 if not OPENAI_MODEL:
     raise Exception("OPENAI_MODEL غير موجود!")
 
+# ✅ متغير مخصص لموديل الصوت فقط (منفصل عن المحادثة)
 OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
 
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -1044,6 +1045,7 @@ def fetch_news(query, limit=6):
     _news_cache[query] = (now, results)
     return results[:limit]
 
+
 def format_news_reply(articles, lang="ar"):
     if not articles:
         return "ما لقيت أخبار جديدة عن الموضوع هذا." if lang == "ar" else "No recent news found."
@@ -1081,7 +1083,9 @@ def format_news_reply(articles, lang="ar"):
             else:
                 lines.append(f"[🔗 قراءة الخبر كاملاً]({link})")
             lines.append("")
-    return "\n".join(lines)              # ✅ 4 مسافات (مستوى جسم الدالة، خارج الحلقة)
+    return "\n".join(lines)
+
+
 SHARED_VIEW_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>محادثة نبراس</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}body{background:#f4f7fc;display:flex;justify-content:center;align-items:flex-start;min-height:100dvh;padding:20px}.container{max-width:700px;width:100%;background:#fff;border-radius:24px;box-shadow:0 10px 40px rgba(0,0,0,0.08);padding:30px 25px;margin-top:20px}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eaeef2;padding-bottom:15px;margin-bottom:25px}.header h1{font-size:22px;color:#1a2b3c}.header a{color:#4a6a8a;text-decoration:none;font-size:15px;font-weight:600}.msg{display:flex;margin-bottom:18px;gap:10px}.msg .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px}.msg.user .avatar{background:#eaeef2;color:#1a2b3c}.msg.bot .avatar{background:#4a6a8a;color:#fff}.msg .content{background:#f5f7fa;padding:12px 18px;border-radius:16px;border-top-right-radius:4px;max-width:85%;line-height:1.8;color:#111;word-wrap:break-word;white-space:pre-wrap}.msg.user .content{background:#eaeef2}.footer{text-align:center;margin-top:30px;padding-top:20px;border-top:1px solid #eaeef2;color:#8b949e;font-size:14px}.footer a{color:#4a6a8a;text-decoration:none;font-weight:700}.error{background:#ffe8e8;color:#c33;padding:20px;border-radius:14px;text-align:center;font-weight:600}</style></head><body><div class="container"><div class="header"><h1>محادثة نبراس</h1><a href="/">الرئيسية</a></div><div id="content"><div class="error">جاري التحميل...</div></div><div class="footer">تمت المشاركة من <a href="/">نبراس</a></div></div><script>
 (function(){
     var container=document.getElementById('content');
@@ -1227,6 +1231,7 @@ RESET_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UT
     });
 })();
 </script></body></html>"""
+
 
 HT = r"""<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0"/><meta name="screen-orientation" content="portrait"><meta name="x5-orientation" content="portrait"><meta name="full-screen" content="no"><meta name="x5-fullscreen" content="false"><meta name="browsermode" content="application"><meta name="x5-page-mode" content="app"><title>نبراس GP | مساعد ذكي</title><link rel="manifest" href="/static/manifest.json"><link rel="icon" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="180x180" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png"><link rel="apple-touch-icon" sizes="512x512" href="/static/icon-512.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="نبراس"><meta name="theme-color" content="#ffffff"><style>:root{--bg-body:#f4f7fc;--bg-app:#fff;--bg-header:#fff;--border-color:#eaeef2;--text-primary:#111;--text-secondary:#5a6b7c;--bg-input:#f5f7fa;--bg-bot-msg:transparent;--bg-user-msg:#e0f2fa;--bg-dropdown:#fff;--bg-hover:#f5f7fa;--shadow-color:rgba(0,0,0,0.08);--primary-color:#4a6a8a;--primary-hover:#3a5a7a;--send-shadow:rgba(74,106,138,0.2);--danger-bg:#fde8e8;--danger-color:#a33;--placeholder-color:#9aabbc;--icon-color:#4a6a8a;--border-input:#dce1e8;--send-bg:#4a6a8a;--send-hover:#3a5a7a;--modal-bg:rgba(0,0,0,0.5);--accent-color:#4a6a8a;--font-size-base:16px;--font-size-small:14px}html.dark-mode{--bg-body:#0d1117;--bg-app:#161b22;--bg-header:#161b22;--border-color:#30363d;--text-primary:#c9d1d9;--text-secondary:#8b949e;--bg-input:#21262d;--bg-user-msg:#1a3a4a;--bg-dropdown:#161b22;--bg-hover:#21262d;--shadow-color:rgba(0,0,0,0.5);--primary-color:#58a6ff;--primary-hover:#79c0ff;--send-shadow:rgba(88,166,255,0.2);--danger-bg:#2d1b1b;--danger-color:#f85149;--placeholder-color:#484f58;--icon-color:#58a6ff;--border-input:#30363d;--send-bg:#238636;--send-hover:#2ea043;--modal-bg:rgba(0,0,0,0.7);--accent-color:#58a6ff}html[data-font="small"]{--font-size-base:14px;--font-size-small:12.5px}html[data-font="medium"]{--font-size-base:16px;--font-size-small:14px}html[data-font="large"]{--font-size-base:18px;--font-size-small:16px}html[data-font="xlarge"]{--font-size-base:20px;--font-size-small:18px}*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}html{-webkit-tap-highlight-color:transparent}body{-webkit-tap-highlight-color:transparent}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg-body)}body{display:flex;justify-content:center;align-items:center;position:relative}.app{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;max-width:450px;margin:0 auto;background:var(--bg-app);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 20px var(--shadow-color)}@media(min-width:600px){.app{top:50%;left:50%;transform:translate(-50%,-50%);bottom:auto;right:auto;height:100dvh;max-height:100dvh;border-radius:20px}}.header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;flex-shrink:0;background:var(--bg-header)}.header-right{display:flex;align-items:center;gap:6px}.header-left{display:flex;align-items:center;gap:6px}.icon-btn{background:0 0;border:none;color:var(--icon-color);cursor:pointer;padding:6px;border-radius:10px;display:flex;align-items:center;justify-content:center;transition:background .2s,opacity .2s}.icon-btn:hover{background:var(--bg-hover)}.icon-btn svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.icon-btn.voice-on{color:var(--primary-color);opacity:1}.icon-btn.voice-off{color:var(--icon-color);opacity:0.5}.dropdown{position:absolute;top:68px;left:12px;right:12px;background:var(--bg-dropdown);border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,0.15),0 4px 12px rgba(0,0,0,0.08);display:none;flex-direction:column;z-index:100;border:1px solid var(--border-color);max-height:78vh;overflow-y:auto;padding:10px;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease}.dropdown.show{display:flex;opacity:1;transform:translateY(0)}.dropdown::-webkit-scrollbar{width:4px}.dropdown::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}.dropdown .item{display:flex;align-items:center;gap:14px;padding:13px 16px;font-size:15px;color:var(--text-primary);background:transparent;border:none;width:100%;text-align:right;cursor:pointer;font-family:inherit;font-weight:600;border-radius:14px;transition:background .15s ease,transform .1s ease;letter-spacing:-0.2px}.dropdown .item:hover{background:var(--bg-hover)}.dropdown .item:active{transform:scale(0.98)}.dropdown .item svg{width:20px;height:20px;stroke:var(--text-primary);stroke-width:1.8;fill:none;flex-shrink:0;stroke-linecap:round;stroke-linejoin:round;opacity:.85}.dropdown .section-title{padding:16px 16px 6px;font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:.8px;text-transform:uppercase;opacity:.7}.dropdown .conv-item{display:flex;align-items:center;gap:8px;padding:11px 16px;border:none;background:transparent;width:100%;text-align:right;cursor:pointer;font-family:inherit;font-size:14px;color:var(--text-primary);font-weight:500;border-radius:14px;transition:background .15s ease;letter-spacing:-0.1px;position:relative;user-select:none}.dropdown .conv-item:hover{background:var(--bg-hover)}.dropdown .conv-item .conv-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dropdown .conv-item::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--primary-color);opacity:.4;flex-shrink:0}.dropdown .conv-item .pin-btn{background:transparent;border:none;cursor:pointer;padding:4px;border-radius:8px;display:flex;align-items:center;justify-content:center;opacity:0.5;transition:opacity .2s,background .2s;flex-shrink:0}.dropdown .conv-item .pin-btn:hover{opacity:1;background:var(--bg-hover)}.dropdown .conv-item .pin-btn svg{width:16px;height:16px;stroke:var(--text-primary);stroke-width:2;fill:none}.dropdown .conv-item .pin-btn.pinned svg{fill:var(--primary-color);stroke:var(--primary-color)}.dropdown .pinned-item{padding:11px 16px;display:flex;align-items:center;gap:8px;border-radius:14px;transition:background .15s ease}.dropdown .pinned-item:hover{background:var(--bg-hover)}.dropdown .conv-item.long-pressing{transform:scale(0.96);background:var(--bg-hover);transition:all .2s;}
 .gender-option{flex:1;padding:9px 12px;border-radius:12px;border:1px solid var(--border-color);background:transparent;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all .2s ease;font-family:inherit}.gender-option.active{background:var(--primary-color);color:#fff;border-color:var(--primary-color);box-shadow:0 4px 12px rgba(74,106,138,0.3)}.dropdown .item.danger{color:#d32f2f}.dropdown .item.danger svg{stroke:#d32f2f;opacity:1}.dropdown .item.danger:hover{background:rgba(211,47,47,0.08)}.settings-overlay{position:fixed;inset:0;background:var(--bg-body);z-index:99999;display:none;flex-direction:column;overflow-y:auto}.settings-overlay.show{display:flex}.settings-page{max-width:500px;width:100%;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:var(--bg-body)}.settings-header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg-app);position:sticky;top:0;z-index:10;border-bottom:1px solid var(--border-color)}.settings-header h2{font-size:18px;color:var(--text-primary);font-weight:700;margin:0}.settings-body{padding:16px;display:flex;flex-direction:column;gap:14px}.settings-card{background:var(--bg-app);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.settings-item{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}.settings-item:last-child{border-bottom:none}.settings-item:hover{background:var(--bg-hover)}.settings-item .item-right{display:flex;align-items:center;gap:14px;color:var(--text-primary);font-size:15px;font-weight:600}.settings-item .item-right svg{width:22px;height:22px;stroke:var(--text-primary);stroke-width:1.8;fill:none;flex-shrink:0}.settings-item .chevron{width:18px;height:18px;stroke:var(--text-secondary);stroke-width:2;fill:none}.sub-page{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:none;align-items:center;justify-content:center;padding:20px}.sub-page.show{display:flex}.sub-page .modal-box{background:var(--bg-app);width:100%;max-width:420px;max-height:80vh;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;animation:modalIn .25s ease;border:1px solid var(--border-color)}.sub-page-header{display:none}.sub-page-body{padding:20px;overflow-y:auto;flex:1}.sub-page-body::-webkit-scrollbar{width:4px}.sub-page-body::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}.modal-title{text-align:center;font-size:17px;font-weight:700;color:var(--text-primary);padding:18px 20px;border-bottom:1px solid var(--border-color)}.modal-confirm{width:100%;padding:16px;background:transparent;border:none;border-top:1px solid var(--border-color);font-size:16px;font-weight:700;color:var(--primary-color);cursor:pointer;font-family:inherit}.modal-confirm:active{background:var(--bg-hover)}@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}.info-box{background:var(--bg-hover);padding:16px;border-radius:14px;font-size:14px;color:var(--text-secondary);line-height:1.8}.option-list{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.option-row{padding:18px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .2s}.option-row:last-child{border-bottom:none}.option-row:active{background:var(--bg-hover)}.option-label{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--text-primary);font-weight:500}.check-icon{width:22px;height:22px;stroke:var(--primary-color);stroke-width:2.5;fill:none;opacity:0;transition:opacity .25s}.option-row.selected .check-icon{opacity:1}.color-grid{display:flex;flex-direction:column;background:var(--bg-app);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--shadow-color)}.color-row{padding:16px 20px;border-bottom:1px solid var(--border-color);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .2s}.color-row:last-child{border-bottom:none}.color-row:active{background:var(--bg-hover)}.color-row-left{display:flex;align-items:center;gap:14px;font-size:15px;color:var(--text-primary);font-weight:500}.color-circle{width:26px;height:26px;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.15);flex-shrink:0}.color-row .check-icon{opacity:0;transition:opacity .25s}.color-row.selected .check-icon{opacity:1}.lang-list{display:flex;flex-direction:column;gap:12px}.lang-card{display:flex;align-items:center;gap:16px;padding:18px 20px;background:var(--bg-app);border-radius:18px;cursor:pointer;border:2px solid var(--border-color);transition:all .25s cubic-bezier(.4,0,.2,1);box-shadow:0 1px 3px var(--shadow-color)}.lang-card:hover{border-color:var(--primary-color);transform:translateY(-2px);box-shadow:0 8px 24px rgba(74,106,138,0.15)}.lang-card.selected{border-color:var(--primary-color);background:linear-gradient(135deg,var(--bg-app) 0%,rgba(74,106,138,0.06) 100%);box-shadow:0 6px 20px rgba(74,106,138,0.18)}.lang-flag{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0;letter-spacing:-0.5px;box-shadow:0 2px 6px rgba(0,0,0,0.15);color:#fff}.lang-info{flex:1;display:flex;flex-direction:column;gap:3px}.lang-name{font-size:17px;font-weight:700;color:var(--text-primary);letter-spacing:-0.2px}.lang-sub{font-size:13px;color:var(--text-secondary)}.lang-check{width:26px;height:26px;stroke:var(--primary-color);stroke-width:3;fill:none;opacity:0;transition:opacity .3s ease,transform .35s cubic-bezier(.34,1.56,.64,1);flex-shrink:0;transform:scale(0.5)}.lang-card.selected .lang-check{opacity:1;transform:scale(1)}
@@ -1420,6 +1425,7 @@ html.dark-mode .agent-btn-del{color:#f87171}
 .lib-empty svg{color:var(--border-color);margin-bottom:14px;stroke-width:1.4}
 .lib-empty h4{font-size:15px;color:var(--text-primary);font-weight:700;margin-bottom:6px}
 .lib-empty p{font-size:13px;line-height:1.7;margin:0}
+/* Context Menu */
 .context-menu-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 99998; display: none; opacity: 0; transition: opacity 0.2s; }
 .context-menu-backdrop.show { display: block; opacity: 1; }
 .context-menu{position:fixed;background:var(--bg-dropdown);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.2);border:1px solid var(--border-color);padding:6px;z-index:99999;display:none;flex-direction:column;min-width:180px;animation:modalIn .15s ease}
@@ -1430,6 +1436,11 @@ html.dark-mode .agent-btn-del{color:#f87171}
 .context-menu-item.danger svg{stroke:#ef4444}
 .context-menu-item svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;flex-shrink:0}
 .context-menu-sep{height:1px;background:var(--border-color);margin:4px 8px}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  🎨 NEON THEME — Full SVG Button Styling                        */
+/*  يُطبَّق عند: html[data-theme="neon"]                            */
+/* ═══════════════════════════════════════════════════════════════ */
 html[data-theme="neon"] {
     --bg-body: #07090e;
     --bg-app: #0a0d14;
@@ -1512,6 +1523,7 @@ html[data-theme="neon"] .nibras-response a { color: var(--primary-color); }
 html[data-theme="neon"] .typing-dots { color: var(--primary-color); }
 html[data-theme="neon"] ::-webkit-scrollbar-thumb { background: rgba(var(--primary-rgb), 0.3); }
 html[data-theme="neon"] ::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary-rgb), 0.6); }
+/* ═══════════════════════════════════════════════════════════════ */
 {{ memory_css|safe }}
 </style></head><body>
 <div class="app">
@@ -1542,6 +1554,7 @@ html[data-theme="neon"] ::-webkit-scrollbar-thumb:hover { background: rgba(var(-
         </button>
     </div>
 </div>
+<!-- Context Menu -->
 <div class="context-menu-backdrop" id="ctxBackdrop" onclick="hideContextMenu()"></div>
 <div class="context-menu" id="convContextMenu">
     <button class="context-menu-item" onclick="ctxAction('pin', event)">
@@ -1728,101 +1741,9 @@ let audioCtx = null;
 let allSources = [];
 let ca = null;
 let voiceSessionId = 0;
-let audioPlayQueue = [];
-let isPlayingAudioQueue = false;
-let spokenUntil = 0;
-let pendingTTS = Promise.resolve();
-
 function getAudioContext(){ if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } if(audioCtx.state === 'suspended'){ audioCtx.resume(); } return audioCtx; }
-function stopAllAudio(){ allSources.forEach(function(src){ try{ src.stop(0); }catch(e){} }); allSources = []; ca = null; voiceSessionId++; audioPlayQueue = []; pendingTTS = Promise.resolve(); }
+function stopAllAudio(){ allSources.forEach(function(src){ try{ src.stop(0); }catch(e){} }); allSources = []; ca = null; voiceSessionId++; }
 function playAudioWithSpeed(base64Audio, onEnd){ try{ stopAllAudio(); const mySession = voiceSessionId; const ctx = getAudioContext(); const binary = atob(base64Audio); const bytes = new Uint8Array(binary.length); for(let i = 0; i < binary.length; i++){ bytes[i] = binary.charCodeAt(i); } ctx.decodeAudioData(bytes.buffer, function(buffer){ if(mySession !== voiceSessionId){ if(typeof onEnd === 'function') onEnd(); return; } const source = ctx.createBufferSource(); source.buffer = buffer; source.playbackRate.value = voiceSpeed; const gainNode = ctx.createGain(); const savedLvl = localStorage.getItem('nibras-voice-level'); gainNode.gain.value = savedLvl ? savedLvl/100 : 1; source.connect(gainNode); gainNode.connect(ctx.destination); source.onended = function(){ const idx = allSources.indexOf(source); if(idx >= 0) allSources.splice(idx, 1); if(typeof onEnd === 'function') onEnd(); }; source.start(0); allSources.push(source); ca = { pause: function(){ try{source.stop(0);}catch(e){} }, currentTime: 0 }; }, function(err){ console.error('Audio decode error:', err); if(typeof onEnd === 'function') onEnd(); }); }catch(e){ console.error('Web Audio API error:', e); if(typeof onEnd === 'function') onEnd(); } }
-
-function stripMarkdownForTTS(text){
-    return String(text||'')
-        .replace(/\*\*(.*?)\*\*/g,'$1')
-        .replace(/__(.*?)__/g,'$1')
-        .replace(/\*(.*?)\*/g,'$1')
-        .replace(/_(.*?)_/g,'$1')
-        .replace(/`([^`]+)`/g,'$1')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
-        .replace(/https?:\/\/\S+/g,'')
-        .replace(/#+\s+/g,'')
-        .replace(/\s+/g,' ')
-        .trim();
-}
-
-function extractNewSentences(text){
-    const out=[];
-    const re=/[.!?؟\n]+/g;
-    let m;
-    while((m=re.exec(text))!==null){
-        const end=m.index+m[0].length;
-        if(end>spokenUntil){
-            const s=text.slice(spokenUntil,end).trim();
-            if(s.length>=20){ out.push(s); spokenUntil=end; }
-        }
-    }
-    return out;
-}
-
-function enqueueSentenceAudio(sentence){
-    if(!sentence||!voiceOn) return;
-    const clean=stripMarkdownForTTS(sentence);
-    if(clean.length<3) return;
-    const mySession=voiceSessionId;
-    pendingTTS=pendingTTS.then(function(){
-        if(!voiceOn||mySession!==voiceSessionId) return;
-        return fetch('/voice',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({text:clean})
-        }).then(r=>r.json()).then(v=>{
-            if(v&&v.audio&&voiceOn&&mySession===voiceSessionId){
-                audioPlayQueue.push(v.audio);
-                playQueuedAudio();
-            }
-        }).catch(function(){});
-    });
-}
-
-async function playQueuedAudio(){
-    if(isPlayingAudioQueue) return;
-    isPlayingAudioQueue=true;
-    const mySession=voiceSessionId;
-    try{
-        while(audioPlayQueue.length>0){
-            if(mySession!==voiceSessionId) break;
-            const b64=audioPlayQueue.shift();
-            await new Promise(function(resolve){
-                try{
-                    const ctx=getAudioContext();
-                    const bin=atob(b64);
-                    const bytes=new Uint8Array(bin.length);
-                    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-                    ctx.decodeAudioData(bytes.buffer,function(buffer){
-                        if(mySession!==voiceSessionId){ resolve(); return; }
-                        const source=ctx.createBufferSource();
-                        source.buffer=buffer;
-                        source.playbackRate.value=voiceSpeed;
-                        const gain=ctx.createGain();
-                        const lvl=localStorage.getItem('nibras-voice-level');
-                        gain.gain.value=lvl?lvl/100:1;
-                        source.connect(gain); gain.connect(ctx.destination);
-                        source.onended=function(){
-                            const idx=allSources.indexOf(source);
-                            if(idx>=0) allSources.splice(idx,1);
-                            resolve();
-                        };
-                        source.start(0);
-                        allSources.push(source);
-                    },function(){ resolve(); });
-                }catch(e){ resolve(); }
-            });
-        }
-    } finally {
-        if(mySession===voiceSessionId) isPlayingAudioQueue=false;
-    }
-}
 
 function tr(key){const d={thinking:{ar:'جاري التفكير',en:'Thinking'},listening:{ar:'جاري الاستماع...',en:'Listening...'},inputPlaceholder:{ar:'اكتب رسالتك...',en:'Type your message...'},micUnsupported:{ar:'المتصفح لا يدعم التعرف على الصوت.',en:'Browser does not support voice recognition.'}};return (d[key]||{})[userLang]||(d[key]||{}).ar||key;}
 function applyLang(){ui.placeholder=tr('inputPlaceholder');document.documentElement.lang=userLang==='en'?'en':'ar';const lbl=document.getElementById('currentLangLabel');if(lbl)lbl.textContent=userLang==='en'?'English':'العربية';}
@@ -1878,6 +1799,9 @@ function setTheme(t){
     }
 }
 
+/* ═══════════════════════════════════════════════════════════ */
+/*  🆕 SVG Buttons Wiring — New chat                          */
+/* ═══════════════════════════════════════════════════════════ */
 (function wireNewHeaderButtons(){
     var newChatBtn = document.getElementById('newChatBtn');
     if (newChatBtn) {
@@ -1915,7 +1839,7 @@ function setAccentColor(color,name){
     h.style.setProperty('--send-shadow',color+'33');
     h.style.setProperty('--msg-user-bg',color);
     h.style.setProperty('--msg-user-text',getContrastColor(color));
-    h.style.setProperty('--primary-rgb',hexToRgb(color));
+    h.style.setProperty('--primary-rgb',hexToRgb(color)); // السطر السحري الجديد
     const lbl=document.getElementById('currentColorLabel');
     if(lbl)lbl.textContent=name;
     const dot=document.getElementById('currentColorDot');
@@ -2333,8 +2257,6 @@ async function sendMessage(){
     if(iw)return;
     const msgText=ui.value.trim(),img=pid;
     if(!msgText&&!img)return;
-    stopAllAudio();
-    spokenUntil=0;
     let userMsgEl=null;
     if(msgText){userMsgEl=addMessage(msgText,'user');ch.push({role:'user',content:msgText});}
     if(img){userMsgEl=addMessage(userLang==='en'?'Image attached':'صورة مرفقة','user',false,img);ch.push({role:'user',content:userLang==='en'?'[Image attached]':'[صورة مرفقة]'});clearPending()}
@@ -2356,12 +2278,6 @@ async function sendMessage(){
             displayText+=bufferText.slice(0,1);
             bufferText=bufferText.slice(1);
             botEl.innerHTML=formatBotText(displayText);
-
-            if(voiceOn && IS_REGISTERED){
-                extractNewSentences(displayText).forEach(function(s){
-                    enqueueSentenceAudio(s);
-                });
-            }
         }
         if(bufferText.length===0&&streamDone){
             clearInterval(typingTimer);
@@ -2372,27 +2288,8 @@ async function sendMessage(){
                 ch.push({role:'assistant',content:displayText});
             }
             iw=false;
-
-            if(voiceOn){
-                if(IS_REGISTERED){
-                    const remaining=displayText.slice(spokenUntil).trim();
-                    if(remaining.length>0){
-                        enqueueSentenceAudio(remaining);
-                        spokenUntil=displayText.length;
-                    }
-                } else {
-                    if(displayText && displayText.trim().length>10){
-                        fetch('/voice',{
-                            method:'POST',
-                            headers:{'Content-Type':'application/json'},
-                            body:JSON.stringify({text:displayText})
-                        }).then(r=>r.json()).then(v=>{
-                            if(v && v.audio){
-                                playAudioWithSpeed(v.audio, function(){});
-                            }
-                        }).catch(function(){});
-                    }
-                }
+            if(voiceOn===true && displayText && displayText.trim().length>10){
+                fetch('/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:displayText})}).then(r=>r.json()).then(v=>{if(v && v.audio){playAudioWithSpeed(v.audio, function(){});}}).catch(function(){});
             }
         }
     }
@@ -2483,6 +2380,7 @@ setTimeout(function(){
 (function initPersonality(){var map={friendly:'ودود',concise:'مختصر',detailed:'مفصّل',formal:'رسمي',teacher:'معلّم',playful:'فرفوش'};var lbl=document.getElementById('currentPersonalityLabel');if(lbl)lbl.textContent=map[userPersonality]||'ودود';})();
 {{ memory_js|safe }}
 })();</script></body></html>"""
+
 
 @app.route('/')
 def index():
@@ -3784,7 +3682,6 @@ def voice():
             return jsonify({"audio": None})
         
         # ✅ تحديد نوع الصوت حسب نوع المستخدم
-        # ⚠️ مهم: الضيف يبقى على gTTS مجاني — لا تغيّر هذا المنطق
         email = session.get('user_email')
         is_admin = session.get('is_admin')
         
@@ -4039,7 +3936,7 @@ def chat():
                 stream = client.chat.completions.create(
                     model=OPENAI_MODEL,
                     messages=msgs,
-                    max_completion_tokens=1000,
+                    max_completion_tokens=8000,
                     stream=True
                 )
                 for chunk in stream:
