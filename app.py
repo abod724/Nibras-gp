@@ -455,36 +455,8 @@ def delete_user_image(uid, image_id):
     except Exception as e: return False
 
 # ==============================================================================
-# 5. دوال البحث والأخبار (الموجه الذكي)
+# 5. دوال الأخبار
 # ==============================================================================
-def route_intent(message):
-    if not message: return "chat"
-    msg = message.strip()
-    
-    # 1. إزالة التحيات
-    clean_msg = msg
-    greetings = ["السلام عليكم", "كيف حالك", "كيفك", "شخبارك", "أخبارك", "كيف أخبارك", "وش أخبارك", "صباح الخير", "مساء الخير", "هلا", "مرحبا", "يا نبراس"]
-    for g in greetings:
-        clean_msg = clean_msg.replace(g, "")
-    
-    clean_msg = clean_msg.strip(" ؟!،. \n")
-    
-    # إذا ما بقي شي بعد إزالة التحية، يعني مجرد تحية
-    if not clean_msg:
-        return "chat"
-        
-    # 2. الأخبار
-    if "أخبار" in clean_msg or "اخبار" in clean_msg or "خبر" in clean_msg:
-        return "news"
-        
-    # 3. البحث (أسعار، طقس، مباريات، إلخ)
-    search_kw = ["ابحث", "بحث", "سعر", "أسعار", "طقس", "الطقس", "مباراة", "نتيجة", "من هو", "من هي", "متى", "أين", "كم سعر", "اسهم", "أسهم", "دولار"]
-    for kw in search_kw:
-        if kw in clean_msg:
-            return "search"
-            
-    return "chat"
-
 _news_cache = {}
 _NEWS_CACHE_TTL = 900
 
@@ -646,6 +618,12 @@ SP = f"""أنت "نبراس GP"، مساعد شخصي سعودي تتكلم **ع
 **قواعد السياق والبحث:**
 - اقرأ الرسائل السابقة بتمعن. إذا قال المستخدم "طيب"، أو "وبعدين"، أو سأل سؤالاً يعتمد على رسالة سابقة، افهم القصد من السياق وأكمل عليه دون أن تطلب منه التوضيح.
 - إذا أعطاك النظام "نتائج بحث فعلية من الويب" أو "نتائج أخبار"، فاعتمد عليها كلياً في ردك، واذكر الروابط بشكل منسق وواضح.
+
+**🛠️ قاعدة استخدام الأدوات (مهم جداً):**
+- أنت لديك أدوات مخفية (get_news للأخبار، search_web للبحث).
+- إذا سأل المستخدم عن حالك أو سولف معك ("اخبارك"، "كيفك"، "وش لونك")، **لا تستخدم أي أداة**، ورد من عقلك مباشرة.
+- إذا طلب منك أخبار صراحة أو سأل عن مستجدات ("جيب لي أخبار"، "وش صار بالعالم")، استخدم أداة get_news.
+- إذا سأل عن شيء يحتاج معلومات حديثة ("سعر الدولار"، "الطقس")، استخدم أداة search_web.
 
 **🔑 صلاحيات الأدمن (حساسة — لا تكشفها لأي أحد):**
 - بريد الأدمن الرسمي: `abdullaha0569361@gmail.com`
@@ -1467,79 +1445,103 @@ def chat():
         msgs = [{"role": "system", "content": personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + approved_knowledge_context + lang_inst + assistant_persona_extra}] + server_hist[-40:]
 
         # ==============================================================================
-        # التوجيه الذكي (Smart Router) - دستور نبراس
+        # الطريقة الذكية (Function Calling) - زي شات جي بي تي
         # ==============================================================================
-        intent = "chat"
-        if not has_image and is_registered:
-            intent = route_intent(um)
-            
-            # 1. الأخبار
-            if intent == "news":
-                inc_usage(uid, "search_count")
-                news_articles = fetch_news(um, limit=10)
-                if news_articles:
-                    news_titles = "\n".join([f"- {a['title']} (المصدر: {a['source']})" for a in news_articles[:3]])
-                    prompt_for_news = (
-                        f"المستخدم طلب أخبار. إليك أهم العناوين اللي جبتها:\n{news_titles}\n\n"
-                        "اكتب مقدمة قصيرة جداً (جملة أو جملتين) بالعامي السعودي كأنك صديق يبشره بالأخبار، "
-                        "ثم قل له إنك رتبت له الأخبار تحت عشان يقرأها. لا تكرر العناوين، بس تفاعل معها."
-                    )
-                    try:
-                        news_intro_res = client.chat.completions.create(
-                            model=OPENAI_MODEL,
-                            messages=[{"role": "system", "content": SP + personality_inst + lang_inst}, {"role": "user", "content": prompt_for_news}],
-                            max_completion_tokens=150,
-                            stream=False
-                        )
-                        news_intro = news_intro_res.choices[0].message.content.strip()
-                    except:
-                        news_intro = "أبشر يا طويل العمر، هذي آخر الأخبار اللي جمعتها لك:"
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_news",
+                    "description": "جلب آخر الأخبار. استخدمها فقط إذا طلب المستخدم الأخبار صراحة أو سأل عن مستجدات أو أحداث حالية. لا تستخدمها إذا كان يسأل عن حالك أو يسولف.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"topic": {"type": "string", "description": "موضوع الأخبار (مثلاً: السعودية، رياضة). اتركه فارغاً للأخبار العامة."}}
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_web",
+                    "description": "البحث في الإنترنت. استخدمها فقط إذا كان السؤال يحتاج معلومات حديثة أو حقائق حالية لا تعرفها.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string", "description": "نص البحث"}},
+                        "required": ["query"]
+                    }
+                }
+            }
+        ]
 
-                    news_md = f"**{news_intro}**\n\n" + format_news_reply(news_articles, user_lang)
-                    news_html = str(format_nibras_response(news_md))
+        if is_registered and not has_image:
+            try:
+                # 1. نسأل النموذج: هل تحتاج أداة؟
+                first_response = client.chat.completions.create(
+                    model=OPENAI_MODEL, messages=msgs, tools=tools, tool_choice="auto", max_completion_tokens=300
+                )
+                response_message = first_response.choices[0].message
+                
+                # 2. إذا طلب أداة
+                if response_message.tool_calls:
+                    msgs.append(response_message)
+                    for tool_call in response_message.tool_calls:
+                        function_name = tool_call.function.name
+                        function_args = json.loads(tool_call.function.arguments)
+                        
+                        if function_name == "get_news":
+                            topic = function_args.get("topic") or "أهم أخبار السعودية والعالم اليوم"
+                            inc_usage(uid, "search_count")
+                            articles = fetch_news(topic, limit=10)
+                            
+                            if articles:
+                                news_md = format_news_reply(articles, user_lang)
+                                news_html = str(format_nibras_response(news_md))
+                                def news_stream():
+                                    yield f"data: {json.dumps({'formatted_html': news_html}, ensure_ascii=False)}\n\n"
+                                    nid = save_message(uid, um, news_md, cid) if is_registered else ("guest_conv_" + secrets.token_hex(5) if not cid else cid)
+                                    inc_usage(uid, "chat_count")
+                                    yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
+                                return Response(stream_with_context(news_stream()), mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'})
+                            else:
+                                msgs.append({"role": "tool", "tool_call_id": tool_call.id, "content": "لم يتم العثور على أخبار."})
+                        
+                        elif function_name == "search_web":
+                            query = function_args.get("query")
+                            inc_usage(uid, "search_count")
+                            try:
+                                sr = client.responses.create(
+                                    model=OPENAI_MODEL,
+                                    instructions="أنت محرك بحث. ارجع النتائج مع الروابط.",
+                                    input=query,
+                                    tools=[{"type": "web_search"}]
+                                )
+                                res = sr.output_text if hasattr(sr, 'output_text') else str(sr.output)
+                            except Exception as e:
+                                res = "فشل البحث."
+                            msgs.append({"role": "tool", "tool_call_id": tool_call.id, "content": res})
+                    
+                    # بعد ما نفذنا الأدوات، نكمل عادي ونخلي الموديل يجاوب بناءً على النتيجة (راح يدخل في دالة generate تحت)
+                
+                # 3. إذا ما طلب أداة (سؤال عادي)، ناخذ الرد اللي جهزه ونبثه للمستخدم (Fake Stream)
+                else:
+                    full_reply = response_message.content or ""
+                    def normal_stream():
+                        import time
+                        chunks = [full_reply[i:i+3] for i in range(0, len(full_reply), 3)]
+                        for chunk in chunks:
+                            yield f"data: {json.dumps({'token': chunk}, ensure_ascii=False)}\n\n"
+                            time.sleep(0.01)
+                        nid = save_message(uid, um or "[صورة مرفقة]", full_reply, cid) if is_registered else ("guest_conv_" + secrets.token_hex(5) if not cid else cid)
+                        inc_usage(uid, "chat_count")
+                        yield f"data: {json.dumps({'done': True, 'conv_id': nid})}\n\n"
+                    return Response(stream_with_context(normal_stream()), mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'})
 
-                    def news_stream():
-                        try:
-                            yield f"data: {json.dumps({'formatted_html': news_html}, ensure_ascii=False)}\n\n"
-                            nid = save_message(uid, um, news_md, cid) if is_registered else ("guest_conv_" + secrets.token_hex(5) if not cid else cid)
-                            inc_usage(uid, "chat_count")
-                            yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
-                        except Exception as e:
-                            print("news error:", e)
-                            nid = cid or ("guest_conv_" + secrets.token_hex(5))
-                            inc_usage(uid, "chat_count")
-                            yield f"data: {json.dumps({'token': news_md}, ensure_ascii=False)}\n\n"
-                            yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                print(f"Tool check error: {e}")
 
-                    return Response(
-                        stream_with_context(news_stream()),
-                        mimetype='text/event-stream',
-                        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
-                    )
-            
-            # 2. البحث
-            elif intent == "search":
-                if can_search:
-                    inc_usage(uid, "search_count")
-                    try:
-                        sr = client.responses.create(
-                            model=OPENAI_MODEL,
-                            instructions="أنت محرك بحث. ارجع النتائج كما هي مع الروابط والمصادر والتواريخ.",
-                            input=f"ابحث عن أحدث المعلومات: {um}",
-                            tools=[{"type": "web_search"}]
-                        )
-                        res = ""
-                        if hasattr(sr, "output_text") and sr.output_text:
-                            res = sr.output_text.strip()
-                        elif getattr(sr, "output", None):
-                            try: res = sr.output[0].content[0].text
-                            except: res = ""
-                        if res:
-                            msgs.append({"role": "system", "content": f"نتائج البحث الفعلية من الويب (بيانات داخلية مو رسالة من المستخدم):\n\n{res}"})
-                    except Exception as e:
-                        print(f"فشل البحث ({type(e).__name__}): {e}")
         # ==============================================================================
-
+        # البث المباشر (للبحث أو للضيوف أو الصور)
+        # ==============================================================================
         def generate():
             full_reply = ""
             try:
