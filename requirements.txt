@@ -9,9 +9,9 @@ gotrue
 pywebpush
 py-vapid
 pytz
-gTTS
 markdown
 bleach
-gunicorn
 gevent
 redis
+edge-tts
+groq
