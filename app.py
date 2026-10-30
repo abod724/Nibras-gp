@@ -17,7 +17,6 @@ from supabase import create_client
 from markupsafe import escape, Markup
 import io
 import hashlib
-from gtts import gTTS
 import threading
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -25,6 +24,11 @@ from urllib.parse import quote_plus
 import markdown
 import bleach
 import uuid
+
+# --- استيرادات الصوت الجديدة (Edge TTS) ---
+import edge_tts
+import asyncio
+# -----------------------------------------
 
 # استدعاء الواجهات من الملف المنفصل
 from templates_content import (
@@ -649,16 +653,21 @@ def format_nibras_response(text):
 
     return Markup(clean_html)
 
+# ==============================================================================
+# 6. توليد الصوت (TTS) - Edge TTS الجديد
+# ==============================================================================
 _tts_cache = {}
 _TTS_CACHE_MAX = 100
 
-def generate_speech_free(text):
-    """صوت مجاني باستخدام gTTS - للجميع مع cache"""
+def generate_speech_edge(text):
+    """توليد صوت احترافي باستخدام Microsoft Edge TTS (صوت حامد السعودي)"""
     try:
+        # التحقق من الـ Cache أولاً لتسريع الاستجابة
         key = hashlib.sha256(text.encode('utf-8')).hexdigest()
         if key in _tts_cache:
             return _tts_cache[key]
 
+        # إزالة الإيموجي لأنها تسبب مشاكل في النطق
         emoji_pattern = re.compile(
             "["
             u"\U0001F600-\U0001F64F" u"\U0001F300-\U0001F5FF" u"\U0001F680-\U0001F6FF"
@@ -671,20 +680,39 @@ def generate_speech_free(text):
         )
         clean_text = emoji_pattern.sub('', text)
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        
         if not clean_text:
             return None
-        tts = gTTS(text=clean_text[:4000], lang='ar', slow=False)
-        buf = io.BytesIO()
-        tts.write_to_fp(buf)
-        audio = buf.getvalue()
-        if audio:
-            b64 = base64.b64encode(audio).decode('utf-8')
+
+        # الصوت السعودي (حامد)
+        voice = "ar-SA-HamedNeural"
+
+        async def _get_audio():
+            communicate = edge_tts.Communicate(clean_text[:3000], voice)
+            audio_data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+            return audio_data
+
+        # تشغيل الدالة غير المتزامنة داخل Flask (متوافق مع Gevent)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            audio_bytes = loop.run_until_complete(_get_audio())
+        finally:
+            loop.close()
+
+        if audio_bytes:
+            b64 = base64.b64encode(audio_bytes).decode('utf-8')
+            # حفظ في الـ Cache
             if len(_tts_cache) >= _TTS_CACHE_MAX:
                 _tts_cache.pop(next(iter(_tts_cache)))
             _tts_cache[key] = b64
             return b64
+            
     except Exception as e:
-        print(f"❌ gTTS failed: {type(e).__name__}: {e}")
+        print(f"❌ Edge TTS failed: {type(e).__name__}: {e}")
     return None
 
 def detect_news_query(message):
@@ -897,7 +925,7 @@ def format_news_reply(articles, lang="ar"):
     return "\n".join(lines)
 
 # ==============================================================================
-# 6. المسارات (Routes)
+# 7. المسارات (Routes)
 # ==============================================================================
 @app.route('/')
 def index():
@@ -1869,7 +1897,10 @@ def voice():
         text = (d.get('text') or "").strip()
         if not text or len(text) > 3000:
             return jsonify({"audio": None})
-        audio_data = generate_speech_free(text)
+        
+        # استدعاء دالة Edge TTS الجديدة
+        audio_data = generate_speech_edge(text)
+        
         return jsonify({"audio": audio_data})
     except Exception as e:
         print(f"voice: {e}")
