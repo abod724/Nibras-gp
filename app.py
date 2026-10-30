@@ -17,6 +17,7 @@ from supabase import create_client
 from markupsafe import escape, Markup
 import io
 import hashlib
+from gtts import gTTS
 import threading
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -24,11 +25,6 @@ from urllib.parse import quote_plus
 import markdown
 import bleach
 import uuid
-import subprocess
-import tempfile
-import sys
-import wave
-from groq import Groq
 
 # استدعاء الواجهات من الملف المنفصل
 from templates_content import (
@@ -66,12 +62,6 @@ if not OPENAI_MODEL:
     raise Exception("OPENAI_MODEL غير موجود!")
 
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-# ==============================================================================
-# إعدادات Groq للصوت السعودي
-# ==============================================================================
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -437,6 +427,7 @@ def save_image_to_library(uid, image_url=None, image_data=None, title="", source
             encoded_data = image_data.split(",", 1)[1]
             image_bytes = base64.b64decode(encoded_data)
             
+            # الرفع لـ Storage (تأكد إن البكت اسمه images ومخليه Public)
             sb.storage.from_("images").upload(
                 path=file_name, 
                 file=image_bytes, 
@@ -658,154 +649,42 @@ def format_nibras_response(text):
 
     return Markup(clean_html)
 
-# ==============================================================================
-# 6. توليد الصوت (TTS) - Groq (صوت سعودي) + Edge TTS (احتياطي)
-# ==============================================================================
 _tts_cache = {}
 _TTS_CACHE_MAX = 100
 
-def combine_wavs(wav_bytes_list):
-    """دمج عدة ملفات WAV في ملف واحد"""
-    if not wav_bytes_list: return None
-    if len(wav_bytes_list) == 1: return wav_bytes_list[0]
-    try:
-        first_wav = io.BytesIO(wav_bytes_list[0])
-        with wave.open(first_wav, 'rb') as w_in:
-            params = w_in.getparams()
-        out_wav = io.BytesIO()
-        with wave.open(out_wav, 'wb') as w_out:
-            w_out.setparams(params)
-            for b in wav_bytes_list:
-                with wave.open(io.BytesIO(b), 'rb') as w_in:
-                    w_out.writeframes(w_in.readframes(w_in.getnframes()))
-        return out_wav.getvalue()
-    except Exception as e:
-        print("WAV combine error:", e)
-        return wav_bytes_list[0]
-
-def chunk_text(text, limit=180):
-    """تقسيم النص لجمل قصيرة لا تتجاوز 180 حرف (لأن حد Groq هو 200)"""
-    words = text.split()
-    chunks = []
-    current = ""
-    for w in words:
-        if len(current) + len(w) + 1 <= limit:
-            current += w + " "
-        else:
-            chunks.append(current.strip())
-            current = w + " "
-    if current:
-        chunks.append(current.strip())
-    return chunks
-
-def generate_speech_groq(text, voice="Abdullah"):
-    """توليد صوت سعودي أصلي باستخدام Groq Orpheus مع دعم النصوص الطويلة"""
-    try:
-        if not groq_client:
-            print("❌ GROQ_API_KEY غير موجود")
-            return None
-
-        key = hashlib.sha256((text + voice).encode('utf-8')).hexdigest()
-        if key in _tts_cache:
-            return _tts_cache[key]
-
-        emoji_pattern = re.compile(
-            "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
-            "\U0001F1E0-\U0001F1FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FAFF"
-            "\U00002600-\U000026FF\U00002700-\U000027BF\U0001F000-\U0001F02F"
-            "\U0001F0A0-\U0001F0FF\U00002B00-\U00002BFF\U0001F780-\U0001F7FF"
-            "\U0001F800-\U0001F8FF\U00002190-\U000021FF\U0000FE00-\U0000FE0F"
-            "\U0000200D\U000020E3]+", flags=re.UNICODE
-        )
-        clean_text = emoji_pattern.sub('', text)
-        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-
-        if not clean_text:
-            return None
-
-        chunks = chunk_text(clean_text)
-        audio_parts = []
-
-        for chunk in chunks:
-            try:
-                response = groq_client.audio.speech.create(
-                    model="canopylabs/orpheus-arabic-saudi",
-                    voice=voice,
-                    input=chunk,
-                    response_format="wav"
-                )
-                audio_parts.append(response.content)
-            except Exception as e:
-                print(f"Groq chunk failed: {e}")
-                continue 
-
-        if not audio_parts:
-            return None
-
-        final_audio = combine_wavs(audio_parts)
-        b64 = base64.b64encode(final_audio).decode('utf-8')
-
-        if len(_tts_cache) >= _TTS_CACHE_MAX:
-            _tts_cache.pop(next(iter(_tts_cache)))
-        _tts_cache[key] = b64
-        
-        return b64
-
-    except Exception as e:
-        print(f"❌ Groq TTS failed: {type(e).__name__}: {e}")
-        return None
-
-def generate_speech_edge(text):
-    """توليد صوت احتياطي باستخدام Microsoft Edge TTS"""
+def generate_speech_free(text):
+    """صوت مجاني باستخدام gTTS - للجميع مع cache"""
     try:
         key = hashlib.sha256(text.encode('utf-8')).hexdigest()
         if key in _tts_cache:
             return _tts_cache[key]
 
         emoji_pattern = re.compile(
-            "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
-            "\U0001F1E0-\U0001F1FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FAFF"
-            "\U00002600-\U000026FF\U00002700-\U000027BF\U0001F000-\U0001F02F"
-            "\U0001F0A0-\U0001F0FF\U00002B00-\U00002BFF\U0001F780-\U0001F7FF"
-            "\U0001F800-\U0001F8FF\U00002190-\U000021FF\U0000FE00-\U0000FE0F"
-            "\U0000200D\U000020E3]+", flags=re.UNICODE
+            "["
+            u"\U0001F600-\U0001F64F" u"\U0001F300-\U0001F5FF" u"\U0001F680-\U0001F6FF"
+            u"\U0001F1E0-\U0001F1FF" u"\U0001F900-\U0001F9FF" u"\U0001FA00-\U0001FAFF"
+            u"\U00002600-\U000026FF" u"\U00002700-\U000027BF" u"\U0001F000-\U0001F02F"
+            u"\U0001F0A0-\U0001F0FF" u"\U00002B00-\U00002BFF" u"\U0001F780-\U0001F7FF"
+            u"\U0001F800-\U0001F8FF" u"\U00002190-\U000021FF" u"\U0000FE00-\U0000FE0F"
+            u"\U0000200D" u"\U000020E3"
+            "]+", flags=re.UNICODE
         )
         clean_text = emoji_pattern.sub('', text)
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-        
         if not clean_text:
             return None
-
-        voice = "ar-SA-HamedNeural"
-        
-        fd, temp_path = tempfile.mkstemp(suffix=".mp3")
-        os.close(fd)
-        
-        try:
-            cmd = [
-                sys.executable, "-m", "edge_tts", 
-                "--voice", voice, 
-                "--rate", "+10%",
-                "--text", clean_text[:3000], 
-                "--write-media", temp_path
-            ]
-            subprocess.run(cmd, check=True, timeout=30, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            with open(temp_path, "rb") as f:
-                audio_bytes = f.read()
-                
-            if audio_bytes:
-                b64 = base64.b64encode(audio_bytes).decode('utf-8')
-                if len(_tts_cache) >= _TTS_CACHE_MAX:
-                    _tts_cache.pop(next(iter(_tts_cache)))
-                _tts_cache[key] = b64
-                return b64
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-                
+        tts = gTTS(text=clean_text[:4000], lang='ar', slow=False)
+        buf = io.BytesIO()
+        tts.write_to_fp(buf)
+        audio = buf.getvalue()
+        if audio:
+            b64 = base64.b64encode(audio).decode('utf-8')
+            if len(_tts_cache) >= _TTS_CACHE_MAX:
+                _tts_cache.pop(next(iter(_tts_cache)))
+            _tts_cache[key] = b64
+            return b64
     except Exception as e:
-        print(f"❌ Edge TTS subprocess failed: {type(e).__name__}: {e}")
+        print(f"❌ gTTS failed: {type(e).__name__}: {e}")
     return None
 
 def detect_news_query(message):
@@ -1018,7 +897,7 @@ def format_news_reply(articles, lang="ar"):
     return "\n".join(lines)
 
 # ==============================================================================
-# 7. المسارات (Routes)
+# 6. المسارات (Routes)
 # ==============================================================================
 @app.route('/')
 def index():
@@ -1084,6 +963,7 @@ def library_upload():
         
         title = d.get('title') if isinstance(d.get('title'), str) else "صورة"
         
+        # التحقق من نجاح الرفع
         result = save_image_to_library(get_user_id(), image_data=image_data, title=title[:200] or "صورة", source="upload")
         
         if result:
@@ -1989,16 +1869,7 @@ def voice():
         text = (d.get('text') or "").strip()
         if not text or len(text) > 3000:
             return jsonify({"audio": None})
-        
-        # 1. استخدام Groq (صوت سعودي أصلي)
-        # يمكنك تغيير الصوت إلى: Abdullah, Aisha, Fahd, Sultan, Lulwa, Noura
-        audio_data = generate_speech_groq(text, voice="Abdullah")
-        
-        # 2. خطة بديلة (إذا فشل Groq، نرجع لـ Edge TTS)
-        if not audio_data:
-            print("⚠️ Groq failed, falling back to Edge TTS")
-            audio_data = generate_speech_edge(text)
-            
+        audio_data = generate_speech_free(text)
         return jsonify({"audio": audio_data})
     except Exception as e:
         print(f"voice: {e}")
