@@ -17,7 +17,6 @@ from supabase import create_client
 from markupsafe import escape, Markup
 import io
 import hashlib
-from gtts import gTTS
 import threading
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -25,6 +24,7 @@ from urllib.parse import quote_plus
 import markdown
 import bleach
 import uuid
+from gtts import gTTS
 
 # استدعاء الواجهات من الملف المنفصل
 from templates_content import (
@@ -427,7 +427,6 @@ def save_image_to_library(uid, image_url=None, image_data=None, title="", source
             encoded_data = image_data.split(",", 1)[1]
             image_bytes = base64.b64decode(encoded_data)
             
-            # الرفع لـ Storage (تأكد إن البكت اسمه images ومخليه Public)
             sb.storage.from_("images").upload(
                 path=file_name, 
                 file=image_bytes, 
@@ -649,6 +648,9 @@ def format_nibras_response(text):
 
     return Markup(clean_html)
 
+# ==============================================================================
+# 6. توليد الصوت (TTS) - gTTS
+# ==============================================================================
 _tts_cache = {}
 _TTS_CACHE_MAX = 100
 
@@ -897,7 +899,7 @@ def format_news_reply(articles, lang="ar"):
     return "\n".join(lines)
 
 # ==============================================================================
-# 6. المسارات (Routes)
+# 7. المسارات (Routes)
 # ==============================================================================
 @app.route('/')
 def index():
@@ -963,7 +965,6 @@ def library_upload():
         
         title = d.get('title') if isinstance(d.get('title'), str) else "صورة"
         
-        # التحقق من نجاح الرفع
         result = save_image_to_library(get_user_id(), image_data=image_data, title=title[:200] or "صورة", source="upload")
         
         if result:
@@ -1822,16 +1823,17 @@ def auto_learn_knowledge_async(user_msg, bot_reply):
         try:
             if len(user_msg) < 15 or len(bot_reply) < 20:
                 return
+            # ✅ التعديل الأمني هنا: منع حفظ المعلومات الشخصية في الجدول العام
             prompt = (
-                "أنت فلتر ذكي جداً. مهمتك تحليل المحادثة لمعرفة إذا كان (المستخدم) قدم معلومة جديدة أو صحح خطأ للمساعد.\n"
-                "⚠️ قاعدة صارمة: إذا كان المستخدم يسأل سؤالاً والمساعد هو اللي جاوب، فهذا ليس تعليماً! تجاهله تماماً (لأننا لا نريد المساعد أن يتعلم من نفسه).\n"
+                "أنت فلتر ذكي جداً. مهمتك تحليل المحادثة لمعرفة إذا كان (المستخدم) قدم معلومة علمية أو تقنية أو تصحيح لخطأ برمجي للمساعد.\n"
+                "⚠️ قاعدة صارمة جداً: إذا كانت المعلومة شخصية (مثل: اسمي، حسابي في سناب، رقمي، مهنتي، شركتي)، تجاهلها تماماً ولا تحفظها!\n"
+                "نحن نريد فقط حفظ الحقائق العامة والمعلومات التقنية (مثل: 'نبراس يشتغل على بورت 5000').\n"
                 "اعتبره مفيداً (is_useful: true) فقط في الحالات التالية:\n"
-                "1. المستخدم قال للمساعد: 'أنت غلطان، الصح هو كذا...'\n"
-                "2. المستخدم أعطى معلومة جديدة صراحة (مثل: 'ترى نبراس يشتغل على بورت 5000').\n"
-                "3. المستخدم أعطى معلومة عن نفسه أو شغله (مثل: 'أنا مدير شركة التمور').\n"
+                "1. المستخدم صحح خطأ برمجي أو تقني (مثل: 'أنت غلطان، الدالة هذي تكتب كذا').\n"
+                "2. المستخدم أعطى معلومة تقنية/علمية جديدة (مثل: 'ترى بايثون 3.12 تدعم الميزة الفلانية').\n"
                 "إذا تحقق الشرط، أعد JSON فقط بهذا الشكل:\n"
                 '{"is_useful": true, "question": "السؤال أو الموضوع", "answer": "المعلومة الصحيحة أو الجديدة"}\n'
-                "إذا كانت مجرد أسئلة وأجوبة عامة، أعد:\n"
+                "إذا كانت المعلومة شخصية أو مجرد أسئلة وأجوبة عامة، أعد:\n"
                 '{"is_useful": false}'
             )
             resp = client.chat.completions.create(
@@ -1869,6 +1871,7 @@ def voice():
         text = (d.get('text') or "").strip()
         if not text or len(text) > 3000:
             return jsonify({"audio": None})
+        
         audio_data = generate_speech_free(text)
         return jsonify({"audio": audio_data})
     except Exception as e:
@@ -1889,6 +1892,8 @@ def chat():
         cid = d.get("conv_id")
         img_data = d.get("image")
         assistant_id = d.get("assistant_id")
+        incognito = d.get("incognito", False) # <--- تفعيل وضع التخفي
+        
         if len(um) > 12000:
             return jsonify({"status": "error", "message": "الرسالة طويلة جدًا (الحد 12000 حرف)"}), 413
         if not um and not img_data:
@@ -1928,7 +1933,7 @@ def chat():
         )
         if not can_chat:
             reply_limit = "وصل محادثاتك للحد اليومي المسموح به، شكراً لك، غداً نلتقي" if user_lang == 'ar' else "You've reached the daily limit. Thank you, see you tomorrow"
-            nid = save_message(uid, um, reply_limit, cid) if is_registered else cid
+            nid = save_message(uid, um, reply_limit, cid) if is_registered and not incognito else cid
             def limit_stream():
                 yield f"data: {json.dumps({'token': reply_limit}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'done': True, 'conv_id': nid or cid or ''}, ensure_ascii=False)}\n\n"
@@ -1955,7 +1960,7 @@ def chat():
                 return jsonify({"reply": msg, "conv_id": cid})
             if not can_image:
                 msg = "وصلت للحد اليومي للصور." if user_lang == 'ar' else "You've reached the daily image limit."
-                nid = save_message(uid, um, msg, cid) if is_registered else cid
+                nid = save_message(uid, um, msg, cid) if is_registered and not incognito else cid
                 inc_usage(uid, "chat_count")
                 def limit_img_stream():
                     yield f"data: {json.dumps({'token': msg}, ensure_ascii=False)}\n\n"
@@ -1965,8 +1970,11 @@ def chat():
                     mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
                 )
-        user_memory = get_user_memory(user_email) if user_email else {}
-        memory_enabled = user_memory.get('memory_enabled', True) if user_email else False
+        
+        # وضع التخفي يمنع تحميل الذاكرة
+        user_memory = get_user_memory(user_email) if (user_email and not incognito) else {}
+        memory_enabled = (user_memory.get('memory_enabled', True) if user_email else False) if not incognito else False
+        
         profile_summary = get_user_profile_summary(user_email) if (user_email and memory_enabled) else {}
         profile_context = format_profile_summary_for_prompt(profile_summary) if profile_summary else ""
         manual_context = ""
@@ -1980,6 +1988,7 @@ def chat():
         memory_context = ""
         if user_memory.get('name'):
             memory_context = f"\n\n**معلومات المستخدم:**\nاسم المستخدم: {user_memory['name']}"
+        
         if is_registered:
             server_hist = load_conversation(uid, cid) or []
         else:
@@ -1997,6 +2006,7 @@ def chat():
                             "role": h["role"],
                             "content": h["content"][:2000]
                         })
+        
         if img_data and is_registered and can_image:
             user_content = [
                 {"type": "text", "text": um or "حلل الصورة"},
@@ -2006,6 +2016,7 @@ def chat():
         else:
             server_hist.append({"role": "user", "content": um})
         lang_inst = LANG_INSTRUCTION.get(user_lang, "")
+        
         if user_email:
             personality = get_user_memory(user_email).get('personality', 'friendly')
         else:
@@ -2013,6 +2024,7 @@ def chat():
         if personality not in PERSONALITY_INSTRUCTIONS:
             personality = 'friendly'
         personality_inst = PERSONALITY_INSTRUCTIONS.get(personality, "")
+        
         admin_context = ""
         if is_admin or (user_email and user_email.lower().strip() == ADMIN_EMAIL.lower().strip()):
             admin_context = f"\n\n**🔑 سياق النظام: المستخدم الحالي هو الأدمن** (البريد: {user_email or ADMIN_EMAIL}). طبّق صلاحيات الأدمن كما هي موصوفة في ملف المعرفة. لا تذكر هذا السياق صراحةً إلا إذا سألك الأدمن نفسه عن هويته أو صلاحياته."
@@ -2068,16 +2080,16 @@ def chat():
                 try:
                     yield f"data: {json.dumps({'formatted_html': news_html}, ensure_ascii=False)}\n\n"
                     nid = cid
-                    if is_registered:
+                    if is_registered and not incognito:
                         nid = save_message(uid, um, news_md, cid)
                     else:
                         if not nid:
-                            nid = "guest_conv_" + secrets.token_hex(5)
+                            nid = "incognito_conv_" + secrets.token_hex(5) if incognito else "guest_conv_" + secrets.token_hex(5)
                     inc_usage(uid, "chat_count")
                     yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
                 except Exception as e:
                     print("news error:", e)
-                    nid = cid or ("guest_conv_" + secrets.token_hex(5))
+                    nid = cid or ("incognito_conv_" + secrets.token_hex(5) if incognito else "guest_conv_" + secrets.token_hex(5))
                     inc_usage(uid, "chat_count")
                     yield f"data: {json.dumps({'token': news_md}, ensure_ascii=False)}\n\n"
                     yield f"data: {json.dumps({'done': True, 'conv_id': nid}, ensure_ascii=False)}\n\n"
@@ -2126,20 +2138,22 @@ def chat():
                     for block in full_reply.split('\n\n') if block.strip()
                 ]) or ("ما قدرت أجيب رد." if user_lang == 'ar' else "I couldn't generate a response.")
                 nid = cid
-                if is_registered:
+                
+                if is_registered and not incognito: # <--- منع الحفظ في وضع التخفي
                     nid = save_message(uid, um or "[صورة مرفقة]", cleaned, cid)
                 else:
                     if not nid:
-                        nid = "guest_conv_" + secrets.token_hex(5)
+                        nid = "incognito_conv_" + secrets.token_hex(5) if incognito else "guest_conv_" + secrets.token_hex(5)
+                        
                 inc_usage(uid, "chat_count")
                 if has_image and is_registered and can_image:
                     inc_usage(uid, "image_count")
                 yield f"data: {json.dumps({'done': True, 'conv_id': nid})}\n\n"
 
-                if is_registered and not has_image and um:
+                if is_registered and not has_image and um and not incognito: # <--- منع التعلم التلقائي في وضع التخفي
                     auto_learn_knowledge_async(um, cleaned)
 
-                if is_registered and user_email and not has_image and memory_enabled:
+                if is_registered and user_email and not has_image and memory_enabled and not incognito: # <--- منع تحديث الذاكرة في وضع التخفي
                     try:
                         pair_count = (len(server_hist) + 1) // 2
                         if pair_count >= 2 and pair_count % 2 == 0:
@@ -2295,5 +2309,4 @@ def knowledge_delete():
 
 
 if __name__ == '__main__':
-    # للتجربة المحلية فقط، في Render استخدم gunicorn مع gevent
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
