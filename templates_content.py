@@ -491,6 +491,16 @@ html[data-theme="neon"] ::-webkit-scrollbar-thumb:hover { background: rgba(var(-
         <span id="incognitoText">تفعيل وضع التخفي</span>
     </button>
     
+    <!-- ⬅️ جديد: زر مسح الملف المرفق -->
+    <button class="item" id="clearPdfBtn" onclick="clearPdfContext()" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+        </svg>
+        <span>مسح الملف المرفق</span>
+    </button>
+    
     <button class="item" onclick="window.location.href='/library'"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>مكتبتي</button>
     <button class="item" data-action="share"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>مشاركة المحادثة</button>
     <button class="item" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>الإعدادات</button>
@@ -585,12 +595,13 @@ html[data-theme="neon"] ::-webkit-scrollbar-thumb:hover { background: rgba(var(-
 <div class="assistant-menu" id="assistantMenu"></div>
 <div class="input-area" id="inputArea">
     <div id="imagePreviewContainer"><div class="image-preview-wrapper"><img id="imagePreview" src="" alt=""/><button class="remove-img-btn" id="removeImageBtn" title="إزالة" aria-label="إزالة الصورة"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>
+    <div id="pdfBadge" style="display:none;width:100%;padding:6px 0 4px;"><div style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg-hover);border:1px solid var(--border-color);border-radius:12px;font-size:12.5px;font-weight:600;color:var(--text-primary);max-width:100%;"><span id="pdfBadgeName" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">📄 ملف</span><button type="button" id="pdfClearBtn" title="إزالة" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;">✕</button></div></div>
     <button class="btn-icon mic-btn" id="micBtn" title="صوت"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg></button>
     <button class="plus-btn" id="plusBtn" title="إضافة"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-    <div class="plus-options" id="plusOptions"><button class="option-btn" id="cameraBtn" title="كاميرا"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button><button class="option-btn" id="galleryBtn" title="صور"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button></div>
+    <div class="plus-options" id="plusOptions"><button class="option-btn" id="cameraBtn" title="كاميرا"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button><button class="option-btn" id="galleryBtn" title="صور"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button><button class="option-btn" id="pdfBtn" title="ملف PDF أو Word"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></button></div>
     <textarea id="userInput" placeholder="اكتب رسالتك..." autofocus rows="1"></textarea>
     <button class="send" id="sendBtn" title="إرسال"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
-</div><input type="file" id="fileInput" accept="image/*" style="display:none"/><input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none"/></div>
+</div><input type="file" id="fileInput" accept="image/*" style="display:none"/><input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none"/><input type="file" id="pdfInput" accept=".pdf,.docx" style="display:none"/></div>
 
 <div class="share-modal" id="shareModal">
     <div class="box">
@@ -650,7 +661,8 @@ html[data-theme="neon"] ::-webkit-scrollbar-thumb:hover { background: rgba(var(-
         }
     }catch(e){}
 })();
-(function(){const IS_REGISTERED={{ 'true' if is_registered else 'false' }};const SERVER_LANG='{{ user_lang }}';let userLang=SERVER_LANG||localStorage.getItem('nibras-lang')||'ar';try{localStorage.setItem('nibras-lang',userLang);}catch(e){}let userPersonality=localStorage.getItem('nibras-personality')||'friendly';let userFontSize=localStorage.getItem('nibras-font-size')||'medium';let voiceSpeed=parseFloat(localStorage.getItem('nibras-voice-speed'))||1;let ch=[],pid=null,iw=!1,cid=null,voiceOn=false,stickBottom=true,isIncognito=false;const cb=document.getElementById('chat'),ui=document.getElementById('userInput'),sb=document.getElementById('sendBtn'),mb=document.getElementById('micBtn'),fi=document.getElementById('fileInput'),ci=document.getElementById('cameraInput'),mt=document.getElementById('menuToggle'),dd=document.getElementById('dropdown'),pb=document.getElementById('plusBtn'),po=document.getElementById('plusOptions'),cab=document.getElementById('cameraBtn'),gb=document.getElementById('galleryBtn'),ipc=document.getElementById('imagePreviewContainer'),ip=document.getElementById('imagePreview'),rib=document.getElementById('removeImageBtn'),hl=document.getElementById('historyList'),pl=document.getElementById('pinnedList'),sm=document.getElementById('shareModal'),vt=document.getElementById('voiceToggle');
+(function(){const IS_REGISTERED={{ 'true' if is_registered else 'false' }};const IS_ADMIN={{ 'true' if is_admin else 'false' }};const SERVER_LANG='{{ user_lang }}';let userLang=SERVER_LANG||localStorage.getItem('nibras-lang')||'ar';try{localStorage.setItem('nibras-lang',userLang);}catch(e){}let userPersonality=localStorage.getItem('nibras-personality')||'friendly';let userFontSize=localStorage.getItem('nibras-font-size')||'medium';let voiceSpeed=parseFloat(localStorage.getItem('nibras-voice-speed'))||1;let ch=[],pid=null,iw=!1,cid=null,voiceOn=false,stickBottom=true,isIncognito=false;let currentPdfName=null;
+const cb=document.getElementById('chat'),ui=document.getElementById('userInput'),sb=document.getElementById('sendBtn'),mb=document.getElementById('micBtn'),fi=document.getElementById('fileInput'),ci=document.getElementById('cameraInput'),mt=document.getElementById('menuToggle'),dd=document.getElementById('dropdown'),pb=document.getElementById('plusBtn'),po=document.getElementById('plusOptions'),cab=document.getElementById('cameraBtn'),gb=document.getElementById('galleryBtn'),ipc=document.getElementById('imagePreviewContainer'),ip=document.getElementById('imagePreview'),rib=document.getElementById('removeImageBtn'),hl=document.getElementById('historyList'),pl=document.getElementById('pinnedList'),sm=document.getElementById('shareModal'),vt=document.getElementById('voiceToggle');
 const SVG_SPK_ON='<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
 const SVG_SPK_OFF='<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
 
@@ -809,6 +821,18 @@ function toggleIncognito() {
         btn.style.color = "inherit";
         showToast(userLang==='en'?'Incognito Mode OFF':'تم إيقاف وضع التخفي. المحادثة ستُحفظ.');
     }
+}
+
+// ⬅️ جديد: دالة مسح سياق الملف المرفق
+async function clearPdfContext(){
+    try{await fetch('/clear_pdf',{method:'POST',credentials:'same-origin'});}catch(e){}
+    var badge=document.getElementById('pdfBadge');
+    if(badge)badge.style.display='none';
+    var item=document.getElementById('clearPdfBtn');
+    if(item)item.style.display='none';
+    currentPdfName=null;
+    showToast(userLang==='en'?'File cleared':'تم مسح الملف المرفق');
+    document.getElementById('dropdown').classList.remove('show');
 }
 
 function compressImage(file,maxWidth,callback){var reader=new FileReader();reader.onload=function(ev){var img=new Image();img.onload=function(){var canvas=document.createElement('canvas');var ratio=Math.min(maxWidth/img.width,maxWidth/img.height,1);canvas.width=img.width*ratio;canvas.height=img.height*ratio;var ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);callback(canvas.toDataURL('image/jpeg',0.75));};img.src=ev.target.result;};reader.readAsDataURL(file);}
@@ -1108,6 +1132,46 @@ gb.addEventListener('click',function(){fi.click();po.classList.remove('show')});
 fi.addEventListener('change',function(e){if(this.files&&this.files.length>0){var f=this.files[0];fi.value='';compressImage(f,800,function(dataUrl){pid=dataUrl;showImagePreview(pid);});}});
 cab.addEventListener('click',function(){ci.click();po.classList.remove('show')});
 ci.addEventListener('change',function(e){if(this.files&&this.files.length>0){var f=this.files[0];ci.value='';compressImage(f,800,function(dataUrl){pid=dataUrl;showImagePreview(pid);});}});
+const pdfBtn=document.getElementById('pdfBtn'),pdfInput=document.getElementById('pdfInput');
+if(pdfBtn&&pdfInput){
+    pdfBtn.addEventListener('click',function(){pdfInput.click();po.classList.remove('show');});
+    pdfInput.addEventListener('change',async function(e){
+        if(!this.files||this.files.length===0)return;
+        var f=this.files[0];pdfInput.value='';
+        var lowerName = f.name.toLowerCase();
+        if(!lowerName.endsWith('.pdf') && !lowerName.endsWith('.docx')){
+            showToast(userLang==='en'?'PDF & Word only':'ندعم ملفات PDF و Word فقط');
+            return;
+        }
+        if(f.size>16*1024*1024){showToast(userLang==='en'?'Max 16MB':'حجم الملف يتجاوز 16 ميجا');return;}
+        showToast(userLang==='en'?'Uploading...':'جاري تجهيز الملف...');
+        var fd=new FormData();fd.append('file',f);
+        try{
+            var res=await fetch('/upload_pdf',{method:'POST',body:fd,credentials:'same-origin'});
+            var data=await res.json();
+            if(res.ok&&data.status==='ok'){
+                showToast(userLang==='en'?'✅ File ready! Ask me about it':'✅ الملف جاهز! اسألني عنه');
+                var badge=document.getElementById('pdfBadge');
+                var badgeName=document.getElementById('pdfBadgeName');
+                if(badge&&badgeName){badgeName.textContent='📄 '+f.name;badge.style.display='block';}
+                currentPdfName=f.name;
+                var clearItem=document.getElementById('clearPdfBtn');
+                if(clearItem)clearItem.style.display='flex';
+            } else {
+                showToast('❌ '+(data.message||(userLang==='en'?'Upload failed':'فشل رفع الملف')));
+            }
+        }catch(err){
+            console.error('file upload error:',err);
+            showToast(userLang==='en'?'Connection failed':'تعذر الاتصال بالسيرفر');
+        }
+    });
+    var pdfClearBtn=document.getElementById('pdfClearBtn');
+    if(pdfClearBtn){
+        pdfClearBtn.addEventListener('click',async function(){
+            await clearPdfContext();
+        });
+    }
+}
 
 let myAssistants=[];
 let currentAssistantId=null;
@@ -1274,10 +1338,20 @@ if(IS_REGISTERED){document.getElementById('assistantBar').classList.add('show');
 async function sendMessage(){
     if(iw)return;
     const msgText=ui.value.trim(),img=pid;
-    if(!msgText&&!img)return;
+    if(!msgText&&!img&&!currentPdfName)return;
     stopAllAudio();
     spokenUntil=0;
     let userMsgEl=null;
+    let pdfToSend = currentPdfName;
+    if(currentPdfName){
+        addMessage('📄 ملف مرفق: '+currentPdfName,'user');
+        ch.push({role:'user',content:'[ملف مرفق: '+currentPdfName+']'});
+        var _pdfBadgeEl=document.getElementById('pdfBadge');
+        if(_pdfBadgeEl)_pdfBadgeEl.style.display='none';
+        var _clearPdfItem=document.getElementById('clearPdfBtn');
+        if(_clearPdfItem)_clearPdfItem.style.display='none';
+        currentPdfName=null;
+    }
     if(msgText){userMsgEl=addMessage(msgText,'user');ch.push({role:'user',content:msgText});}
     if(img){userMsgEl=addMessage(userLang==='en'?'Image attached':'صورة مرفقة','user',false,img);ch.push({role:'user',content:userLang==='en'?'[Image attached]':'[صورة مرفقة]'});clearPending()}
     ui.value='';ui.style.height='auto';iw=true;
@@ -1286,7 +1360,10 @@ async function sendMessage(){
     botEl.innerHTML='<span class="typing-dots">'+tr('thinking')+'</span>';
     cb.appendChild(botEl);
     if(userMsgEl)scrollMsgToTop(userMsgEl);
-    const payload={message:msgText||"مرفق",image:img||null,history:ch,conv_id:cid,lang:userLang,personality:userPersonality,assistant_id:currentAssistantId,incognito:isIncognito};
+    let _payloadMsg = msgText;
+    if(!_payloadMsg && pdfToSend) _payloadMsg = "لخص لي محتوى الملف المرفق";
+    if(!_payloadMsg) _payloadMsg = "مرفق";
+    const payload={message:_payloadMsg,image:img||null,history:ch,conv_id:cid,lang:userLang,personality:userPersonality,assistant_id:currentAssistantId,incognito:isIncognito};
     let displayText='';
     let bufferText='';
     let streamDone=false;
@@ -1388,7 +1465,7 @@ document.addEventListener('click',function(e){if(!mt.contains(e.target)&&!dd.con
 let recog=null;
 mb.addEventListener('click',function(){if(!('webkitSpeechRecognition' in window)){addMessage(tr('micUnsupported'),'bot',true);return}if(this.classList.contains('listening')){this.classList.remove('listening');if(recog)recog.stop();return}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;recog=new SR();recog.lang=userLang==='en'?'en-US':'ar-SA';this.classList.add('listening');addMessage(tr('listening'),'bot',true);recog.onresult=function(e){const tr2=e.results[0][0].transcript;ui.value=tr2;mb.classList.remove('listening');setTimeout(function(){sendMessage()},300)};recog.onerror=function(){mb.classList.remove('listening')};recog.start()});
 window.deleteMyAccount=function(){if(!confirm('حذف حسابك بالكامل؟'))return;fetch('/delete_my_account',{method:'POST'}).then(r=>r.json()).then(d=>{if(d.status==='success'){alert('تم الحذف');window.location.href='/'}});};
-window.openSettings=openSettings;window.closeSettings=closeSettings;window.setTheme=setTheme;window.setAccentColor=setAccentColor;window.openSubPage=openSubPage;window.closeSubPage=closeSubPage;window.confirmSubPage=confirmSubPage;window.selectTheme=selectTheme;window.selectColor=selectColor;window.selectLanguage=selectLanguage;window.selectPersonality=selectPersonality;window.selectFontSize=selectFontSize;window.saveGeneral=saveGeneral;window.saveVoice=saveVoice;window.selectVoiceSpeed=selectVoiceSpeed;window.selectVoiceLevel=selectVoiceLevel;window.selectTTSVoice=selectTTSVoice;window.changePassword=changePassword;window.logoutAll=logoutAll;window.clearCache=clearCache;window.exportData=exportData;window.saveAds=saveAds;window.sendReport=sendReport;window.loadPinned=loadPinned;window.loadHistory=loadHistory;window.loadConversation=loadConversation;window.loadStorageInfo=loadStorageInfo;window.getContrastColor=getContrastColor;window.toggleAssistantMenu=toggleAssistantMenu;window.selectAssistant=selectAssistant;window.openNewAssistantForm=openNewAssistantForm;window.openAssistantForm=openAssistantForm;window.pickAssistantColor=pickAssistantColor;window.saveAssistant=saveAssistant;window.deleteAssistant=deleteAssistant;window.loadAssistantsPage=loadAssistantsPage;window.loadLibraryStore=loadLibraryStore;window.addFromLibrary=addFromLibrary;window.showContextMenu=showContextMenu;window.ctxAction=ctxAction;window.hideContextMenu=hideContextMenu;window.toggleIncognito=toggleIncognito;
+window.openSettings=openSettings;window.closeSettings=closeSettings;window.setTheme=setTheme;window.setAccentColor=setAccentColor;window.openSubPage=openSubPage;window.closeSubPage=closeSubPage;window.confirmSubPage=confirmSubPage;window.selectTheme=selectTheme;window.selectColor=selectColor;window.selectLanguage=selectLanguage;window.selectPersonality=selectPersonality;window.selectFontSize=selectFontSize;window.saveGeneral=saveGeneral;window.saveVoice=saveVoice;window.selectVoiceSpeed=selectVoiceSpeed;window.selectVoiceLevel=selectVoiceLevel;window.selectTTSVoice=selectTTSVoice;window.changePassword=changePassword;window.logoutAll=logoutAll;window.clearCache=clearCache;window.exportData=exportData;window.saveAds=saveAds;window.sendReport=sendReport;window.loadPinned=loadPinned;window.loadHistory=loadHistory;window.loadConversation=loadConversation;window.loadStorageInfo=loadStorageInfo;window.getContrastColor=getContrastColor;window.toggleAssistantMenu=toggleAssistantMenu;window.selectAssistant=selectAssistant;window.openNewAssistantForm=openNewAssistantForm;window.openAssistantForm=openAssistantForm;window.pickAssistantColor=pickAssistantColor;window.saveAssistant=saveAssistant;window.deleteAssistant=deleteAssistant;window.loadAssistantsPage=loadAssistantsPage;window.loadLibraryStore=loadLibraryStore;window.addFromLibrary=addFromLibrary;window.showContextMenu=showContextMenu;window.ctxAction=ctxAction;window.hideContextMenu=hideContextMenu;window.toggleIncognito=toggleIncognito;window.clearPdfContext=clearPdfContext;
 applyLang();
 setTimeout(function(){
     try {
@@ -1396,7 +1473,7 @@ setTimeout(function(){
         var hour = now.getHours();
         var today = now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate();
         var lastNewsDate = localStorage.getItem('nibras_morning_news_date');
-        if (hour >= 5 && hour < 11 && lastNewsDate !== today) {
+        if (IS_ADMIN && hour >= 5 && hour < 11 && lastNewsDate !== today) {
             localStorage.setItem('nibras_morning_news_date', today);
             ui.value = "جيب لي أخبار اليوم";
             sendMessage();
