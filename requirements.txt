@@ -15,3 +15,7 @@ bleach
 gunicorn
 gevent
 redis
+PyPDF2
+duckduckgo-search
+python-docx
+PyMuPDF
