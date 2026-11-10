@@ -25,6 +25,10 @@ import markdown
 import bleach
 import uuid
 from gtts import gTTS
+import fitz # <--- مكتبة PyMuPDF الاحترافية لقراءة PDF
+from docx import Document
+import email
+from email import policy
 
 # استدعاء الواجهات من الملف المنفصل
 from templates_content import (
@@ -70,14 +74,17 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+# ذاكرة مؤقتة للضيوف فقط (المسجلين ينحفظ ملفهم في قاعدة البيانات)
+user_pdf_context = {} 
+
 # ==============================================================================
 # 2. إعداد Redis و Rate Limiting
 # ==============================================================================
-REDIS_URL = os.environ.get("REDIS_URL") # ضيفه في رندير
+REDIS_URL = os.environ.get("REDIS_URL")
 LIMITS = {
-    "guest": {"chat": 15,  "search": 0,   "image": 0},
-    "user":  {"chat": 15,  "search": 2,   "image": 1},
-    "admin": {"chat": 9999, "search": 9999, "image": 9999},
+    "guest": {"chat": 15,  "search": 0,   "image": 0, "file": 0},
+    "user":  {"chat": 15,  "search": 2,   "image": 1, "file": 3},
+    "admin": {"chat": 9999, "search": 9999, "image": 9999, "file": 9999},
 }
 
 def get_user_ip():
@@ -129,70 +136,70 @@ def service_worker():
 # ==============================================================================
 # 3. الدوال المساعدة (Auth, Profiles, Memory, Limits, Conversations)
 # ==============================================================================
-def get_user_role(email):
-    if not email: return 'guest'
-    if email.lower() == ADMIN_EMAIL.lower(): return 'admin'
+def get_user_role(email_str):
+    if not email_str: return 'guest'
+    if email_str.lower() == ADMIN_EMAIL.lower(): return 'admin'
     try:
-        r = (sb.table("profiles").select("role").eq("email", email.lower()).limit(1).execute())
+        r = (sb.table("profiles").select("role").eq("email", email_str.lower()).limit(1).execute())
         if r and r.data and r.data[0].get("role"): return r.data[0]["role"]
     except Exception as e: print("get_user_role:", e)
     return 'user'
 
-def get_user_profile(email):
-    if not email: return None
+def get_user_profile(email_str):
+    if not email_str: return None
     try:
-        r = (sb.table("profiles").select("*").eq("email", email.lower().strip()).limit(1).execute())
+        r = (sb.table("profiles").select("*").eq("email", email_str.lower().strip()).limit(1).execute())
         if r and r.data: return r.data[0]
     except Exception as e: print("get_user_profile:", e)
     return None
 
-def save_user_profile(email, name=None, avatar=None):
-    if not email: return
+def save_user_profile(email_str, name=None, avatar=None):
+    if not email_str: return
     try:
-        data = {"email": email.lower().strip()}
+        data = {"email": email_str.lower().strip()}
         if name is not None: data["display_name"] = name
         if avatar is not None: data["avatar_url"] = avatar
         sb.table("profiles").upsert(data, on_conflict="email").execute()
     except Exception as e: print("save_user_profile:", e)
 
-def touch_user(email):
-    if not email: return
+def touch_user(email_str):
+    if not email_str: return
     try:
-        sb.table("profiles").update({"last_seen": datetime.utcnow().isoformat()}).eq("email", email.lower().strip()).execute()
+        sb.table("profiles").update({"last_seen": datetime.utcnow().isoformat()}).eq("email", email_str.lower().strip()).execute()
     except Exception as e: print("touch_user:", e)
 
-def get_user_memory(email):
-    if not email: return {}
+def get_user_memory(email_str):
+    if not email_str: return {}
     try:
-        r = (sb.table("profiles").select("memory").eq("email", email.lower().strip()).limit(1).execute())
+        r = (sb.table("profiles").select("memory").eq("email", email_str.lower().strip()).limit(1).execute())
         if r and r.data and r.data[0].get("memory"): return r.data[0]["memory"] or {}
     except Exception as e: print("get_user_memory:", e)
     return {}
 
-def save_user_memory(email, memory_dict):
-    if not email: return
+def save_user_memory(email_str, memory_dict):
+    if not email_str: return
     try:
-        sb.table("profiles").update({"memory": memory_dict}).eq("email", email.lower().strip()).execute()
+        sb.table("profiles").update({"memory": memory_dict}).eq("email", email_str.lower().strip()).execute()
     except Exception as e: print("save_user_memory:", e)
 
 PROFILE_SUMMARY_MODEL = os.environ.get("PROFILE_SUMMARY_MODEL") or OPENAI_MODEL
 PROFILE_SUMMARY_INTERVAL = 12
 
-def get_user_profile_summary(email):
-    if not email: return {}
+def get_user_profile_summary(email_str):
+    if not email_str: return {}
     try:
-        mem = get_user_memory(email) or {}
+        mem = get_user_memory(email_str) or {}
         s = mem.get('profile_summary') or {}
         return s if isinstance(s, dict) else {}
     except Exception as e: return {}
 
-def save_user_profile_summary(email, summary):
-    if not email or not isinstance(summary, dict): return
+def save_user_profile_summary(email_str, summary):
+    if not email_str or not isinstance(summary, dict): return
     try:
-        mem = get_user_memory(email) or {}
+        mem = get_user_memory(email_str) or {}
         mem['profile_summary'] = summary
         mem['profile_summary_updated_at'] = datetime.utcnow().isoformat()
-        save_user_memory(email, mem)
+        save_user_memory(email_str, mem)
     except Exception as e: print("save_user_profile_summary:", e)
 
 def format_profile_summary_for_prompt(summary):
@@ -290,36 +297,36 @@ def extract_profile_summary_from_messages(existing_summary, new_messages):
         print("extract_profile_summary:", e)
         return None
 
-def update_profile_summary_async(email, existing, new_messages):
+def update_profile_summary_async(email_str, existing, new_messages):
     def worker():
         try:
             updated = extract_profile_summary_from_messages(existing, new_messages)
             if updated:
-                save_user_profile_summary(email, updated)
-                print(f"✅ profile summary updated for {email}")
+                save_user_profile_summary(email_str, updated)
+                print(f"✅ profile summary updated for {email_str}")
         except Exception as e:
             print("profile summary worker:", e)
     threading.Thread(target=worker, daemon=True).start()
 
-def get_user_language(email):
-    if not email: return 'ar'
-    mem = get_user_memory(email)
+def get_user_language(email_str):
+    if not email_str: return 'ar'
+    mem = get_user_memory(email_str)
     lang = mem.get('lang')
     if lang in ('ar', 'en'): return lang
     return 'ar'
 
-def get_pinned_convs(email):
-    if not email: return []
+def get_pinned_convs(email_str):
+    if not email_str: return []
     try:
-        r = (sb.table("profiles").select("pinned_convs").eq("email", email.lower().strip()).limit(1).execute())
+        r = (sb.table("profiles").select("pinned_convs").eq("email", email_str.lower().strip()).limit(1).execute())
         if r and r.data and r.data[0].get("pinned_convs"): return r.data[0]["pinned_convs"] or []
     except Exception as e: print("get_pinned_convs:", e)
     return []
 
-def save_pinned_convs(email, pinned_list):
-    if not email: return
+def save_pinned_convs(email_str, pinned_list):
+    if not email_str: return
     try:
-        sb.table("profiles").update({"pinned_convs": pinned_list}).eq("email", email.lower().strip()).execute()
+        sb.table("profiles").update({"pinned_convs": pinned_list}).eq("email", email_str.lower().strip()).execute()
     except Exception as e: print("save_pinned_convs:", e)
 
 def get_user_id():
@@ -340,7 +347,7 @@ def get_usage_today(uid):
         r = (sb.table("assistant_usage").select("*").eq("user_id", uid).eq("date", today).limit(1).execute())
         if r and r.data: return r.data[0]
     except Exception as e: print("get_usage_today select:", e)
-    new_row = {"user_id": uid, "date": today, "chat_count": 0, "image_count": 0, "search_count": 0}
+    new_row = {"user_id": uid, "date": today, "chat_count": 0, "image_count": 0, "search_count": 0, "file_count": 0}
     try:
         r = sb.table("assistant_usage").insert(new_row).execute()
         if r and r.data: return r.data[0]
@@ -356,13 +363,14 @@ def inc_usage(uid, field):
     except Exception as e: print("inc_usage:", e)
     return current
 
-def check_limits(uid, role, email=None):
+def check_limits(uid, role, email_str=None):
     usage = get_usage_today(uid)
     limits = LIMITS.get(role, LIMITS["guest"])
     can_chat = int(usage.get("chat_count", 0) or 0) < limits["chat"]
     can_search = int(usage.get("search_count", 0) or 0) < limits["search"]
     can_image = int(usage.get("image_count", 0) or 0) < limits["image"]
-    return usage, limits, can_chat, can_search, can_image
+    can_file = int(usage.get("file_count", 0) or 0) < limits.get("file", 0)
+    return usage, limits, can_chat, can_search, can_image, can_file
 
 def get_user_conversations(uid):
     try:
@@ -904,17 +912,17 @@ def format_news_reply(articles, lang="ar"):
 @app.route('/')
 def index():
     user_name = None
-    email = session.get('user_email')
-    is_registered = bool(email) or bool(session.get('is_admin'))
-    is_admin = bool(session.get('is_admin')) or (email and email.lower() == ADMIN_EMAIL.lower())
+    email_str = session.get('user_email')
+    is_registered = bool(email_str) or bool(session.get('is_admin'))
+    is_admin = bool(session.get('is_admin')) or (email_str and email_str.lower() == ADMIN_EMAIL.lower())
     user_lang = ''
-    if email and not session.get('is_admin'):
-        p = get_user_profile(email)
+    if email_str and not session.get('is_admin'):
+        p = get_user_profile(email_str)
         if p:
-            user_name = p.get("display_name") or email.split("@")[0]
+            user_name = p.get("display_name") or email_str.split("@")[0]
         else:
-            user_name = email.split("@")[0]
-        mem = get_user_memory(email)
+            user_name = email_str.split("@")[0]
+        mem = get_user_memory(email_str)
         if mem.get('name'):
             user_name = mem['name']
         lang_from_mem = mem.get('lang')
@@ -989,6 +997,110 @@ def library_delete():
     except Exception as e:
         print("library_delete:", e)
         return jsonify({"status": "error", "message": "حدث خطأ داخلي"}), 500
+
+@app.route('/upload_pdf', methods=['POST'])
+def upload_pdf():
+    try:
+        user_email = session.get('user_email', '')
+        is_admin = bool(session.get('is_admin'))
+        user_role = get_user_role(user_email) if user_email else 'guest'
+        is_registered = is_admin or (bool(user_email) and user_role in ('user', 'admin'))
+        
+        if not is_registered:
+            return jsonify({"status": "error", "message": "رفع الملفات للمسجلين فقط."}), 403
+
+        uid = get_user_id()
+        usage, limits, can_chat, can_search, can_image, can_file = check_limits(
+            uid,
+            user_role if not is_admin else 'admin',
+            email_str=user_email or None
+        )
+
+        if not can_file:
+            return jsonify({"status": "error", "message": "وصلت للحد الأقصى لرفع الملفات اليوم."}), 429
+
+        if 'file' not in request.files:
+            return jsonify({"status": "error", "message": "لم يتم إرسال ملف"}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"status": "error", "message": "اسم الملف فارغ"}), 400
+
+        ext = file.filename.lower().split('.')[-1]
+        if ext not in ['pdf', 'docx', 'eml', 'txt']:
+            return jsonify({"status": "error", "message": "ندعم فقط ملفات PDF, Word, Email, TXT"}), 400
+
+        text = ""
+
+        if ext == 'pdf':
+            file_bytes = file.read()
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            if len(doc) > 100:
+                return jsonify({"status": "error", "message": "الملف كبير جداً (الحد 100 صفحة)"}), 400
+            for page in doc:
+                extracted = page.get_text("text")
+                if extracted:
+                    text += extracted + "\n"
+            doc.close()
+        elif ext == 'docx':
+            doc = Document(file)
+            for para in doc.paragraphs:
+                if para.text:
+                    text += para.text + "\n"
+        elif ext == 'eml':
+            msg = email.message_from_bytes(file.read(), policy=policy.default)
+            subject = msg.get('Subject', 'بدون موضوع')
+            sender = msg.get('From', 'غير معروف')
+            date = msg.get('Date', '')
+            text += f"الموضوع: {subject}\nالمرسل: {sender}\nالتاريخ: {date}\n\n"
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        try: text += part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='ignore')
+                        except: pass
+            else:
+                try: text += msg.get_payload(decode=True).decode(msg.get_content_charset() or 'utf-8', errors='ignore')
+                except: pass
+        elif ext == 'txt':
+            text = file.read().decode('utf-8', errors='ignore')
+
+        if not text.strip():
+            return jsonify({"status": "error", "message": "تعذر استخراج نص من الملف (قد يكون فارغ)"}), 400
+
+        chunks = [text[i:i+1500] for i in range(0, len(text), 1500)]
+        
+        # ⬅️ الحفظ في قاعدة البيانات للمسجلين، وفي الذاكرة للضيوف
+        if is_registered and user_email:
+            # مسح الملف القديم إن وجد
+            sb.table("user_files").delete().eq("user_id", uid).execute()
+            # إدخال الملف الجديد
+            sb.table("user_files").insert({
+                "user_id": uid,
+                "filename": file.filename,
+                "chunks": chunks
+            }).execute()
+        else:
+            user_pdf_context[uid] = {"filename": file.filename, "chunks": chunks}
+        
+        inc_usage(uid, "file_count")
+        
+        return jsonify({"status": "ok", "message": "تم تجهيز الملف بنجاح!", "filename": file.filename})
+    except Exception as e:
+        print("upload_pdf error:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/clear_pdf', methods=['POST'])
+def clear_pdf():
+    uid = get_user_id()
+    user_pdf_context.pop(uid, None)
+    
+    user_email = session.get('user_email')
+    if user_email:
+        try:
+            sb.table("user_files").delete().eq("user_id", uid).execute()
+        except Exception as e:
+            print("clear_pdf error:", e)
+            
+    return jsonify({"status": "ok"})
 
 @app.route('/my_assistants')
 def my_assistants():
@@ -1069,10 +1181,10 @@ def delete_assistant():
 
 @app.route('/pinned_conversations')
 def pinned_conversations():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"pinned": []})
-    pinned_ids = get_pinned_convs(email)
+    pinned_ids = get_pinned_convs(email_str)
     if not pinned_ids:
         return jsonify({"pinned": []})
     all_convs = get_user_conversations(get_user_id())
@@ -1080,28 +1192,28 @@ def pinned_conversations():
 
 @app.route('/pin_conversation', methods=['POST'])
 def pin_conversation():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "error"}), 401
     d = request.get_json(silent=True) or {}
     cid = d.get('conv_id')
-    pinned = get_pinned_convs(email)
+    pinned = get_pinned_convs(email_str)
     if cid not in pinned:
         pinned.append(cid)
-        save_pinned_convs(email, pinned)
+        save_pinned_convs(email_str, pinned)
     return jsonify({"status": "ok"})
 
 @app.route('/unpin_conversation', methods=['POST'])
 def unpin_conversation():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "error"}), 401
     d = request.get_json(silent=True) or {}
     cid = d.get('conv_id')
-    pinned = get_pinned_convs(email)
+    pinned = get_pinned_convs(email_str)
     if cid in pinned:
         pinned.remove(cid)
-        save_pinned_convs(email, pinned)
+        save_pinned_convs(email_str, pinned)
     return jsonify({"status": "ok"})
 
 @app.route('/delete_conversation', methods=['POST'])
@@ -1115,12 +1227,12 @@ def delete_conversation():
     uid = get_user_id()
     try:
         sb.table("assistant_chats").delete().eq("user_id", uid).eq("conv_id", conv_id).execute()
-        email = session.get('user_email')
-        if email:
-            pinned = get_pinned_convs(email)
+        email_str = session.get('user_email')
+        if email_str:
+            pinned = get_pinned_convs(email_str)
             if conv_id in pinned:
                 pinned.remove(conv_id)
-                save_pinned_convs(email, pinned)
+                save_pinned_convs(email_str, pinned)
         return jsonify({"status": "ok"})
     except Exception as e:
         print("delete_conversation:", e)
@@ -1147,8 +1259,8 @@ def rename_conversation():
 def history():
     uid = get_user_id()
     cs = get_user_conversations(uid)
-    email = session.get('user_email')
-    pinned_ids = get_pinned_convs(email) if email else []
+    email_str = session.get('user_email')
+    pinned_ids = get_pinned_convs(email_str) if email_str else []
     return jsonify({"conversations": [{"id": c["id"], "title": c["title"], "pinned": c["id"] in pinned_ids} for c in cs]})
 
 @app.route('/load_conversation/<cid>')
@@ -1182,16 +1294,16 @@ def delete_message():
 
 @app.route('/get_memory')
 def get_memory_route():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "guest", "items": {}})
     try:
-        mem = get_user_memory(email) or {}
+        mem = get_user_memory(email_str) or {}
         return jsonify({
             "name": mem.get('name', ''),
             "lang": mem.get('lang', 'ar'),
             "personality": mem.get('personality', 'friendly'),
-            "email": email,
+            "email": email_str,
             "profile_summary": mem.get('profile_summary') or {},
             "nickname": mem.get('nickname', ''),
             "job": mem.get('job', ''),
@@ -1204,33 +1316,33 @@ def get_memory_route():
 
 @app.route('/update_manual_memory', methods=['POST'])
 def update_manual_memory():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "error", "message": "سجّل دخولك أولاً"}), 401
     d = request.get_json(silent=True) or {}
-    mem = get_user_memory(email) or {}
+    mem = get_user_memory(email_str) or {}
     if 'nickname' in d: mem['nickname'] = (d.get('nickname') or '').strip()[:100]
     if 'job' in d: mem['job'] = (d.get('job') or '').strip()[:200]
     if 'more_about' in d: mem['more_about'] = (d.get('more_about') or '').strip()[:1000]
-    save_user_memory(email, mem)
+    save_user_memory(email_str, mem)
     return jsonify({"status": "ok"})
 
 @app.route('/toggle_memory', methods=['POST'])
 def toggle_memory():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "error"}), 401
     d = request.get_json(silent=True) or {}
     enabled = bool(d.get('enabled', True))
-    mem = get_user_memory(email) or {}
+    mem = get_user_memory(email_str) or {}
     mem['memory_enabled'] = enabled
-    save_user_memory(email, mem)
+    save_user_memory(email_str, mem)
     return jsonify({"status": "ok", "enabled": enabled})
 
 @app.route('/delete_my_account', methods=['POST'])
 def delete_my_account():
-    email = session.get('user_email')
-    if not email or session.get('is_admin'):
+    email_str = session.get('user_email')
+    if not email_str or session.get('is_admin'):
         return jsonify({"status": "error"}), 400
     uid = get_user_id()
     try:
@@ -1248,7 +1360,7 @@ def delete_my_account():
             users_payload = ar.json()
             auth_users = users_payload.get("users", []) if isinstance(users_payload, dict) else []
             for auth_user in auth_users:
-                if (auth_user.get("email") or "").lower() == email.lower():
+                if (auth_user.get("email") or "").lower() == email_str.lower():
                     auth_user_id = auth_user.get("id")
                     break
             if auth_user_id or len(auth_users) < 100:
@@ -1259,7 +1371,8 @@ def delete_my_account():
         sb.table("assistant_usage").delete().eq("user_id", uid).execute()
         sb.table("image_library").delete().eq("user_id", uid).execute()
         sb.table("custom_assistants").delete().eq("user_id", uid).execute()
-        sb.table("profiles").delete().eq("email", email.lower()).execute()
+        sb.table("user_files").delete().eq("user_id", uid).execute()
+        sb.table("profiles").delete().eq("email", email_str.lower()).execute()
         dr = requests.delete(
             f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
             headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"}, timeout=15
@@ -1278,15 +1391,15 @@ def update_profile():
     lang = d.get('lang')
     if not name or len(name) < 2:
         return jsonify({"status": "error"}), 400
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "error", "message": "سجّل دخولك أولاً"}), 401
-    save_user_profile(email, name=name)
-    mem = get_user_memory(email) or {}
+    save_user_profile(email_str, name=name)
+    mem = get_user_memory(email_str) or {}
     mem['name'] = name
     if lang in ('ar', 'en'):
         mem['lang'] = lang
-    save_user_memory(email, mem)
+    save_user_memory(email_str, mem)
     return jsonify({"status": "ok"})
 
 @app.route('/update_language', methods=['POST'])
@@ -1295,12 +1408,12 @@ def update_language():
     lang = d.get('lang')
     if lang not in ('ar', 'en'):
         return jsonify({"status": "error"}), 400
-    email = session.get('user_email')
-    if email:
+    email_str = session.get('user_email')
+    if email_str:
         try:
-            mem = get_user_memory(email) or {}
+            mem = get_user_memory(email_str) or {}
             mem['lang'] = lang
-            save_user_memory(email, mem)
+            save_user_memory(email_str, mem)
         except Exception as e:
             print("update_language:", e)
     return jsonify({"status": "ok"})
@@ -1311,20 +1424,20 @@ def update_personality():
     p = d.get('personality')
     if p not in PERSONALITY_INSTRUCTIONS:
         return jsonify({"status": "error", "message": "شخصية غير صالحة"}), 400
-    email = session.get('user_email')
-    if email:
+    email_str = session.get('user_email')
+    if email_str:
         try:
-            mem = get_user_memory(email) or {}
+            mem = get_user_memory(email_str) or {}
             mem['personality'] = p
-            save_user_memory(email, mem)
+            save_user_memory(email_str, mem)
         except Exception as e:
             print("update_personality:", e)
     return jsonify({"status": "ok"})
 
 @app.route('/change_password', methods=['POST'])
 def change_password():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return jsonify({"status": "error", "message": "سجّل دخولك أولاً"}), 401
     d = request.get_json(silent=True) or {}
     oldp = d.get('old_password', '')
@@ -1336,7 +1449,7 @@ def change_password():
     try:
         r = requests.post(f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
             headers={"apikey": SUPABASE_KEY, "Content-Type": "application/json"},
-            json={"email": email, "password": oldp}, timeout=15)
+            json={"email": email_str, "password": oldp}, timeout=15)
     except Exception as e:
         print(f"change_password: login request error: {e}")
         return jsonify({"status": "error", "message": "تعذر الاتصال بخدمة المصادقة"}), 500
@@ -1388,7 +1501,7 @@ def change_password():
                 payload = ar.json()
                 users = payload.get("users", []) if isinstance(payload, dict) else []
                 for u in users:
-                    if (u.get("email") or "").lower() == email.lower():
+                    if (u.get("email") or "").lower() == email_str.lower():
                         auth_user_id = u.get("id")
                         break
                 if auth_user_id or len(users) < 100:
@@ -1413,13 +1526,13 @@ def change_password():
 
 @app.route('/export_data')
 def export_data():
-    email = session.get('user_email')
-    if not email:
+    email_str = session.get('user_email')
+    if not email_str:
         return "يجب تسجيل الدخول", 401
     uid = get_user_id()
-    data = {"user_email": email, "conversations": get_user_conversations(uid), "images_count": len(get_user_images(uid))}
+    data = {"user_email": email_str, "conversations": get_user_conversations(uid), "images_count": len(get_user_images(uid))}
     resp = jsonify(data)
-    resp.headers['Content-Disposition'] = f'attachment; filename=nibras_data_{email}.json'
+    resp.headers['Content-Disposition'] = f'attachment; filename=nibras_data_{email_str}.json'
     return resp
 
 @app.route('/report_bug', methods=['POST'])
@@ -1640,21 +1753,21 @@ def oauth_session():
         if r.status_code != 200:
             return jsonify({"status": "error", "message": "توكن غير صالح"}), 401
         u = r.json()
-        email = (u.get('email') or '').lower().strip()
-        if not email:
+        email_str = (u.get('email') or '').lower().strip()
+        if not email_str:
             return jsonify({"status": "error", "message": "بريد غير موجود بالحساب"}), 400
         session.clear()
         session.permanent = True
-        session['user_email'] = email
-        session['is_admin'] = (email == ADMIN_EMAIL.lower())
-        session['user_role'] = get_user_role(email)
+        session['user_email'] = email_str
+        session['is_admin'] = (email_str == ADMIN_EMAIL.lower())
+        session['user_role'] = get_user_role(email_str)
         try:
             meta = u.get('user_metadata') or {}
-            name = (meta.get('full_name') or meta.get('name') or email.split('@')[0]).strip()
-            if not get_user_profile(email):
-                save_user_profile(email, name=name)
-                save_user_memory(email, {"name": name})
-            touch_user(email)
+            name = (meta.get('full_name') or meta.get('name') or email_str.split('@')[0]).strip()
+            if not get_user_profile(email_str):
+                save_user_profile(email_str, name=name)
+                save_user_memory(email_str, {"name": name})
+            touch_user(email_str)
         except Exception as e:
             print("oauth_session profile:", e)
         return jsonify({"status": "ok"})
@@ -1894,7 +2007,7 @@ def chat():
         cid = d.get("conv_id")
         img_data = d.get("image")
         assistant_id = d.get("assistant_id")
-        incognito = d.get("incognito", False) # <--- تفعيل وضع التخفي
+        incognito = d.get("incognito", False)
         
         if len(um) > 12000:
             return jsonify({"status": "error", "message": "الرسالة طويلة جدًا (الحد 12000 حرف)"}), 413
@@ -1928,10 +2041,10 @@ def chat():
             except Exception as e:
                 print(f"assistant load: {e}")
 
-        usage, limits, can_chat, can_search, can_image = check_limits(
+        usage, limits, can_chat, can_search, can_image, can_file = check_limits(
             uid,
             user_role if not is_admin else 'admin',
-            email=user_email or None
+            email_str=user_email or None
         )
         if not can_chat:
             reply_limit = "وصل محادثاتك للحد اليومي المسموح به، شكراً لك، غداً نلتقي" if user_lang == 'ar' else "You've reached the daily limit. Thank you, see you tomorrow"
@@ -1973,7 +2086,6 @@ def chat():
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
                 )
         
-        # وضع التخفي يمنع تحميل الذاكرة
         user_memory = get_user_memory(user_email) if (user_email and not incognito) else {}
         memory_enabled = (user_memory.get('memory_enabled', True) if user_email else False) if not incognito else False
         
@@ -2040,8 +2152,63 @@ def chat():
         except Exception as e:
             print("Error fetching approved knowledge:", e)
 
+        # ⬇️ حقن سياق الملف المرفق (من قاعدة البيانات للمسجلين)
+        pdf_context = ""
+        pdf_data = None
+        
+        if is_registered:
+            try:
+                res_file = sb.table("user_files").select("*").eq("user_id", uid).limit(1).execute()
+                if res_file.data:
+                    pdf_data = res_file.data[0]
+            except Exception as e:
+                print("get user_files error:", e)
+        elif uid in user_pdf_context:
+            pdf_data = user_pdf_context[uid]
+
+        if pdf_data:
+            pdf_filename = pdf_data.get("filename", "الملف")
+            chunks = pdf_data.get("chunks", [])
+            
+            query_words = set(re.findall(r'\w+', um.lower()))
+            scores = []
+            for i, chunk in enumerate(chunks):
+                chunk_words = set(re.findall(r'\w+', chunk.lower()))
+                overlap = len(query_words.intersection(chunk_words))
+                scores.append((overlap, i, chunk))
+            scores.sort(key=lambda x: (x[0], -x[1]), reverse=True)
+            best_chunks = [c for s, i, c in scores[:3] if s > 0]
+            
+            if not best_chunks:
+                best_chunks = chunks[:3]
+                
+            if best_chunks:
+                pdf_context = (
+                    f"\n\n**📄 المستخدم رفع ملف باسم: {pdf_filename}**\n"
+                    f"**تعليمات مهمة:** إذا كان سؤال المستخدم عن الملف (مثل: لخص، اشرح، وش فيه، اقرأ، عن ماذا يتحدث، حلل الملف) → استخدم المحتوى التالي وأجب منه. "
+                    f"أما لو سأل عن شيء آخر (سلام، أخبار، أسئلة عامة) → تجاهل هذا السياق تماماً ولا تذكر الملف.\n\n"
+                    f"**محتوى من الملف:**\n" + "\n...\n".join(best_chunks) + "\n"
+                )
+                print(f"--- [PDF] Injected {len(best_chunks)} chunks from '{pdf_filename}' ---")
+        else:
+            has_file_in_history = False
+            if "[ملف مرفق:" in um:
+                has_file_in_history = True
+            else:
+                for m in server_hist[-3:]:
+                    if isinstance(m.get("content"), str) and "[ملف مرفق:" in m.get("content"):
+                        has_file_in_history = True
+                        break
+            
+            if has_file_in_history:
+                pdf_context = (
+                    "\n\n**🚨 تنبيه هام جداً للنظام: المستخدم يعتقد أنه رفع ملفاً، لكن النظام فقد هذا الملف.**\n"
+                    "**يجب عليك أن تعتذر منه بلطف بالعامي وتوضح له أن الملف قد انقطع وتطلب منه إعادة رفعه مرة أخرى.**\n"
+                )
+        # ⬆️ نهاية الإضافة
+
         msgs = [{"role": "system", "content": 
-            personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + approved_knowledge_context + lang_inst + assistant_persona_extra
+            personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + approved_knowledge_context + pdf_context + lang_inst + assistant_persona_extra
         }] + server_hist[-40:]
 
         news_articles = None
@@ -2141,7 +2308,7 @@ def chat():
                 ]) or ("ما قدرت أجيب رد." if user_lang == 'ar' else "I couldn't generate a response.")
                 nid = cid
                 
-                if is_registered and not incognito: # <--- منع الحفظ في وضع التخفي
+                if is_registered and not incognito:
                     nid = save_message(uid, um or "[صورة مرفقة]", cleaned, cid)
                 else:
                     if not nid:
@@ -2152,10 +2319,10 @@ def chat():
                     inc_usage(uid, "image_count")
                 yield f"data: {json.dumps({'done': True, 'conv_id': nid})}\n\n"
 
-                if is_registered and not has_image and um and not incognito: # <--- منع التعلم التلقائي في وضع التخفي
+                if is_registered and not has_image and um and not incognito:
                     auto_learn_knowledge_async(um, cleaned)
 
-                if is_registered and user_email and not has_image and memory_enabled and not incognito: # <--- منع تحديث الذاكرة في وضع التخفي
+                if is_registered and user_email and not has_image and memory_enabled and not incognito:
                     try:
                         pair_count = (len(server_hist) + 1) // 2
                         if pair_count >= 2 and pair_count % 2 == 0:
