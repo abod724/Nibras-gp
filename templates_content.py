@@ -297,6 +297,22 @@ html.dark-mode .sp-btn-danger:hover{background:rgba(248,81,73,0.2)}
 .nibras-response p{margin:0 0 10px;color:var(--text-primary)}
 .nibras-response em{color:var(--text-secondary);font-size:0.9em;display:inline-block;margin-bottom:6px;font-style:normal}
 .nibras-response hr{border:0;height:1px;background:var(--border-color);margin:18px 0}
+.code-block{direction:ltr;text-align:left;margin:12px 0;border:1px solid var(--border-color);border-radius:14px;overflow:hidden;background:#f6f8fa;max-width:100%;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.code-block-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;background:#eef2f6;border-bottom:1px solid #dce2e9;}
+.code-language{font-size:11px;font-weight:800;color:#526174;letter-spacing:.3px;text-transform:uppercase;}
+.code-copy-btn{border:1px solid #cbd5df;border-radius:8px;background:#fff;color:#344256;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+.code-copy-btn:active{transform:scale(.96)}.code-copy-btn.copied{background:#166534;border-color:#166534;color:#fff}
+.code-block pre{margin:0;padding:14px;max-width:100%;overflow-x:auto;white-space:pre;direction:ltr;text-align:left;-webkit-overflow-scrolling:touch;}
+.code-block pre code{font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.7;color:#24292f;white-space:pre;word-break:normal;overflow-wrap:normal;}
+.code-block .tok-keyword{color:#8250df;font-weight:700}.code-block .tok-string{color:#0a7b43}.code-block .tok-comment{color:#6e7781;font-style:italic}.code-block .tok-number{color:#0550ae}.code-block .tok-literal{color:#cf222e;font-weight:600}
+html.dark-mode .code-block,html[data-theme="neon"] .code-block{background:#111923;border-color:#344252;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+html.dark-mode .code-block-head,html[data-theme="neon"] .code-block-head{background:#1b2733;border-bottom-color:#344252}
+html.dark-mode .code-language,html[data-theme="neon"] .code-language{color:#cbd5e1}
+html.dark-mode .code-copy-btn,html[data-theme="neon"] .code-copy-btn{border-color:#465568;background:#263445;color:#f1f5f9}
+html.dark-mode .code-block pre code,html[data-theme="neon"] .code-block pre code{color:#e6edf3}
+html.dark-mode .code-block .tok-keyword,html[data-theme="neon"] .code-block .tok-keyword{color:#d2a8ff}html.dark-mode .code-block .tok-string,html[data-theme="neon"] .code-block .tok-string{color:#a5d6a7}html.dark-mode .code-block .tok-comment,html[data-theme="neon"] .code-block .tok-comment{color:#8b949e}html.dark-mode .code-block .tok-number,html[data-theme="neon"] .code-block .tok-number{color:#79c0ff}html.dark-mode .code-block .tok-literal,html[data-theme="neon"] .code-block .tok-literal{color:#ff7b72}
+.inline-code{direction:ltr;unicode-bidi:isolate;background:var(--bg-hover);border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-family:Consolas,'Courier New',monospace;font-size:.9em;}
+html.dark-mode .inline-code{color:#e6edf3;}
 .nibras-response strong{font-weight:800;color:var(--text-primary)}
 .nibras-response a{color:var(--primary-color);text-decoration:none;font-weight:600;display:inline-block;padding:4px 0}
 .nibras-response a:hover{text-decoration:underline}
@@ -1142,14 +1158,76 @@ document.querySelector('[data-action="new"]').addEventListener('click',function(
 document.querySelector('[data-action="share"]').addEventListener('click',function(e){e.stopPropagation();dd.classList.remove('show');const msgs=ch.slice(-20).map(function(m){return{r:m.role==='user'?'u':'b',c:String(m.content||'').slice(0,500)};}).filter(function(m){return m.c;});if(!msgs||msgs.length===0){showToast(userLang==='en'?'No conversation to share':'لا توجد محادثة لمشاركتها');return;}const text=userLang==='en'?'Check out my conversation with Nibras':'شوف محادثتي مع نبراس';if(IS_REGISTERED&&cid&&!String(cid).startsWith('guest_conv_')){const dbUrl=window.location.origin+'/share/'+cid;document.getElementById('shareWhatsapp').href='https://wa.me/?text='+encodeURIComponent(text+'\n'+dbUrl);document.getElementById('shareFacebook').href='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(dbUrl);document.getElementById('shareTwitter').href='https://twitter.com/intent/tweet?url='+encodeURIComponent(dbUrl)+'&text='+encodeURIComponent(text);document.getElementById('shareSnapchat').onclick=function(){navigator.clipboard.writeText(dbUrl).then(function(){showToast(userLang==='en'?'Link copied':'تم نسخ الرابط');}).catch(function(){showToast(userLang==='en'?'Copy failed':'فشل النسخ');});};sm.classList.add('show');}else{let url='';try{const json=JSON.stringify(msgs);const encoded=btoa(unescape(encodeURIComponent(json)));url=window.location.origin+'/share/view#d='+encodeURIComponent(encoded);}catch(err){showToast(userLang==='en'?'Failed to prepare link':'تعذر تجهيز الرابط');return;}if(url.length>60000){showToast(userLang==='en'?'Conversation too long to share':'المحادثة طويلة جداً للمشاركة');return;}if(navigator.share){navigator.share({title:userLang==='en'?'Nibras Conversation':'محادثة نبراس',text:text,url:url}).catch(function(){});}else{navigator.clipboard.writeText(url).then(function(){showToast(userLang==='en'?'Link copied':'تم نسخ الرابط');}).catch(function(){showToast(userLang==='en'?'Copy failed':'فشل النسخ');});}}});
 
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function highlightCode(code, language){
+    const keywords = new Set(('and as assert async await break class continue def del elif else except finally for from global if import in is lambda not or pass raise return try while with yield const let var function new this switch case default do catch throw typeof instanceof export extends true false null None undefined self public private static int float string bool').split(/\s+/));
+    const pattern = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*|#[^\n]*|&quot;[^\n]*?&quot;|&#39;[^\n]*?&#39;|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$]*\b)/g;
+    return String(code || '').replace(pattern, function(token){
+        let cls = '';
+        if (/^(\/\*|\/\/|#)/.test(token)) cls = 'tok-comment';
+        else if (/^(&quot;|&#39;)/.test(token)) cls = 'tok-string';
+        else if (/^\d/.test(token)) cls = 'tok-number';
+        else if (/^(true|false|null|None|undefined)$/i.test(token)) cls = 'tok-literal';
+        else if (keywords.has(token)) cls = 'tok-keyword';
+        else if (keywords.has(token)) cls = 'tok-keyword';
+        return cls ? '<span class="' + cls + '">' + token + '</span>' : token;
+    });
+}
+
+
+
+function formatStreamingBotText(t){
+    const text = String(t || '');
+    const fences = text.match(/```/g) || [];
+    if(fences.length % 2 === 0) return formatBotText(text);
+
+    const openAt = text.lastIndexOf('```');
+    const before = text.slice(0, openAt);
+    const rest = text.slice(openAt + 3);
+    const newlineAt = rest.indexOf('\n');
+    const lang = (newlineAt >= 0 ? rest.slice(0, newlineAt) : rest).trim().replace(/[^a-zA-Z0-9_+#.-]/g, '').slice(0,24);
+    const code = newlineAt >= 0 ? rest.slice(newlineAt + 1) : '';
+    const label = lang || (userLang === 'en' ? 'Code' : 'كود');
+    const block = '<div class="code-block"><div class="code-block-head"><span class="code-language">' + escapeHtml(label) + '</span><button type="button" class="code-copy-btn" title="' + (userLang === 'en' ? 'Copy code' : 'نسخ الكود') + '">' + (userLang === 'en' ? 'Copy' : 'نسخ') + '</button></div><pre><code>' + highlightCode(escapeHtml(code), lang) + '</code></pre></div>';
+    return formatBotText(before) + block;
+}
+
 function formatBotText(t){
     let s = escapeHtml(t);
+    const codeBlocks = [];
+    s = s.replace(/```([a-zA-Z0-9_+#.-]*)[ \t]*\r?\n?([\s\S]*?)```/g, function(match, language, code){
+        const lang = String(language || '').trim().replace(/[^a-zA-Z0-9_+#.-]/g, '').slice(0,24);
+        const label = lang || (userLang === 'en' ? 'Code' : 'كود');
+        const html = '<div class="code-block"><div class="code-block-head"><span class="code-language">' + escapeHtml(label) + '</span><button type="button" class="code-copy-btn" title="' + (userLang === 'en' ? 'Copy code' : 'نسخ الكود') + '">' + (userLang === 'en' ? 'Copy' : 'نسخ') + '</button></div><pre><code>' + highlightCode(code.replace(/\n$/, ''), lang) + '</code></pre></div>';
+        const token = 'NIBRASCODEBLOCKTOKEN' + codeBlocks.length + 'END';
+        codeBlocks.push({token:token, html:html});
+        return token;
+    });
     s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--primary-color); text-decoration:underline;">$1</a>');
     s = s.replace(/(^|[^"'])(https?:\/\/([^\/\s]+)[^\s]*)/g, function(match, p1, fullUrl, domain) { let cleanDomain = domain.replace(/^www\./, ''); return p1 + '<a href="' + fullUrl + '" target="_blank" rel="noopener noreferrer" style="color:var(--primary-color); text-decoration:underline; direction:ltr; display:inline-block;">' + cleanDomain + '</a>'; });
     s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    return s.split(/\n\s*\n/).map(p => p.replace(/[\r\n]+/g, '<br>').trim()).filter(p => p.length > 0).join('<br><br>');
+    s = s.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    s = s.split(/\n\s*\n/).map(p => p.replace(/[\r\n]+/g, '<br>').trim()).filter(p => p.length > 0).join('<br><br>');
+    codeBlocks.forEach(function(block){ s = s.replace(block.token, block.html); });
+    return s;
 }
+
+document.addEventListener('click', function(e){
+    const btn = e.target.closest('.code-copy-btn');
+    if(!btn) return;
+    const code = btn.closest('.code-block');
+    const codeEl = code && code.querySelector('pre code');
+    if(!codeEl) return;
+    const value = codeEl.textContent || '';
+    const copied = function(){ btn.classList.add('copied'); btn.textContent = userLang === 'en' ? 'Copied' : 'تم النسخ'; showToast(userLang === 'en' ? 'Code copied' : 'تم نسخ الكود'); setTimeout(function(){ btn.classList.remove('copied'); btn.textContent = userLang === 'en' ? 'Copy' : 'نسخ'; }, 1500); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(value).then(copied).catch(function(){ showToast(userLang === 'en' ? 'Copy failed' : 'فشل النسخ'); });
+    }else{
+        const area = document.createElement('textarea'); area.value = value; area.style.position = 'fixed'; area.style.opacity = '0'; document.body.appendChild(area); area.select();
+        try{ if(document.execCommand('copy')) copied(); else showToast(userLang === 'en' ? 'Copy failed' : 'فشل النسخ'); }catch(err){ showToast(userLang === 'en' ? 'Copy failed' : 'فشل النسخ'); }
+        area.remove();
+    }
+});
 
 function showToast(msg){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2000);}
 function scrollMsgToTop(el){if(!el)return;requestAnimationFrame(function(){const r=el.getBoundingClientRect();const c=cb.getBoundingClientRect();cb.scrollTop=cb.scrollTop+(r.top-c.top)-8;});}
@@ -1160,7 +1238,42 @@ cb.addEventListener('wheel',function(){stickBottom=isNearBottom();},{passive:tru
 
 function attachBotActions(el,msgText){if(!el||el.querySelector('.msg-actions'))return;const actions=document.createElement('div');actions.className='msg-actions';actions.innerHTML='<button class="act-like" title="إعجاب"><svg viewBox="0 0 24 24"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button><button class="act-dislike" title="عدم إعجاب"><svg viewBox="0 0 24 24"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button><button class="act-copy" title="نسخ"><svg viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2.5" ry="2.5"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button><button class="act-share-img" title="مشاركة كصورة"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button><button class="act-speak" title="استماع"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></button>';el.appendChild(actions);const likeBtn=actions.querySelector('.act-like');const dislikeBtn=actions.querySelector('.act-dislike');const copyBtn=actions.querySelector('.act-copy');const shareImgBtn=actions.querySelector('.act-share-img');const speakBtn=actions.querySelector('.act-speak');likeBtn.addEventListener('click',function(){const wasLiked=this.classList.contains('liked');this.classList.toggle('liked',!wasLiked);dislikeBtn.classList.remove('disliked');actions.classList.add('touched');fetch('/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:wasLiked?'unlike':'like',message:msgText,conv_id:cid})}).catch(function(){});showToast(wasLiked?(userLang==='en'?'Like removed':'تم إلغاء الإعجاب'):(userLang==='en'?'Thanks!':'شكراً لتقييمك'));});dislikeBtn.addEventListener('click',function(){const wasDisliked=this.classList.contains('disliked');this.classList.toggle('disliked',!wasDisliked);likeBtn.classList.remove('liked');actions.classList.add('touched');fetch('/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:wasDisliked?'undislike':'dislike',message:msgText,conv_id:cid})}).catch(function(){});showToast(wasDisliked?(userLang==='en'?'Rating removed':'تم إلغاء التقييم'):(userLang==='en'?'We will improve':'رأيك مهم، بنتحسن'));});copyBtn.addEventListener('click',function(){navigator.clipboard.writeText(msgText).then(()=>{this.classList.add('copied');showToast(userLang==='en'?'Copied':'تم النسخ');const b=this;setTimeout(()=>b.classList.remove('copied'),1500);}).catch(()=>showToast(userLang==='en'?'Copy failed':'فشل النسخ'));});shareImgBtn.addEventListener('click', function(){ showToast(userLang==='en'?'Generating image...':'جاري إنشاء الصورة...'); const wrapper=document.createElement('div'); wrapper.style.cssText='position:fixed; top:-9999px; left:-9999px; padding:24px; background:#ffffff; border-radius:20px; width:380px; font-family:"Segoe UI",Arial,sans-serif; direction:rtl; border:1px solid #eaeef2;'; const clone=el.cloneNode(true); const cloneActions=clone.querySelector('.msg-actions'); if(cloneActions) cloneActions.remove(); const headerHTML='<div style="display:flex; align-items:center; gap:10px; border-bottom:2px solid #eaeef2; padding-bottom:12px; margin-bottom:16px;"><div style="background:#4a6a8a; color:#fff; width:34px; height:34px; border-radius:50%; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:16px;">ن</div><div style="font-size:16px; font-weight:bold; color:#1a2b3c;">نبراس GP</div></div>'; const footerHTML='<div style="margin-top:20px; font-size:11px; color:#8b949e; text-align:center; border-top:1px solid #eaeef2; padding-top:12px;">تم الإنشاء بواسطة نبراس - مساعدك الذكي</div>'; wrapper.innerHTML = headerHTML + `<div style="color:#111; line-height:1.8; font-size:15px;">${clone.innerHTML}</div>` + footerHTML; document.body.appendChild(wrapper); html2canvas(wrapper, { scale: 2, useCORS: true, backgroundColor: "#ffffff" }).then(canvas => { const imgData = canvas.toDataURL('image/png'); const link = document.createElement('a'); link.download = 'nibras-chat.png'; link.href = imgData; link.click(); wrapper.remove(); showToast(userLang==='en'?'Image downloaded!':'تم تحميل الصورة بنجاح 📸'); }).catch(err => { console.error(err); wrapper.remove(); showToast(userLang==='en'?'Failed to generate image':'فشل إنشاء الصورة'); }); });speakBtn.addEventListener('click',function(){const btn=this;if(btn.classList.contains('speaking')){stopAllAudio();document.querySelectorAll('.act-speak.speaking').forEach(function(b){ b.classList.remove('speaking'); });return;}stopAllAudio();document.querySelectorAll('.act-speak.speaking').forEach(function(b){ b.classList.remove('speaking'); });btn.classList.add('speaking');fetch('/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:msgText})}).then(r=>r.json()).then(v=>{if(v && v.audio){playAudioWithSpeed(v.audio, function(){btn.classList.remove('speaking');});}else{btn.classList.remove('speaking');showToast(userLang==='en'?'Playback failed':'فشل التشغيل');}}).catch(function(){btn.classList.remove('speaking');showToast(userLang==='en'?'Connection failed':'فشل الاتصال');});});}
 
-function addMessage(t,s,isSys,img,imageUrl,isHtml,rawText){s=s||'bot';isSys=isSys||false;const el=document.createElement('div');el.className='msg '+s;if(img){el.innerHTML='<img src="'+escapeHtml(img)+'" class="image-upload" />';cb.appendChild(el);if(stickBottom)cb.scrollTop=cb.scrollHeight;return el}let content=isHtml?t:formatBotText(t);if(imageUrl){const safeUrl=escapeHtml(imageUrl);content+='<br><img src="'+safeUrl+'" class="generated-image" />';}el.innerHTML=content;if(isHtml){el.classList.add('nibras-response');}if(s==='bot'&&!isSys){attachBotActions(el,rawText||t);}cb.appendChild(el);if(stickBottom)cb.scrollTop=cb.scrollHeight;return el;}
+function formatSavedBotHtml(html){
+    const template = document.createElement('template');
+    template.innerHTML = String(html || '');
+    template.content.querySelectorAll('pre > code').forEach(function(codeEl){
+        const pre = codeEl.parentElement;
+        const classes = String(codeEl.className || '');
+        const match = classes.match(/language-([a-zA-Z0-9_+#.-]+)/);
+        const lang = match ? match[1] : '';
+        const label = lang || (userLang === 'en' ? 'Code' : 'كود');
+        const rawCode = codeEl.textContent || '';
+        const block = document.createElement('div');
+        block.className = 'code-block';
+        const head = document.createElement('div');
+        head.className = 'code-block-head';
+        const language = document.createElement('span');
+        language.className = 'code-language';
+        language.textContent = label;
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'code-copy-btn';
+        copy.title = userLang === 'en' ? 'Copy code' : 'نسخ الكود';
+        copy.textContent = userLang === 'en' ? 'Copy' : 'نسخ';
+        head.appendChild(language);
+        head.appendChild(copy);
+        const newPre = document.createElement('pre');
+        const newCode = document.createElement('code');
+        newCode.innerHTML = highlightCode(escapeHtml(rawCode), lang);
+        newPre.appendChild(newCode);
+        block.appendChild(head);
+        block.appendChild(newPre);
+        pre.replaceWith(block);
+    });
+    return template.innerHTML;
+}
+
+function addMessage(t,s,isSys,img,imageUrl,isHtml,rawText){s=s||'bot';isSys=isSys||false;const el=document.createElement('div');el.className='msg '+s;if(img){el.innerHTML='<img src="'+escapeHtml(img)+'" class="image-upload" />';cb.appendChild(el);if(stickBottom)cb.scrollTop=cb.scrollHeight;return el}let content=isHtml?formatSavedBotHtml(t):formatBotText(t);if(isHtml&&rawText&&/```/.test(rawText)&&!content.includes('class="code-block"')){content=formatBotText(rawText);}if(imageUrl){const safeUrl=escapeHtml(imageUrl);content+='<br><img src="'+safeUrl+'" class="generated-image" />';}el.innerHTML=content;if(isHtml){el.classList.add('nibras-response');}if(s==='bot'&&!isSys){attachBotActions(el,rawText||t);}cb.appendChild(el);if(stickBottom)cb.scrollTop=cb.scrollHeight;return el;}
 
 function showImagePreview(d){ip.src=d;ipc.classList.add('show');}
 function clearPending(){pid=null;ipc.classList.remove('show');ip.src='';}
@@ -1416,7 +1529,7 @@ async function sendMessage(){
             const chunk = bufferText.length > 40 ? 3 : bufferText.length > 20 ? 2 : 1;
             displayText+=bufferText.slice(0,chunk);
             bufferText=bufferText.slice(chunk);
-            botEl.innerHTML=formatBotText(displayText);
+            botEl.innerHTML=formatStreamingBotText(displayText);
             if(voiceOn){
                 extractNewSentences(displayText).forEach(function(s){
                     enqueueSentenceAudio(s);
