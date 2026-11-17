@@ -283,15 +283,23 @@ def extract_profile_summary_from_messages(existing_summary, new_messages):
             max_completion_tokens=900,
             response_format={"type": "json_object"}
         )
-        content = (resp.choices[0].message.content or "").strip()
+        choice = resp.choices[0]
+        finish_reason = getattr(choice, "finish_reason", None)
+        content = (choice.message.content or "").strip()
         content = re.sub(r"^```(?:json)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
+
+        if not content:
+            print(f"extract profile empty response: finish_reason={finish_reason}")
+            return None
+
         try:
             data = json.loads(content)
             if isinstance(data, dict):
                 return data
+            print(f"extract profile invalid JSON type: finish_reason={finish_reason}, length={len(content)}")
         except Exception as e:
-            print("extract profile json parse:", e)
+            print(f"extract profile json parse: {e}; finish_reason={finish_reason}; length={len(content)}")
         return None
     except Exception as e:
         print("extract_profile_summary:", e)
@@ -696,6 +704,127 @@ def generate_speech_free(text):
     except Exception as e:
         print(f"❌ gTTS failed: {type(e).__name__}: {e}")
     return None
+
+def should_use_pdf_context(message, history=None):
+    """لاسترجاع الملف عند طلب استخدامه صراحةً، أو متابعة طلب سابق متعلق بملف."""
+    def normalize(value):
+        value = (value or "").strip().lower()
+        value = value.translate(str.maketrans({
+            "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي", "ة": "ه"
+        }))
+        return re.sub(r"[^\w\s]", " ", value)
+
+    text = normalize(message)
+    if not text:
+        return False
+
+    file_terms = (
+        "ملف", "الملف", "المرفق", "مرفق", "pdf", "document",
+        "attachment", "محاكي نافس"
+    )
+    file_actions = (
+        "لخص", "تلخيص", "اختصر", "اختصار", "اشرح", "شرح",
+        "اقرا", "قراءه", "اقرأ", "حلل", "تحليل", "استخرج",
+        "محتوى", "وش فيه", "ماذا يحتوي", "عن ماذا يتحدث",
+        "اقتبس", "راجع", "افحص"
+    )
+    has_file_reference = any(term in text for term in file_terms)
+    has_file_action = any(term in text for term in file_actions)
+
+    if has_file_reference and has_file_action:
+        return True
+
+    # يسمح بمتابعة طلب الملف بكلمات مثل: اختصره، كمل، وضح أكثر.
+    follow_up_terms = (
+        "اختصره", "لخصه", "كمله", "كمل", "وضح اكثر",
+        "اشرح اكثر", "تابع", "استخرج الباقي"
+    )
+    if any(term in text for term in follow_up_terms):
+        for item in (history or [])[-8:]:
+            if not isinstance(item, dict) or item.get("role") != "user":
+                continue
+            previous = normalize(item.get("content", ""))
+            if (any(term in previous for term in file_terms)
+                    and any(term in previous for term in file_actions)):
+                return True
+
+    return False
+
+
+def should_web_search(message):
+    """تحديد الحاجة للبحث الخارجي محلياً دون استدعاء نموذج إضافي."""
+    if not isinstance(message, str) or not message.strip():
+        return False
+
+    normalized = re.sub(r"\s+", " ", message.strip().lower())
+    normalized = normalized.translate(str.maketrans({
+        "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي"
+    }))
+
+    def contains_phrase(phrases):
+        return any(
+            re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", normalized)
+            for phrase in phrases
+        )
+
+    # طلب بحث صريح من المستخدم.
+    explicit_search = [
+        "ابحث", "دور لي", "دور عن", "فتش", "تحقق من",
+        "تاكد من", "مصدر موثوق", "مصادر موثوقة",
+        "اعطني مصدر", "اعطني مصادر", "روابط", "بالويب",
+        "على الويب", "في الويب", "بالانترنت", "على الانترنت",
+        "في الانترنت", "بالنت", "على النت", "جوجل", "قوقل",
+        "search", "search for", "search online", "look up",
+        "find online", "browse"
+    ]
+    if contains_phrase(explicit_search):
+        return True
+
+    # موضوعات تتطلب عادةً معلومات متغيرة أو آنية.
+    live_topics = [
+        "سعر", "السعر", "اسعار", "الاسعار", "سعر السهم",
+        "اسعار الاسهم", "سعر الذهب", "سعر الدولار", "سعر الصرف",
+        "سعر البيتكوين", "الطقس", "حالة الطقس", "توقعات الطقس",
+        "درجة الحرارة", "درجات الحرارة", "نتيجة المباراة",
+        "نتائج المباريات", "مواعيد المباريات", "موعد المباراة",
+        "موعد مباراة", "مباراة", "جدول المباريات",
+        "التشكيلة الرسمية", "الترتيب الحالي", "حالة الرحلة",
+        "ساعات العمل", "مواعيد الدوام", "مفتوح الان", "يفتح اليوم",
+        "متى يفتح", "متى تقفل", "هل مفتوح",
+        "stock price", "share price", "gold price", "exchange rate",
+        "bitcoin price", "weather", "live score", "match results",
+        "flight status", "opening hours"
+    ]
+    if contains_phrase(live_topics):
+        return True
+
+    # طلبات التحديث الصريحة تكفي وحدها لتفعيل البحث.
+    explicit_freshness = [
+        "اخر تحديث", "احدث", "اخر اصدار", "اخر نسخه",
+        "اخر المستجدات", "اخر مستجدات", "اخر التطورات",
+        "اخر تطورات", "latest", "recent", "up to date"
+    ]
+    if contains_phrase(explicit_freshness):
+        return True
+
+    # كلمات الوقت لا تفعّل البحث وحدها؛ يجب أن ترتبط بموضوع متغير.
+    freshness = [
+        "الان", "الحين", "حاليا", "الحالي", "الحالية",
+        "الحاليين", "اليوم", "بكره", "غدا", "القادمة",
+        "هذا الاسبوع", "هالاسبوع", "currently", "today",
+        "right now", "this week"
+    ]
+    current_topics = [
+        "السهم", "الاسهم", "الذهب", "الدولار", "الريال",
+        "البيتكوين", "العملات", "المباراة", "مباراة",
+        "المباريات", "الرحلة", "الرحلات", "الدوام",
+        "الرئيس", "الوزير", "المدير", "الطقس", "اصدار",
+        "نسخه", "تحديث", "weather", "stock", "stocks",
+        "gold", "dollar", "bitcoin", "crypto", "match",
+        "flight", "president", "minister"
+    ]
+    return contains_phrase(freshness) and contains_phrase(current_topics)
+
 
 def detect_news_query(message):
     if not message or not isinstance(message, str):
@@ -2010,6 +2139,15 @@ def voice():
 @app.route('/chat', methods=['POST'])
 @limiter.limit("20 per minute")
 def chat():
+    _chat_started_at = time.perf_counter()
+
+    def _chat_timing(stage):
+        try:
+            elapsed_ms = (time.perf_counter() - _chat_started_at) * 1000
+            print(f"[CHAT_TIMING] {stage}: {elapsed_ms:.0f}ms")
+        except Exception:
+            pass
+
     try:
         d = request.get_json(silent=True) or {}
         if not isinstance(d, dict):
@@ -2060,6 +2198,7 @@ def chat():
             user_role if not is_admin else 'admin',
             email_str=user_email or None
         )
+        _chat_timing("identity_and_limits")
         if not can_chat:
             reply_limit = "وصل محادثاتك للحد اليومي المسموح به، شكراً لك، غداً نلتقي" if user_lang == 'ar' else "You've reached the daily limit. Thank you, see you tomorrow"
             nid = save_message(uid, um, reply_limit, cid) if is_registered and not incognito else cid
@@ -2074,6 +2213,7 @@ def chat():
         if is_registered and user_email:
             try: touch_user(user_email)
             except: pass
+        _chat_timing("user_touch")
         has_image = img_data is not None
         if has_image:
             if not isinstance(img_data, str) or len(img_data) > 7000000 or not re.fullmatch(r"data:image/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=\r\n]+", img_data):
@@ -2116,6 +2256,7 @@ def chat():
         memory_context = ""
         if user_memory.get('name'):
             memory_context = f"\n\n**معلومات المستخدم:**\nاسم المستخدم: {user_memory['name']}"
+        _chat_timing("memory_and_profile")
         
         if is_registered:
             server_hist = load_conversation(uid, cid) or []
@@ -2152,6 +2293,7 @@ def chat():
         if personality not in PERSONALITY_INSTRUCTIONS:
             personality = 'friendly'
         personality_inst = PERSONALITY_INSTRUCTIONS.get(personality, "")
+        _chat_timing("conversation_and_personality")
         
         admin_context = ""
         if is_admin or (user_email and user_email.lower().strip() == ADMIN_EMAIL.lower().strip()):
@@ -2166,60 +2308,72 @@ def chat():
         except Exception as e:
             print("Error fetching approved knowledge:", e)
 
-        # ⬇️ حقن سياق الملف المرفق (من قاعدة البيانات للمسجلين)
+        # استرجاع PDF فقط عند وجود طلب واضح لاستخدام الملف.
         pdf_context = ""
+        wants_pdf = should_use_pdf_context(um, server_hist)
         pdf_data = None
-        
-        if is_registered:
-            try:
-                res_file = sb.table("user_files").select("*").eq("user_id", uid).limit(1).execute()
-                if res_file.data:
-                    pdf_data = res_file.data[0]
-            except Exception as e:
-                print("get user_files error:", e)
-        elif uid in user_pdf_context:
-            pdf_data = user_pdf_context[uid]
 
-        if pdf_data:
-            pdf_filename = pdf_data.get("filename", "الملف")
-            chunks = pdf_data.get("chunks", [])
-            
-            query_words = set(re.findall(r'\w+', um.lower()))
-            scores = []
-            for i, chunk in enumerate(chunks):
-                chunk_words = set(re.findall(r'\w+', chunk.lower()))
-                overlap = len(query_words.intersection(chunk_words))
-                scores.append((overlap, i, chunk))
-            scores.sort(key=lambda x: (x[0], -x[1]), reverse=True)
-            best_chunks = [c for s, i, c in scores[:3] if s > 0]
-            
-            if not best_chunks:
-                best_chunks = chunks[:3]
-                
-            if best_chunks:
-                pdf_context = (
-                    f"\n\n**📄 المستخدم رفع ملف باسم: {pdf_filename}**\n"
-                    f"**تعليمات مهمة:** إذا كان سؤال المستخدم عن الملف (مثل: لخص، اشرح، وش فيه، اقرأ، عن ماذا يتحدث، حلل الملف) → استخدم المحتوى التالي وأجب منه. "
-                    f"أما لو سأل عن شيء آخر (سلام، أخبار، أسئلة عامة) → تجاهل هذا السياق تماماً ولا تذكر الملف.\n\n"
-                    f"**محتوى من الملف:**\n" + "\n...\n".join(best_chunks) + "\n"
-                )
-                print(f"--- [PDF] Injected {len(best_chunks)} chunks from '{pdf_filename}' ---")
-        else:
-            has_file_in_history = False
-            if "[ملف مرفق:" in um:
-                has_file_in_history = True
+        if wants_pdf:
+            if is_registered:
+                try:
+                    res_file = (
+                        sb.table("user_files")
+                        .select("filename,chunks")
+                        .eq("user_id", uid)
+                        .limit(1)
+                        .execute()
+                    )
+                    if res_file.data:
+                        pdf_data = res_file.data[0]
+                except Exception as e:
+                    print("get user_files error:", e)
+            elif uid in user_pdf_context:
+                pdf_data = user_pdf_context[uid]
+
+            if pdf_data:
+                pdf_filename = pdf_data.get("filename", "الملف")
+                chunks = pdf_data.get("chunks", [])
+                query_words = set(re.findall(r"\w+", um.lower()))
+                stop_words = {
+                    "لخص", "تلخيص", "لي", "من", "في", "عن", "هذا",
+                    "هذه", "ملف", "الملف", "المرفق", "pdf", "وش", "ابي",
+                    "ابغى", "ممكن", "فضلا", "لو", "سمحت"
+                }
+                query_words = {w for w in query_words if len(w) > 1 and w not in stop_words}
+
+                scores = []
+                for i, chunk in enumerate(chunks):
+                    chunk_words = set(re.findall(r"\w+", chunk.lower()))
+                    overlap = len(query_words.intersection(chunk_words))
+                    scores.append((overlap, i, chunk))
+                scores.sort(key=lambda x: (x[0], -x[1]), reverse=True)
+
+                best_chunks = [c for score, _, c in scores[:3] if score > 0]
+                # الطلب الصريح بتلخيص/قراءة الملف يسمح بأخذ بدايته حتى لو لم تتطابق كلمات العنوان.
+                if not best_chunks:
+                    best_chunks = chunks[:3]
+
+                if best_chunks:
+                    pdf_context = (
+                        f"\n\n**📄 الملف المتاح للمستخدم: {pdf_filename}**\n"
+                        "**تعليمات مهمة:** المستخدم طلب صراحةً العمل على هذا الملف. "
+                        "استخدم المقاطع التالية للإجابة، ولا تطلب إعادة رفع الملف ما دام محتواه متاحاً. "
+                        "إذا لم تكفِ المقاطع للإجابة، وضّح حدود المحتوى المتاح ولا تخمّن.\n\n"
+                        "**محتوى من الملف:**\n" + "\n...\n".join(best_chunks) + "\n"
+                    )
+                    print(f"--- [PDF] Injected {len(best_chunks)} chunks from '{pdf_filename}' ---")
+                else:
+                    pdf_context = (
+                        "\n\n**تنبيه للنظام:** طلب المستخدم استخدام ملف، لكن الملف المحفوظ لا يحتوي نصاً قابلاً للاسترجاع. "
+                        "اطلب منه إعادة رفع الملف بلطف.\n"
+                    )
             else:
-                for m in server_hist[-3:]:
-                    if isinstance(m.get("content"), str) and "[ملف مرفق:" in m.get("content"):
-                        has_file_in_history = True
-                        break
-            
-            if has_file_in_history:
                 pdf_context = (
-                    "\n\n**🚨 تنبيه هام جداً للنظام: المستخدم يعتقد أنه رفع ملفاً، لكن النظام فقد هذا الملف.**\n"
-                    "**يجب عليك أن تعتذر منه بلطف بالعامي وتوضح له أن الملف قد انقطع وتطلب منه إعادة رفعه مرة أخرى.**\n"
+                    "\n\n**تنبيه للنظام:** طلب المستخدم استخدام ملف، لكن لا يوجد ملف محفوظ متاح حالياً. "
+                    "اطلب منه رفع الملف هنا بلطف.\n"
                 )
-        # ⬆️ نهاية الإضافة
+
+        _chat_timing("knowledge_and_file_context")
 
         msgs = [{"role": "system", "content": 
             personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + approved_knowledge_context + pdf_context + lang_inst + assistant_persona_extra
@@ -2236,6 +2390,7 @@ def chat():
                         print(f"📰 News found for '{news_query}': {len(news_articles)} articles")
             except Exception as e:
                 print(f"news error: {e}")
+        _chat_timing("news_detection_and_fetch")
 
         if news_articles:
             news_titles = "\n".join([f"- {a['title']} (المصدر: {a['source']})" for a in news_articles[:3]])
@@ -2283,8 +2438,9 @@ def chat():
                 headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
             )
 
-        if is_registered and can_search:
-            inc_usage(uid, "search_count")
+        if is_registered and can_search and should_web_search(um):
+            _search_started_at = time.perf_counter()
+            _search_succeeded = False
             try:
                 sr = client.responses.create(
                     model=OPENAI_MODEL,
@@ -2300,11 +2456,25 @@ def chat():
                     except: res = ""
                 if res:
                     msgs.append({"role": "system", "content": f"نتائج البحث الفعلية من الويب (بيانات داخلية مو رسالة من المستخدم):\n\n{res}"})
+                    _search_succeeded = True
+                    inc_usage(uid, "search_count")
             except Exception as e:
                 print(f"فشل البحث ({type(e).__name__}): {e}")
+            finally:
+                _search_ms = (time.perf_counter() - _search_started_at) * 1000
+                _search_status = "results" if _search_succeeded else "no results; quota unchanged"
+                print(f"[CHAT_TIMING] web_search: {_search_ms:.0f}ms ({_search_status})")
+        elif is_registered and can_search:
+            print("[CHAT_TIMING] web_search: skipped (no search intent)")
+        else:
+            print("[CHAT_TIMING] web_search: skipped (not eligible or quota exhausted)")
+        _chat_timing("pre_stream_ready")
+
         def generate():
             full_reply = ""
             try:
+                _model_started_at = time.perf_counter()
+                _first_token_logged = False
                 stream = client.chat.completions.create(
                     model=OPENAI_MODEL,
                     messages=msgs,
@@ -2313,6 +2483,12 @@ def chat():
                 )
                 for chunk in stream:
                     if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                        if not _first_token_logged:
+                            _first_token_logged = True
+                            _model_first_token_ms = (time.perf_counter() - _model_started_at) * 1000
+                            _total_first_token_ms = (time.perf_counter() - _chat_started_at) * 1000
+                            print(f"[CHAT_TIMING] model_first_token: {_model_first_token_ms:.0f}ms")
+                            print(f"[CHAT_TIMING] total_first_token: {_total_first_token_ms:.0f}ms")
                         token = chunk.choices[0].delta.content
                         full_reply += token
                         yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
