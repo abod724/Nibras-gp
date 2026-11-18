@@ -29,6 +29,7 @@ import fitz # <--- مكتبة PyMuPDF الاحترافية لقراءة PDF
 from docx import Document
 import email
 from email import policy
+import html as html_lib
 
 # استدعاء الواجهات من الملف المنفصل
 from templates_content import (
@@ -767,6 +768,16 @@ def should_web_search(message):
             for phrase in phrases
         )
 
+    # أسئلة التحقق من صحة خبر محدد تستدعي بحث ويب موجهاً، لا نشرة Google News.
+    verification_intent = [
+        "هل الخبر صحيح", "هل الخبر ذا صحيح", "هل هذا الخبر صحيح",
+        "هل الخبر هذا صحيح", "هل الكلام صحيح", "صحة الخبر",
+        "صحيح الخبر", "هل صحيح ان", "هل صحيح أن",
+        "سمعت ان", "وصلني خبر", "تاكد من الخبر", "تحقق من الخبر"
+    ]
+    if contains_phrase(verification_intent):
+        return True
+
     # طلب بحث صريح من المستخدم.
     explicit_search = [
         "ابحث", "دور لي", "دور عن", "فتش", "تحقق من",
@@ -827,69 +838,81 @@ def should_web_search(message):
 
 
 def detect_news_query(message):
+    """تفعيل Google News فقط عند طلب نشرة أو أخبار عن موضوع محدد."""
     if not message or not isinstance(message, str):
         return None
+
     msg = message.strip()
     if len(msg) < 2:
         return None
 
-    clean_msg = re.sub(r"[؟?!،,.]", "", msg).strip()
-    clean_msg = re.sub(r"\s+", " ", clean_msg).strip().lower()
+    normalized = msg.lower()
+    normalized = normalized.translate(str.maketrans({
+        "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي", "ة": "ه"
+    }))
+    normalized = re.sub(r"[؟?!،,.]", " ", normalized)
+    normalized = re.sub(r"\\s+", " ", normalized).strip()
 
-    greeting_words = [
-        "اخبارك", "أخبارك", "شخبارك", "شلونك", "شلون", "علومك",
-        "كيف", "وش", "ايش", "إيش", "هلا", "مرحبا", "السلام", "عليكم",
-        "يا", "طويل", "العمر", "و", "الحال", "الدنيا",
-        "صباح", "مساء", "الخير", "النور", "الله", "يعطيك", "العافية", "بخير",
-        "عساك", "طيب", "شحالك"
+    # أسئلة التحقق من صحة خبر محدد ليست طلباً لنشرة Google News.
+    verification_phrases = [
+        "هل الخبر صحيح", "هل هذا الخبر صحيح", "هل الخبر ذا صحيح",
+        "صحيح الخبر", "صحة الخبر", "تاكد من الخبر", "تحقق من الخبر",
+        "هل صحيح ان", "صحيح ان", "سمعت ان", "وصلني خبر",
+        "الخبر المتداول", "هل الكلام صحيح"
     ]
-    temp_msg = clean_msg
-    for w in greeting_words:
-        temp_msg = temp_msg.replace(w, "")
-    temp_msg = re.sub(r"\s+", "", temp_msg).strip()
-
-    if not temp_msg:
+    if any(p in normalized for p in verification_phrases):
         return None
 
-    news_keywords = ["أخبار", "اخبار", "الأخبار", "الاخبار", "خبر", "news"]
-    has_news_kw = any(kw in msg or kw.lower() in msg.lower() for kw in news_keywords)
-    if not has_news_kw:
+    # التحيات والسؤال الاجتماعي عن الحال لا تشغّل الأخبار.
+    social_phrases = [
+        "اخبارك", "وش اخبارك", "وش اخبارك اليوم", "كيف اخبارك",
+        "شخبارك", "وش علومك", "كيف حالك", "شلونك", "صباح الخير",
+        "مساء الخير", "كيفك", "عساك بخير"
+    ]
+    if any(p in normalized for p in social_phrases):
         return None
 
-    general_markers = [
-        "أهم أخبار السعودية والعالم اليوم",
-        "اهم اخبار السعودية والعالم اليوم",
-        "أهم الأخبار", "اهم الاخبار",
-        "آخر الأخبار", "اخر الاخبار",
-        "أخبار اليوم", "اخبار اليوم",
-        "أخبار السعودية والعالم",
-        "كيف الأخبار", "كيف الاخبار",
+    # لا تعرض نشرة عامة إلا بطلب واضح.
+    general_news_markers = [
+        "اخر الاخبار", "اهم الاخبار", "اخبار اليوم",
+        "اخر اخبار اليوم", "عطني الاخبار", "اعطني الاخبار",
+        "جيب الاخبار", "هات الاخبار", "نشرة اخبار",
+        "اخر المستجدات", "وش جديد الاخبار", "اخبار السعودية والعالم",
+        "اهم اخبار السعودية والعالم"
     ]
-    for g in general_markers:
-        if g in msg:
-            return "أهم أخبار السعودية والعالم اليوم"
+    if any(p in normalized for p in general_news_markers):
+        return "أهم أخبار السعودية والعالم اليوم"
 
-    topic = msg
+    # يجب أن تكون كلمة الأخبار مقصودة كطلب، لا مجرد ورود كلمة «خبر».
+    news_terms = ["اخبار", "الاخبار", "news"]
+    has_news_term = any(term in normalized for term in news_terms)
+    if not has_news_term:
+        return None
+
+    # استخرج الموضوع بعد حذف صياغة الطلب والكلمات العامة.
+    topic = normalized
     filler_words = [
-        "وش", "ايش", "إيش", "ما", "ماهي", "ماهو",
-        "أبي", "ابي", "أبغى", "ابغى", "عطني", "أعطني", "هات", "جيب",
-        "آخر", "اخر", "أهم", "اهم", "عن", "حول", "اليوم", "الآن", "الان",
-        "ابحث", "بالويب", "في الويب", "على الويب", "ويب", "لي", "اعطني", "أعطني", "وريني", "شوف"
+        "وش", "ايش", "ما", "ماهي", "ماهو", "ابي", "ابغى",
+        "عطني", "اعطني", "هات", "جيب", "اخر", "اهم",
+        "عن", "حول", "اليوم", "الان", "الحين", "ابحث",
+        "بالويب", "في الويب", "على الويب", "ويب", "لي",
+        "وريني", "شوف", "اخبار", "الاخبار", "news"
     ]
     for word in filler_words:
-        topic = re.sub(rf"\b{re.escape(word)}\b", " ", topic)
-    topic = re.sub(r"\s+", " ", topic).strip()
-    topic = topic.replace("أخبار", "").replace("اخبار", "").replace("الأخبار", "").replace("الاخبار", "").strip()
+        topic = re.sub(rf"(?<!\\w){re.escape(word)}(?!\\w)", " ", topic)
+    topic = re.sub(r"\\s+", " ", topic).strip(" ؟?!،,.")
 
-    if topic and len(topic) >= 2:
+    if len(topic) >= 2:
         return topic[:150]
 
-    return "أهم أخبار السعودية والعالم اليوم"
+    return None
+
 
 _news_cache = {}
 _NEWS_CACHE_TTL = 900
 
 def fetch_news(query, limit=6):
+    """جلب الأخبار من Google News RSS فقط، دون فتح صفحات الناشرين أو استخراج الصور."""
     if not isinstance(query, str) or len(query.strip()) < 2:
         return []
 
@@ -902,7 +925,6 @@ def fetch_news(query, limit=6):
         return cached[1][:limit]
 
     normalized = re.sub(r"\s+", " ", query).strip().lower()
-
     general_queries = {
         "أهم أخبار السعودية والعالم اليوم",
         "اهم اخبار السعودية والعالم اليوم",
@@ -925,21 +947,16 @@ def fetch_news(query, limit=6):
         "User-Agent": "Mozilla/5.0 (compatible; NibrasGP/1.0)"
     }
 
-    feeds = []
-
-    for search_query in searches:
+    def fetch_feed(search_query):
         url = (
             "https://news.google.com/rss/search?q="
             + quote_plus(search_query)
             + "&hl=ar&gl=SA&ceid=SA:ar"
         )
-
         articles = []
-
         try:
-            response = requests.get(
-                url, headers=headers, timeout=10
-            )
+            # مهلة قصيرة مع اتصال وقراءة منفصلين لتجنب تعليق الطلب طويلاً.
+            response = requests.get(url, headers=headers, timeout=(3, 6))
             response.raise_for_status()
             root = ET.fromstring(response.content)
 
@@ -947,6 +964,7 @@ def fetch_news(query, limit=6):
                 title = (item.findtext("title") or "").strip()
                 link = (item.findtext("link") or "").strip()
                 published = (item.findtext("pubDate") or "").strip()
+                description_html = (item.findtext("description") or "").strip()
 
                 source_element = item.find("source")
                 source = (
@@ -955,19 +973,37 @@ def fetch_news(query, limit=6):
                     else ""
                 )
 
-                if title and link:
+                summary = html_lib.unescape(re.sub(r"<[^>]+>", " ", description_html))
+                summary = re.sub(r"\s+", " ", summary).strip()
+                if title and summary.startswith(title):
+                    summary = summary[len(title):].strip(" -|:")
+                summary = summary[:360].strip()
+
+                if title and link.startswith(("https://", "http://")):
                     articles.append({
                         "title": title,
                         "link": link,
                         "published": published,
                         "source": source,
+                        "summary": summary,
                     })
 
         except (requests.RequestException, ET.ParseError) as exc:
-            print("News fetch error:", type(exc).__name__, str(exc))
+            print("News RSS fetch error:", type(exc).__name__, str(exc))
+        except Exception as exc:
+            print("News RSS unexpected error:", type(exc).__name__, str(exc))
 
-        feeds.append(articles)
+        return articles
 
+    # جلب التصنيفات الثلاثة بالتوازي بدلاً من انتظار كل طلب بالتتابع.
+    try:
+        from gevent.pool import Pool
+        feeds = Pool(len(searches)).map(fetch_feed, searches)
+    except Exception as exc:
+        print("News RSS parallel fetch fallback:", type(exc).__name__, str(exc))
+        feeds = [fetch_feed(search_query) for search_query in searches]
+
+    # دمج النتائج وإزالة التكرار مع الإبقاء على العدد المطلوب.
     results = []
     seen = set()
     max_items = max((len(feed) for feed in feeds), default=0)
@@ -979,7 +1015,6 @@ def fetch_news(query, limit=6):
 
             article = feed[index]
             key = re.sub(r"\W+", "", article["title"].casefold())
-
             if key and key not in seen:
                 seen.add(key)
                 results.append(article)
@@ -996,43 +1031,49 @@ def fetch_news(query, limit=6):
     _news_cache[query] = (now, results)
     return results[:limit]
 
+
 def format_news_reply(articles, lang="ar"):
+    """تنسيق أخبار Google News باستخدام Markdown دون صور."""
     if not articles:
         return "ما لقيت أخبار جديدة عن الموضوع هذا." if lang == "ar" else "No recent news found."
-    lines = []
-    lines.append("## 📰 آخر الأخبار" if lang == "ar" else "## 📰 Latest News")
-    lines.append("")
-    lines.append("هذي القائمة بأحدث الأخبار المتعلقة بطلبك:")
-    lines.append("")
-    for i, a in enumerate(articles[:10], 1):
-        title = (a.get("title") or "").strip()
-        source = (a.get("source") or "").strip()
-        link = (a.get("link") or "").strip()
-        published = (a.get("published") or "").strip()
-        lines.append("---")
-        lines.append("")
-        lines.append(f"### {i}. {title}")
-        lines.append("")
+
+    lines = [
+        "## 📰 آخر الأخبار" if lang == "ar" else "## 📰 Latest News",
+        "",
+        "هذي أبرز الأخبار التي جمعتها لك:" if lang == "ar" else "Here are the latest stories:",
+        ""
+    ]
+
+    for i, article in enumerate(articles[:10], 1):
+        title = (article.get("title") or "").strip()
+        source = (article.get("source") or "").strip()
+        link = (article.get("link") or "").strip()
+        summary = (article.get("summary") or "").strip()
+        published = (article.get("published") or "").strip()
+
+        lines.extend(["---", "", f"### {i}. {title}", ""])
         meta_parts = []
         if source:
-            meta_parts.append(f"**المصدر:** {source}")
+            meta_parts.append(f"**{('المصدر' if lang == 'ar' else 'Source')}:** {source}")
         if published:
             try:
                 from email.utils import parsedate_to_datetime
                 dt = parsedate_to_datetime(published)
                 date_str = dt.strftime("%d %B %Y")
-                meta_parts.append(f"*{date_str}*")
+                meta_parts.append(f"**{('التاريخ' if lang == 'ar' else 'Date')}:** {date_str}")
             except Exception:
                 pass
         if meta_parts:
-            lines.append(" · ".join(meta_parts))
-            lines.append("")
-        if link:
-            if source:
-                lines.append(f"[🔗 اقرأ من {source}]({link})")
-            else:
-                lines.append(f"[🔗 قراءة الخبر كاملاً]({link})")
-            lines.append("")
+            lines.extend([" · ".join(meta_parts), ""])
+        if summary:
+            lines.extend([summary, ""])
+        if link.startswith(("https://", "http://")):
+            label = f"اقرأ الخبر من {source}" if source and lang == "ar" else (
+                "اقرأ الخبر كاملاً" if lang == "ar" else
+                (f"Read on {source}" if source else "Read full story")
+            )
+            lines.extend([f"[↗ {label}]({link})", ""])
+
     return "\n".join(lines)
 
 # ==============================================================================
@@ -2394,25 +2435,19 @@ def chat():
 
         if news_articles:
             news_titles = "\n".join([f"- {a['title']} (المصدر: {a['source']})" for a in news_articles[:3]])
-            prompt_for_news = (
-                f"المستخدم طلب أخبار. إليك أهم العناوين اللي جبتها:\n{news_titles}\n\n"
-                "اكتب مقدمة قصيرة جداً (جملة أو جملتين) بالعامي السعودي كأنك صديق يبشره بالأخبار، "
-                "ثم قل له إنك رتبت له الأخبار تحت عشان يقرأها. لا تكرر العناوين، بس تفاعل معها."
+            news_intro = (
+                "أبشر، هذي أهم الأخبار اللي جمعتها لك:"
+                if user_lang == "ar"
+                else "Here are the top stories I found:"
             )
-
-            try:
-                news_intro_res = client.chat.completions.create(
-                    model=OPENAI_MODEL,
-                    messages=[{"role": "system", "content": SP + personality_inst + lang_inst}, {"role": "user", "content": prompt_for_news}],
-                    max_completion_tokens=150,
-                    stream=False
-                )
-                news_intro = news_intro_res.choices[0].message.content.strip()
-            except:
-                news_intro = "أبشر يا طويل العمر، هذي آخر الأخبار اللي جمعتها لك:"
-
             news_md = f"**{news_intro}**\n\n" + format_news_reply(news_articles, user_lang)
             news_html = str(format_nibras_response(news_md))
+            print(
+                "NEWS_RENDER_DIAG",
+                "articles=", len(news_articles),
+                "markdown_images=", news_md.count("!["),
+                "html_images=", news_html.lower().count("<img"),
+            )
 
             def news_stream():
                 try:
