@@ -7,7 +7,7 @@ monkey.patch_all()
 from flask import (
     Flask, request, jsonify, render_template_string,
     session, redirect, url_for, send_from_directory,
-    Response, stream_with_context
+    Response, stream_with_context, send_file
 )
 import openai, os, secrets, json, base64, re, requests, time
 from datetime import datetime, timedelta, date as _date
@@ -381,6 +381,39 @@ def check_limits(uid, role, email_str=None):
     can_file = int(usage.get("file_count", 0) or 0) < limits.get("file", 0)
     return usage, limits, can_chat, can_search, can_image, can_file
 
+
+def file_trial_available(email_str):
+    """تحقق من توفر تجربة الملفات الدائمة للمستخدم المسجل."""
+    if not email_str:
+        return False
+    try:
+        email_key = email_str.lower().strip()
+        save_user_profile(email_key)
+        result = (sb.table("profiles").select("file_trial_used")
+                  .eq("email", email_key).limit(1).execute())
+        if not result.data:
+            return False
+        return result.data[0].get("file_trial_used") is False
+    except Exception as e:
+        print("file_trial_available:", e)
+        return False
+
+
+def claim_file_trial(email_str):
+    """حجز تجربة واحدة ذرياً؛ لا يسمح بطلبين متزامنين باستهلاكها مرتين."""
+    if not email_str:
+        return False
+    try:
+        email_key = email_str.lower().strip()
+        result = (sb.table("profiles").update({"file_trial_used": True})
+                  .eq("email", email_key)
+                  .eq("file_trial_used", False)
+                  .select("email").execute())
+        return bool(result.data)
+    except Exception as e:
+        print("claim_file_trial:", e)
+        return False
+
 def get_user_conversations(uid):
     try:
         r = (sb.table("assistant_chats").select("conv_id,title,created_at").eq("user_id", uid).order("created_at", desc=True).limit(200).execute())
@@ -707,12 +740,14 @@ def generate_speech_free(text):
     return None
 
 def should_use_pdf_context(message, history=None):
-    """لاسترجاع الملف عند طلب استخدامه صراحةً، أو متابعة طلب سابق متعلق بملف."""
+    """تحديد طلبات الملف بصياغة طبيعية، بما فيها الإشارات المختصرة والمتابعة."""
     def normalize(value):
-        value = (value or "").strip().lower()
+        value = str(value or "").strip().lower()
         value = value.translate(str.maketrans({
-            "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي", "ة": "ه"
+            "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي", "ة": "ه",
+            "ؤ": "و", "ئ": "ي"
         }))
+        value = re.sub(r"[\u064b-\u065f\u0670ـ]", "", value)
         return re.sub(r"[^\w\s]", " ", value)
 
     text = normalize(message)
@@ -720,33 +755,38 @@ def should_use_pdf_context(message, history=None):
         return False
 
     file_terms = (
-        "ملف", "الملف", "المرفق", "مرفق", "pdf", "document",
-        "attachment", "محاكي نافس"
+        "ملف", "الملف", "ملفات", "المرفق", "مرفق", "المرفقات",
+        "pdf", "document", "attachment", "محاكي نافس"
     )
     file_actions = (
         "لخص", "تلخيص", "اختصر", "اختصار", "اشرح", "شرح",
-        "اقرا", "قراءه", "اقرأ", "حلل", "تحليل", "استخرج",
-        "محتوى", "وش فيه", "ماذا يحتوي", "عن ماذا يتحدث",
-        "اقتبس", "راجع", "افحص"
+        "اقرا", "قراءه", "حلل", "تحليل", "استخرج", "استخراج",
+        "محتوى", "وش فيه", "وشو", "ماذا يحتوي", "عن ماذا يتحدث",
+        "اقتبس", "راجع", "افحص", "عدل", "عدله", "عدل عليه",
+        "رتب", "رتبه", "استخرج منه", "طلع منه", "اهم ما فيه",
+        "اهم النقاط", "ارسل لي", "جهزه"
     )
+
     has_file_reference = any(term in text for term in file_terms)
     has_file_action = any(term in text for term in file_actions)
 
-    if has_file_reference and has_file_action:
+    # ذكر الملف وحده كافٍ: مثل «هذا الملف» أو «وش وضع المرفق؟».
+    if has_file_reference:
         return True
 
-    # يسمح بمتابعة طلب الملف بكلمات مثل: اختصره، كمل، وضح أكثر.
+    # متابعة طلب سابق عن ملف حتى لو استخدم المستخدم ضميراً أو صياغة مختصرة.
     follow_up_terms = (
         "اختصره", "لخصه", "كمله", "كمل", "وضح اكثر",
-        "اشرح اكثر", "تابع", "استخرج الباقي"
+        "اشرح اكثر", "تابع", "استخرج الباقي", "منه", "فيه",
+        "عدله", "عدل عليه", "رتبه", "وش فيه", "وشو", "هذا",
+        "هذي", "اقراه", "اقراه لي", "اشتغل عليه"
     )
-    if any(term in text for term in follow_up_terms):
-        for item in (history or [])[-8:]:
+    if any(term in text for term in follow_up_terms) or has_file_action:
+        for item in (history or [])[-12:]:
             if not isinstance(item, dict) or item.get("role") != "user":
                 continue
             previous = normalize(item.get("content", ""))
-            if (any(term in previous for term in file_terms)
-                    and any(term in previous for term in file_actions)):
+            if any(term in previous for term in file_terms):
                 return True
 
     return False
@@ -1180,14 +1220,8 @@ def upload_pdf():
             return jsonify({"status": "error", "message": "رفع الملفات للمسجلين فقط."}), 403
 
         uid = get_user_id()
-        usage, limits, can_chat, can_search, can_image, can_file = check_limits(
-            uid,
-            user_role if not is_admin else 'admin',
-            email_str=user_email or None
-        )
-
-        if not can_file:
-            return jsonify({"status": "error", "message": "وصلت للحد الأقصى لرفع الملفات اليوم."}), 429
+        if not is_admin and not file_trial_available(user_email):
+            return jsonify({"status": "error", "message": "استخدمت مهمة الملفات التجريبية الوحيدة. شكراً لتجربتك نبراس GP."}), 429
 
         if 'file' not in request.files:
             return jsonify({"status": "error", "message": "لم يتم إرسال ملف"}), 400
@@ -1251,12 +1285,408 @@ def upload_pdf():
         else:
             user_pdf_context[uid] = {"filename": file.filename, "chunks": chunks}
         
-        inc_usage(uid, "file_count")
-        
+        if not is_admin and not claim_file_trial(user_email):
+            return jsonify({"status": "error", "message": "انتهت مهمة الملفات التجريبية أو استُخدمت من طلب آخر."}), 429
+
         return jsonify({"status": "ok", "message": "تم تجهيز الملف بنجاح!", "filename": file.filename})
     except Exception as e:
         print("upload_pdf error:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/tools/merge-pdf', methods=['POST'])
+@limiter.limit("10 per hour")
+def merge_pdf_files():
+    documents = []
+    merged = None
+    try:
+        user_email = session.get('user_email', '')
+        is_admin = bool(session.get('is_admin'))
+        user_role = get_user_role(user_email) if user_email else 'guest'
+        is_registered = is_admin or (bool(user_email) and user_role in ('user', 'admin'))
+        if not is_registered:
+            return jsonify({"status": "error", "message": "دمج الملفات متاح للمستخدمين المسجلين فقط."}), 403
+
+        uid = get_user_id()
+        if not is_admin and not file_trial_available(user_email):
+            return jsonify({"status": "error", "message": "استخدمت مهمة الملفات التجريبية الوحيدة. شكراً لتجربتك نبراس GP."}), 429
+
+        files = [f for f in request.files.getlist('files') if f and f.filename]
+        if len(files) < 2:
+            return jsonify({"status": "error", "message": "اختر ملفي PDF على الأقل للدمج."}), 400
+        if len(files) > 10:
+            return jsonify({"status": "error", "message": "يمكن دمج 10 ملفات كحد أقصى في العملية الواحدة."}), 400
+
+        total_bytes = 0
+        total_pages = 0
+        merged = fitz.open()
+        for uploaded in files:
+            if not uploaded.filename.lower().endswith('.pdf'):
+                return jsonify({"status": "error", "message": "هذه المهمة تدعم ملفات PDF فقط."}), 400
+            file_bytes = uploaded.read()
+            total_bytes += len(file_bytes)
+            if total_bytes > 7 * 1024 * 1024:
+                return jsonify({"status": "error", "message": "الحجم الإجمالي للملفات يتجاوز 7 ميجابايت."}), 413
+            if not file_bytes:
+                return jsonify({"status": "error", "message": "أحد الملفات فارغ."}), 400
+            try:
+                source_doc = fitz.open(stream=file_bytes, filetype="pdf")
+            except Exception:
+                return jsonify({"status": "error", "message": "تعذر قراءة أحد ملفات PDF. تأكد أن الملف سليم."}), 400
+            documents.append(source_doc)
+            if source_doc.needs_pass:
+                return jsonify({"status": "error", "message": "أحد الملفات محمي بكلمة مرور؛ أزل الحماية ثم أعد المحاولة."}), 400
+            total_pages += len(source_doc)
+            if total_pages > 300:
+                return jsonify({"status": "error", "message": "إجمالي الصفحات يتجاوز الحد المسموح (300 صفحة)."}), 400
+            merged.insert_pdf(source_doc)
+
+        output_bytes = merged.tobytes(garbage=3, deflate=True)
+        if len(output_bytes) > 24 * 1024 * 1024:
+            return jsonify({"status": "error", "message": "حجم الملف الناتج كبير جداً للتنزيل."}), 413
+        if not is_admin and not claim_file_trial(user_email):
+            return jsonify({"status": "error", "message": "انتهت مهمة الملفات التجريبية أو استُخدمت من طلب آخر."}), 429
+        return send_file(
+            io.BytesIO(output_bytes),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name="Nibras_Merged.pdf",
+            max_age=0
+        )
+    except Exception as e:
+        print("merge_pdf_files error:", e)
+        return jsonify({"status": "error", "message": "تعذر دمج الملفات حالياً. حاول مرة أخرى."}), 500
+    finally:
+        if merged is not None:
+            try:
+                merged.close()
+            except Exception:
+                pass
+        for document in documents:
+            try:
+                document.close()
+            except Exception:
+                pass
+
+
+def is_print_ready_request(text):
+    """كشف طلبات إخراج النص مباشرة للطباعة دون مقدمات حوارية."""
+    normalized = html_lib.unescape(str(text or "")).strip().lower()
+    normalized = re.sub(r"[\u064b-\u065f\u0670ـ]", "", normalized)
+    patterns = [
+        r"\b(?:للطباعة|جاهز للطباعة|نسخة للطباعة|ابي اطبعه|ابغى اطبعه|ابغى اطبع|ابي اطبع)\b",
+        r"(?:لا|لات)\s*تكتب\s*(?:لي\s*)?(?:مقدمات|مقدمة)",
+        r"(?:بدون|بلا)\s*(?:اي\s*)?(?:مقدمات|مقدمة)",
+        r"(?:النص|المحتوى|المستند)\s*فقط",
+        r"اطبع(?:ه|ها|ه لي)?\s*(?:مباشرة|كما هو)?",
+        r"جهزه?\s*(?:لي\s*)?للطباعة",
+    ]
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def strip_word_chat_edges(text):
+    """Clean conversational edges of replies without explicit document boundaries."""
+    lines = text.strip().splitlines()
+    opening = re.compile(
+        r"^(?:أبشر|ابشر|حياك الله|يا (?:أبو|ابو) مشعل|يا طويل العمر|"
+        r"(?:رتبت|جهزت|لخصت|استخرجت) لك|تفضل(?: يا|\s*[,،:]))\b"
+    )
+    closing = re.compile(r"^(?:إذا (?:تبي|تبغى|حبيت)|هل تبي|أقدر أساعدك|علمني إذا|يسعدني مساعدتك)\b")
+    start, end = 0, len(lines)
+    heading = []
+    if lines and re.fullmatch(r"#{1,6}\s+.+", lines[0].strip()):
+        heading = [lines[0]]
+        start = 1
+    while start < end:
+        raw = lines[start].strip()
+        probe = re.sub(r"[\u064b-\u065fـ]", "", raw.lstrip("* "))
+        if not probe:
+            start += 1
+            continue
+        if not opening.match(probe):
+            break
+        # Preserve document text when a greeting and the first fact share a line.
+        body = re.search(
+            r"(?:الملف عبارة عن|(?:رقم|تاريخ|اسم|قيمة|نوع|مدة) [^،:\n]{1,30}:|"
+            r"إجمالي الفاتورة:|الإجمالي:|المدينة:|الحالة:)", raw
+        )
+        if not body:
+            # For unstructured prose, retain the sentence following the introduction.
+            body = re.search(r"(?<=[.!؟:：])\s*\S[\s\S]*$", raw)
+        if body:
+            lines[start] = raw[body.start():]
+            break
+        start += 1
+    while end > start:
+        tail = lines[end - 1].strip().lstrip("* ")
+        if tail and not closing.match(tail):
+            break
+        end -= 1
+    return "\n".join(heading + lines[start:end])
+
+
+def prepare_word_report(text):
+    """تهيئة رد نبراس كتقرير مستقل ومنظم محلياً دون استدعاء نموذج إضافي."""
+    text = html_lib.unescape(str(text or "")).replace("\r\n", "\n").replace("\r", "\n").strip()
+    # File replies use an explicit document section; chat before/after it is display-only.
+    section = re.search(r"(?m)^##[ \t]+نص المستند[ \t]*$", text)
+    if section:
+        text = re.split(r"(?m)^##[ \t]+ملاحظة من نبراس[ \t]*$", text[section.end():], maxsplit=1)[0]
+    else:
+        text = strip_word_chat_edges(text)
+    text = re.sub(r"(?i)\b(https?)\s*:\s*/\s*/", r"\1://", text)
+    text = re.sub(r"(?m)^\s*#{1,6}\s*", "", text)
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+    text = re.sub(r"(?<!\w)\*(.*?)\*(?!\w)", r"\1", text)
+    text = re.sub(r"\\([*_~])", r"\1", text)
+    text = re.sub(r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0000FE0F\U0000200D]", "", text)
+    text = re.sub(r"(?i)الملف\s+عبارة\s+عن\s+([^،.\n]+)", r"نوع المستند: \1", text)
+    text = re.sub(r"(?i)وفترتها\s+من\s+", "فترة الفاتورة: من ", text)
+    text = re.sub(r"(?i)وفترته\s+من\s+", "فترة المستند: من ", text)
+    text = re.sub(r"(?i)وعدد\s+الأيام\s+", "عدد الأيام: ", text)
+    text = re.sub(r"(?i)والاستهلاك\s+المسجل\s+", "الاستهلاك المسجل: ", text)
+    text = re.sub(r"(?i)الاستهلاك\s+المسجل\s+", "الاستهلاك المسجل: ", text)
+    text = re.sub(r"(?i)الفاتورة\s+تذكر\s+بعد\s+خيار\s+الفاتورة\s+الثابتة\s+بقيمة\s+", "قيمة الفاتورة الثابتة: ", text)
+    text = re.sub(r"(?i)خيار\s+الفاتورة\s+الثابتة\s+بقيمة\s+", "قيمة الفاتورة الثابتة: ", text)
+    text = re.sub(r"(?i)و?العداد\s+مسجل\s+عليه\s+قراءة\s+بداية\s+([\d,.]+)\s+ونهاية\s+([\d,.]+)", r"قراءة العداد السابقة: \1\nقراءة العداد الحالية: \2", text)
+    text = re.sub(r"(?i)\.\s*(الاستهلاك المسجل:)", r"\n\1", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\s+([،؛:,.!?؟])", r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    lines = [
+        line.strip() for line in text.splitlines()
+        if line.strip() and not re.fullmatch(r"\s*(?:---+|___+|\*\*\*+)\s*", line)
+    ]
+    joined = "\n".join(lines)
+    if re.search(r"فاتورة\s+(?:كهرباء|الكهرباء)|الكهرباء\s+السكنية", joined, re.IGNORECASE):
+        title = "ملخص فاتورة الكهرباء"
+    elif re.search(r"فاتورة", joined):
+        title = "ملخص الفاتورة"
+    elif re.search(r"عقد|اتفاقية", joined):
+        title = "ملخص العقد"
+    elif re.search(r"شهادة", joined):
+        title = "ملخص الشهادة"
+    else:
+        title = "ملخص المستند"
+    lines = [line for line in lines if not re.fullmatch(r"(?:ملخص الملف|ملخص المستند|ملخص فاتورة الكهرباء|ملخص الفاتورة|ملخص العقد|ملخص الشهادة)", line)]
+    return title, lines
+
+
+def add_word_hyperlinks(paragraph, text):
+    """إضافة الروابط بصيغة قابلة للنقر داخل Word."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+    pattern = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)|(https?://[^\s<>]+)", re.IGNORECASE)
+    cursor = 0
+    for match in pattern.finditer(text):
+        if match.start() > cursor:
+            paragraph.add_run(text[cursor:match.start()])
+        label = html_lib.unescape(match.group(1) or match.group(3))
+        url = html_lib.unescape(match.group(2) or match.group(3)).rstrip(".,،؛)")
+        rel_id = paragraph.part.relate_to(url, RT.HYPERLINK, is_external=True)
+        hyperlink = OxmlElement("w:hyperlink")
+        hyperlink.set(qn("r:id"), rel_id)
+        run = OxmlElement("w:r")
+        props = OxmlElement("w:rPr")
+        color = OxmlElement("w:color")
+        color.set(qn("w:val"), "0563C1")
+        props.append(color)
+        underline = OxmlElement("w:u")
+        underline.set(qn("w:val"), "single")
+        props.append(underline)
+        run.append(props)
+        node = OxmlElement("w:t")
+        node.text = label
+        run.append(node)
+        hyperlink.append(run)
+        paragraph._p.append(hyperlink)
+        cursor = match.end()
+    if cursor < len(text):
+        paragraph.add_run(text[cursor:])
+
+
+def is_word_table_separator(line):
+    cells = [cell.strip().replace(" ", "") for cell in line.strip().strip("|").split("|")]
+    return len(cells) >= 2 and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
+
+
+def split_word_table_row(line):
+    return [html_lib.unescape(cell.strip()) for cell in line.strip().strip("|").split("|")]
+
+
+@app.route('/tools/export-summary', methods=['POST'])
+@limiter.limit("10 per hour")
+def export_file_summary():
+    """إنشاء تقرير Word محلي ومنظم من رد نبراس دون استدعاء OpenAI."""
+    try:
+        user_email = session.get('user_email', '')
+        is_admin = bool(session.get('is_admin'))
+        user_role = get_user_role(user_email) if user_email else 'guest'
+        if not (is_admin or (user_email and user_role in ('user', 'admin'))):
+            return jsonify({"status": "error", "message": "تصدير الملفات متاح للمستخدمين المسجلين فقط."}), 403
+
+        data = request.get_json(silent=True) or {}
+        title, report_lines = prepare_word_report(data.get('text') or '')
+        if not report_lines:
+            return jsonify({"status": "error", "message": "لا يوجد محتوى مناسب لتصديره."}), 400
+        if sum(len(line) for line in report_lines) > 30000:
+            return jsonify({"status": "error", "message": "الملخص طويل جداً للتصدير."}), 413
+
+        document = Document()
+        section = document.sections[0]
+        section.top_margin = 720000
+        section.bottom_margin = 720000
+        section.left_margin = 850000
+        section.right_margin = 850000
+
+        heading = document.add_heading(title, level=1)
+        heading.alignment = 2
+        for run in heading.runs:
+            run.font.name = 'Arial'
+            run._element.get_or_add_rPr().rFonts.set(
+                '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia', 'Arial'
+            )
+
+        index = 0
+        while index < len(report_lines):
+            line = report_lines[index].strip()
+            if not line:
+                index += 1
+                continue
+            if "|" in line and line.count("|") >= 2:
+                table_lines = []
+                while index < len(report_lines):
+                    candidate = report_lines[index].strip()
+                    if "|" not in candidate or candidate.count("|") < 2:
+                        break
+                    table_lines.append(candidate)
+                    index += 1
+                rows = [split_word_table_row(row) for row in table_lines if not is_word_table_separator(row)]
+                if rows:
+                    column_count = max(len(row) for row in rows)
+                    table = document.add_table(rows=0, cols=column_count)
+                    table.style = "Table Grid"
+                    try:
+                        from docx.oxml import OxmlElement
+                        table._tbl.tblPr.append(OxmlElement("w:bidiVisual"))
+                    except Exception:
+                        pass
+                    for row_number, values in enumerate(rows):
+                        cells = table.add_row().cells
+                        for col_number in range(column_count):
+                            cell = cells[col_number]
+                            cell.text = ""
+                            paragraph = cell.paragraphs[0]
+                            paragraph.alignment = 2
+                            add_word_hyperlinks(paragraph, values[col_number] if col_number < len(values) else "")
+                            if row_number == 0:
+                                for run in paragraph.runs:
+                                    run.bold = True
+                            for run in paragraph.runs:
+                                run.font.name = "Arial"
+                                run._element.get_or_add_rPr().rFonts.set(
+                                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia", "Arial"
+                                )
+                    continue
+            is_bullet = bool(re.match(r'^(?:[-*•])\s+', line))
+            clean_line = re.sub(r'^(?:[-*•])\s+', '', line).strip()
+            heading_match = (
+                not is_bullet
+                and not re.search(r'[:：.!?؟]', clean_line)
+                and len(clean_line) <= 70
+                and re.match(r'^(?:بيانات|تفاصيل|روابط|ملاحظات|ملخص|نتيجة|التزامات|حقوق|واجبات|الأطراف|الشروط|الأحكام|الرسوم|مدة|نطاق)', clean_line)
+            )
+            if heading_match:
+                index += 1
+                section_heading = document.add_heading(clean_line, level=2)
+                section_heading.alignment = 2
+                section_heading.paragraph_format.space_before = 12
+                section_heading.paragraph_format.space_after = 6
+                for run in section_heading.runs:
+                    run.font.name = 'Arial'
+                    run._element.get_or_add_rPr().rFonts.set(
+                        '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia', 'Arial'
+                    )
+                continue
+            field_match = re.match(r'^(?:[-*•]\s*)?([^:：]{1,55})[:：]\s*(.+)$', line)
+            if field_match:
+                field_rows = []
+                while index < len(report_lines):
+                    candidate = report_lines[index].strip()
+                    match = re.match(r'^(?:[-*•]\s*)?([^:：]{1,55})[:：]\s*(.+)$', candidate)
+                    if not match:
+                        break
+                    field_rows.append((match.group(1).strip(), match.group(2).strip()))
+                    index += 1
+                if len(field_rows) >= 2:
+                    table = document.add_table(rows=0, cols=2)
+                    table.style = "Table Grid"
+                    try:
+                        from docx.oxml import OxmlElement
+                        from docx.oxml.ns import qn
+                        table._tbl.tblPr.append(OxmlElement("w:bidiVisual"))
+                    except Exception:
+                        pass
+                    for label_text, value_text in field_rows:
+                        cells = table.add_row().cells
+                        for cell, value, is_label in ((cells[0], label_text, True), (cells[1], value_text, False)):
+                            cell.text = ""
+                            paragraph = cell.paragraphs[0]
+                            paragraph.alignment = 2
+                            add_word_hyperlinks(paragraph, value)
+                            if is_label:
+                                for run in paragraph.runs:
+                                    run.bold = True
+                                try:
+                                    from docx.oxml import OxmlElement
+                                    from docx.oxml.ns import qn
+                                    shade = OxmlElement("w:shd")
+                                    shade.set(qn("w:fill"), "EEF3F8")
+                                    cell._tc.get_or_add_tcPr().append(shade)
+                                except Exception:
+                                    pass
+                            for run in paragraph.runs:
+                                run.font.name = "Arial"
+                                run._element.get_or_add_rPr().rFonts.set(
+                                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia", "Arial"
+                                )
+                    continue
+            else:
+                index += 1
+            line = clean_line
+            if not line:
+                continue
+            paragraph = document.add_paragraph(style='List Bullet' if is_bullet else 'Normal')
+            if ":" in line:
+                label, value = line.split(":", 1)
+                paragraph.add_run(label.strip() + ": ").bold = True
+                add_word_hyperlinks(paragraph, value.strip())
+            elif "：" in line:
+                label, value = line.split("：", 1)
+                paragraph.add_run(label.strip() + "：").bold = True
+                add_word_hyperlinks(paragraph, value.strip())
+            else:
+                add_word_hyperlinks(paragraph, line)
+            paragraph.alignment = 2
+            paragraph.paragraph_format.space_after = 6
+            for run in paragraph.runs:
+                run.font.name = 'Arial'
+                run._element.get_or_add_rPr().rFonts.set(
+                    '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia', 'Arial'
+                )
+
+        output = io.BytesIO()
+        document.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name='Nibras_File_Summary.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+    except Exception as e:
+        print("export_file_summary error:", e)
+        return jsonify({"status": "error", "message": "تعذر إنشاء ملف الملخص حالياً."}), 500
 
 @app.route('/clear_pdf', methods=['POST'])
 def clear_pdf():
@@ -2349,9 +2779,19 @@ def chat():
         except Exception as e:
             print("Error fetching approved knowledge:", e)
 
-        # استرجاع PDF فقط عند وجود طلب واضح لاستخدام الملف.
+        # قد تحمل الواجهة علامة الملف في سجل العميل، بينما سجل المسجلين يُقرأ من قاعدة البيانات.
+        # نستخدم العلامة كإشارة فقط، ولا نثق بأي محتوى ملف يرسله العميل.
+        client_history = d.get("history") if isinstance(d.get("history"), list) else []
+        client_pdf_marker = any(
+            isinstance(item, dict)
+            and item.get("role") == "user"
+            and isinstance(item.get("content"), str)
+            and "[ملف مرفق:" in item.get("content", "")
+            for item in client_history[-12:]
+        )
+
         pdf_context = ""
-        wants_pdf = should_use_pdf_context(um, server_hist)
+        wants_pdf = should_use_pdf_context(um, server_hist) or client_pdf_marker
         pdf_data = None
 
         if wants_pdf:
@@ -2419,6 +2859,33 @@ def chat():
         msgs = [{"role": "system", "content": 
             personality_inst + "\n\n" + SP + admin_context + memory_context + manual_context + profile_context + approved_knowledge_context + pdf_context + lang_inst + assistant_persona_extra
         }] + server_hist[-40:]
+
+        # عند طلب نسخة للطباعة، نوجّه نفس استدعاء المحادثة لإخراج الوثيقة فقط.
+        # لا يوجد استدعاء OpenAI إضافي ولا يتغير سلوك المحادثات العادية.
+        if is_registered and d.get("word_attachment") is True:
+            msgs.append({
+                "role": "system",
+                "content": (
+                    "سيُستخدم هذا الرد أيضًا لإنشاء ملف Word. ابدأ قسم الوثيقة بسطر مستقل مطابق: ## نص المستند\n"
+                    "اكتب تحته محتوى الوثيقة وحده بلغة المستخدم، بما فيه العناوين والجداول والملاحظات "
+                    "المستندة إلى المصدر. تجنب التحية والنداء ووصف عملك وعروض المساعدة داخل الوثيقة. "
+                    "إذا احتجت تعليقًا للمستخدم فضعه قبل القسم، أو بعد عنوان مستقل مطابق: ## ملاحظة من نبراس\n"
+                    "عند تعذّر قراءة الملف، اشرح السبب في المحادثة فقط واترك قسم نص المستند فارغًا."
+                )
+            })
+        elif is_print_ready_request(um):
+            msgs.append({
+                "role": "system",
+                "content": (
+                    "تعليمات إخراج إلزامية لهذا الطلب: المستخدم يريد محتوى جاهزاً للطباعة. "
+                    "أخرج نص الوثيقة أو محتوى الملف فقط، دون أي مقدمة أو تحية أو نداء للمستخدم "
+                    "أو تعليق على عملية الاستخراج أو ملاحظة من عندك أو خاتمة أو عرض مساعدة. "
+                    "لا تكتب عبارات مثل: إليك النص، رتبت لك، يا طويل العمر، أو يا أبو مشعل. "
+                    "لا تضف عناوين Markdown التي تبدأ بعلامة # ولا خطوطاً فاصلة مثل --- ولا أسواراً برمجية. "
+                    "حافظ على جميع الأسماء والأرقام والتواريخ والحقول كما وردت، ولا تخمّن النص غير الواضح؛ "
+                    "ضع [غير واضح في المصدر] عند الحاجة. اجعل الناتج مستقلاً ويمكن طباعته مباشرة."
+                )
+            })
 
         news_articles = None
         if is_registered and um and not has_image:
