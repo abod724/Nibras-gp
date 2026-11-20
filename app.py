@@ -39,10 +39,13 @@ from templates_content import (
 
 # استدعاء ملفات المكتبة والذاكرة (تأكد من وجودها في نفس المجلد)
 from library import library_bp, view_shared_page
+from media_jobs import register_media
+from saved_files import register_saved_files
+from saved_library_page import SAVED_LIBRARY_HTML
 from memory_page import MEMORY_CSS, MEMORY_HTML, MEMORY_JS
 
 app = Flask(__name__, static_folder='static')
-app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 22 * 1024 * 1024
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY or len(SECRET_KEY) < 32:
     raise RuntimeError("يجب ضبط SECRET_KEY كمتغير بيئة ثابت بطول 32 حرفًا على الأقل")
@@ -372,6 +375,27 @@ def inc_usage(uid, field):
     except Exception as e: print("inc_usage:", e)
     return current
 
+def change_search_slot(uid, day, change, limit):
+    """احجز بحثاً أو أعد حصته مع حماية العداد من الطلبات المتزامنة."""
+    try:
+        for _ in range(4):
+            table = sb.table("assistant_usage")
+            result = table.select("search_count").eq("user_id", uid).eq("date", day).limit(1).execute()
+            if not result.data:
+                return False
+            previous = result.data[0].get("search_count")
+            updated = int(previous or 0) + change
+            if updated < 0 or (change > 0 and updated > limit):
+                return False
+            update = table.update({"search_count": updated}).eq("user_id", uid).eq("date", day)
+            update = update.is_("search_count", "null") if previous is None else update.eq("search_count", previous)
+            if update.execute().data:
+                return True
+    except Exception as exc:
+        print(f"[SEARCH_QUOTA] {type(exc).__name__}")
+    return False
+
+
 def check_limits(uid, role, email_str=None):
     usage = get_usage_today(uid)
     limits = LIMITS.get(role, LIMITS["guest"])
@@ -431,9 +455,33 @@ def get_user_conversations(uid):
         if not seen[cid]["title"]: seen[cid]["title"] = "محادثة"
     return list(seen.values())
 
-def save_message(uid, msg, resp, cid=None):
+def save_message(uid, msg, resp, cid=None, image_data=None, word_attachment=False, word_source=None):
     if not cid: cid = secrets.token_hex(5)
+    image_path = None
     try:
+        if image_data:
+            try:
+                # Chat images remain private and do not consume the optional
+                # 30-day library quota.
+                mime = image_data.split(";", 1)[0].split(":", 1)[-1].lower()
+                ext = {"image/jpeg": "jpg", "image/jpg": "jpg",
+                       "image/png": "png", "image/webp": "webp"}.get(mime)
+                if not ext:
+                    raise ValueError("Unsupported chat image")
+                raw = base64.b64decode(image_data.split(",", 1)[1], validate=True)
+                if not raw or len(raw) > 5 * 1024 * 1024:
+                    raise ValueError("Chat image size is invalid")
+                image_path = "chat/" + hashlib.sha256(uid.encode()).hexdigest()[:24] + "/" + uuid.uuid4().hex + "." + ext
+                sb.storage.from_("nibras-private-library").upload(
+                    path=image_path, file=raw,
+                    file_options={"content-type": mime, "cache-control": "0", "upsert": "false"}
+                )
+            except Exception as storage_error:
+                app.logger.warning("chat image storage: %s", type(storage_error).__name__)
+                if image_path:
+                    try: sb.storage.from_("nibras-private-library").remove([image_path])
+                    except Exception: pass
+                image_path = None
         ex = (sb.table("assistant_chats").select("id").eq("user_id", uid).eq("conv_id", cid).limit(1).execute())
         has_prev = bool(ex.data)
         title = None
@@ -444,20 +492,43 @@ def save_message(uid, msg, resp, cid=None):
                 title = clean_msg[:30]
                 if len(clean_msg) > 30: title += "..."
             else: title = "محادثة جديدة"
-        sb.table("assistant_chats").insert({"user_id": uid, "conv_id": cid, "message": msg, "response": resp, "title": title}).execute()
-    except Exception as e: print("save_message:", e)
+        chat_row = {"user_id": uid, "conv_id": cid, "message": msg, "response": resp, "title": title}
+        if image_path:
+            chat_row["image_path"] = image_path
+        if word_attachment:
+            chat_row["word_attachment"] = True
+            chat_row["word_source"] = (str(word_source or "ملخص المستند")[:180])
+        sb.table("assistant_chats").insert(chat_row).execute()
+    except Exception as e:
+        print("save_message:", e)
+        if image_path:
+            try: sb.storage.from_("nibras-private-library").remove([image_path])
+            except Exception: pass
     return cid
 
-def load_conversation(uid, cid):
+register_media(app, sb, client, OPENAI_MODEL, get_user_role, save_message, ADMIN_EMAIL, limiter)
+register_saved_files(app, sb, get_user_role, get_user_id, ADMIN_EMAIL, file_trial_available, claim_file_trial)
+
+
+def load_conversation(uid, cid, include_image_urls=False):
     try:
-        r = (sb.table("assistant_chats").select("message,response,created_at").eq("user_id", uid).eq("conv_id", cid).order("created_at").execute())
+        r = (sb.table("assistant_chats").select("id,message,response,image_path,word_attachment,word_source,created_at").eq("user_id", uid).eq("conv_id", cid).order("created_at").execute())
         rows = r.data or []
     except Exception as e: return None
     if not rows: return None
     msgs = []
     for row in rows:
-        if row.get("message"): msgs.append({"role": "user", "content": row["message"]})
-        if row.get("response"): msgs.append({"role": "assistant", "content": row["response"]})
+        if row.get("message") or row.get("image_path"):
+            message = {"role": "user", "content": row.get("message") or "[صورة مرفقة]"}
+            if include_image_urls and row.get("image_path"):
+                message["image_url"] = "/chat/images/" + str(row["id"])
+            msgs.append(message)
+        if row.get("response"):
+            reply = {"role": "assistant", "content": row["response"]}
+            if include_image_urls and row.get("word_attachment"):
+                reply["word_attachment"] = True
+                reply["word_source"] = row.get("word_source") or "ملخص المستند"
+            msgs.append(reply)
     return msgs
 
 def load_conversation_public(cid):
@@ -853,7 +924,7 @@ def should_web_search(message):
     explicit_freshness = [
         "اخر تحديث", "احدث", "اخر اصدار", "اخر نسخه",
         "اخر المستجدات", "اخر مستجدات", "اخر التطورات",
-        "اخر تطورات", "latest", "recent", "up to date"
+        "اخر تطورات", "اخر الاحداث", "latest", "recent", "up to date"
     ]
     if contains_phrase(explicit_freshness):
         return True
@@ -877,6 +948,58 @@ def should_web_search(message):
     return contains_phrase(freshness) and contains_phrase(current_topics)
 
 
+def contextual_search_decision(message, history=None):
+    """تقييم نية البحث مع سياق المحادثة؛ الرجوع للقواعد القديمة عند تعذر التصنيف."""
+    if not isinstance(message, str) or not message.strip():
+        return "NO", message
+    history = history or []
+    context = []
+    for item in history[-8:]:
+        if not isinstance(item, dict) or item.get("role") not in ("user", "assistant"):
+            continue
+        content = item.get("content")
+        if isinstance(content, str) and content.strip():
+            context.append({"role": item["role"], "content": content[:700]})
+    normalized = re.sub(r"[؟?!،,.\s]+", " ", message.lower()).strip()
+    normalized = normalized.translate(str.maketrans("أإآ", "ااا"))
+    if normalized in {"السلام عليكم", "هلا", "مرحبا", "صباح الخير", "مساء الخير",
+                      "كيف حالك", "شلونك", "اخبارك", "وش اخبارك", "وش اخبارك اليوم", "شكرا", "شكراً"}:
+        return "NO", message
+    try:
+        decision = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "system", "content": (
+                "أنت موجّه بحث لنبراس GP. اقرأ رسالة المستخدم وسياق المحادثة. "
+                "أجب بسطرين فقط: السطر الأول NEWS أو SEARCH أو NO، والثاني استعلام بحث مستقل وواضح "
+                "عند البحث، أو اتركه فارغًا عند NO. "
+                "اختر NEWS لطلب عناوين أو موجز أخبار. احتفظ بالموضوع أو البلد المذكور في السياق، واستخدم «أهم أخبار السعودية والعالم اليوم» للنشرة العامة. "
+                "اختر SEARCH إذا كان الجواب يحتاج مستجدات أو معلومات متغيرة أو تحققًا من خبر، "
+                "حتى إن لم يذكر المستخدم كلمة بحث. افهم الإحالات مثل: طيب والسعودية؟ "
+                "واربطها بموضوع الحوار السابق. "
+                "اختر NO للسوالف والتحيات والكتابة والترجمة والأسئلة المعرفية الثابتة "
+                "والتعليق على نتائج سبق عرضها، ما لم يُطلب تحديثها. "
+                "لا تختر SEARCH لسؤال اجتماعي مثل وش أخبارك. "
+                "لا تجب عن سؤال المستخدم ولا تخترع أخبارًا."
+            )}] + context + [{"role": "user", "content": message[:1200]}],
+            max_completion_tokens=110
+        )
+        content = (decision.choices[0].message.content or "").strip()
+        parts = content.splitlines()
+        verdict = parts[0].strip().upper() if parts else ""
+        if verdict in {"NEWS", "SEARCH"}:
+            query = " ".join(parts[1:]).strip()[:250] or message
+            return verdict, query
+        if verdict == "NO":
+            return "NO", message
+        print("[SEARCH_DECISION] unexpected_format")
+    except Exception as exc:
+        print(f"[SEARCH_DECISION] fallback: {type(exc).__name__}: {exc}")
+    news_query = detect_news_query(message)
+    if news_query:
+        return "NEWS", news_query
+    return ("SEARCH" if should_web_search(message) else "NO"), message
+
+
 def detect_news_query(message):
     """تفعيل Google News فقط عند طلب نشرة أو أخبار عن موضوع محدد."""
     if not message or not isinstance(message, str):
@@ -891,7 +1014,7 @@ def detect_news_query(message):
         "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي", "ة": "ه"
     }))
     normalized = re.sub(r"[؟?!،,.]", " ", normalized)
-    normalized = re.sub(r"\\s+", " ", normalized).strip()
+    normalized = re.sub(r"\s+", " ", normalized).strip()
 
     # أسئلة التحقق من صحة خبر محدد ليست طلباً لنشرة Google News.
     verification_phrases = [
@@ -920,7 +1043,7 @@ def detect_news_query(message):
         "اخر المستجدات", "وش جديد الاخبار", "اخبار السعودية والعالم",
         "اهم اخبار السعودية والعالم"
     ]
-    if any(p in normalized for p in general_news_markers):
+    if normalized in general_news_markers:
         return "أهم أخبار السعودية والعالم اليوم"
 
     # يجب أن تكون كلمة الأخبار مقصودة كطلب، لا مجرد ورود كلمة «خبر».
@@ -939,8 +1062,8 @@ def detect_news_query(message):
         "وريني", "شوف", "اخبار", "الاخبار", "news"
     ]
     for word in filler_words:
-        topic = re.sub(rf"(?<!\\w){re.escape(word)}(?!\\w)", " ", topic)
-    topic = re.sub(r"\\s+", " ", topic).strip(" ؟?!،,.")
+        topic = re.sub(rf"(?<!\w){re.escape(word)}(?!\w)", " ", topic)
+    topic = re.sub(r"\s+", " ", topic).strip(" ؟?!،,.")
 
     if len(topic) >= 2:
         return topic[:150]
@@ -1147,6 +1270,8 @@ def index():
         is_registered=is_registered,
         is_admin=is_admin,
         user_lang=user_lang,
+        media_enabled=bool(os.getenv("CLOUDCONVERT_API_KEY")),
+        media_hint_id=hashlib.sha256((email_str or "admin").lower().encode()).hexdigest()[:20] if is_registered else "",
         memory_css=MEMORY_CSS,
         memory_html=MEMORY_HTML,
         memory_js=MEMORY_JS
@@ -1156,7 +1281,7 @@ def index():
 def library_page():
     if not session.get('user_email') and not session.get('is_admin'):
         return redirect(url_for('login'))
-    return render_template_string(LIBRARY_HTML)
+    return render_template_string(SAVED_LIBRARY_HTML)
 
 @app.route('/library/images')
 def library_images():
@@ -1228,6 +1353,13 @@ def upload_pdf():
         file = request.files['file']
         if file.filename == '':
             return jsonify({"status": "error", "message": "اسم الملف فارغ"}), 400
+
+        # Guard before parsing a potentially large document; files use the Flask upload path.
+        file.seek(0, 2)
+        document_size = file.tell()
+        file.seek(0)
+        if document_size > 20 * 1024 * 1024:
+            return jsonify({"status": "error", "message": "حجم المستند يتجاوز 20 ميجابايت."}), 413
 
         ext = file.filename.lower().split('.')[-1]
         if ext not in ['pdf', 'docx', 'eml', 'txt']:
@@ -1826,6 +1958,12 @@ def delete_conversation():
         return jsonify({"status": "error", "message": "معرف المحادثة مطلوب"}), 400
     uid = get_user_id()
     try:
+        photo_rows = (sb.table("assistant_chats").select("image_path")
+                      .eq("user_id", uid).eq("conv_id", conv_id)
+                      .not_.is_("image_path", "null").execute().data or [])
+        photo_paths = [row["image_path"] for row in photo_rows if row.get("image_path")]
+        for start in range(0, len(photo_paths), 100):
+            sb.storage.from_("nibras-private-library").remove(photo_paths[start:start + 100])
         sb.table("assistant_chats").delete().eq("user_id", uid).eq("conv_id", conv_id).execute()
         email_str = session.get('user_email')
         if email_str:
@@ -1863,16 +2001,62 @@ def history():
     pinned_ids = get_pinned_convs(email_str) if email_str else []
     return jsonify({"conversations": [{"id": c["id"], "title": c["title"], "pinned": c["id"] in pinned_ids} for c in cs]})
 
+@app.get('/chat/images/<uuid:image_id>')
+def chat_image(image_id):
+    if not session.get('user_email') and not session.get('is_admin'):
+        return jsonify({"message": "سجّل دخولك أولاً"}), 401
+    try:
+        rows = (sb.table("assistant_chats").select("image_path")
+                .eq("id", str(image_id)).eq("user_id", get_user_id())
+                .limit(1).execute().data or [])
+        if not rows or not rows[0].get("image_path"):
+            return jsonify({"message": "الصورة غير موجودة"}), 404
+        signed = sb.storage.from_("nibras-private-library").create_signed_url(rows[0]["image_path"], 120)
+        image_url = signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")
+        if image_url and image_url.startswith("/"):
+            image_url = SUPABASE_URL.rstrip("/") + image_url
+        if not image_url or not image_url.startswith(SUPABASE_URL.rstrip("/") + "/"):
+            return jsonify({"message": "تعذّر فتح الصورة"}), 502
+        response = redirect(image_url, code=302)
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+    except Exception as exc:
+        app.logger.warning("chat image read: %s", type(exc).__name__)
+        return jsonify({"message": "تعذّر فتح الصورة"}), 503
+
+
 @app.route('/load_conversation/<cid>')
 def load_conversation_route(cid):
-    ms = load_conversation(get_user_id(), cid)
+    ms = load_conversation(get_user_id(), cid, include_image_urls=True)
     if not ms:
         return jsonify({"messages": None}), 404
 
+    # Match previously completed conversions to this account's server-verified
+    # jobs. A user-visible download URL is never trusted as proof of ownership.
+    account = (ADMIN_EMAIL if session.get('is_admin') else
+               session.get('user_email') or '').strip().lower()
     for m in ms:
         if m['role'] == 'assistant':
-            m['display_content'] = str(format_nibras_response(m['content']))
-            m['is_html'] = True
+            # Conversion links are already Markdown. Preserve their link and
+            # expose a save action that POSTs the verified job ID on demand.
+            match = re.search(r"\[تحميل الملف المحوّل\]\((https://[^)]+)\)", m['content'])
+            if match:
+                m['display_content'] = m['content']
+                m['is_html'] = False
+                if account:
+                    try:
+                        jobs = (sb.table("nibras_media_jobs")
+                                .select("id").eq("account", account)
+                                .eq("state", "finished")
+                                .eq("result_url", match.group(1))
+                                .limit(1).execute().data or [])
+                        if jobs:
+                            m['media_job_id'] = jobs[0]['id']
+                    except Exception as e:
+                        app.logger.warning("restored conversion save: %s", type(e).__name__)
+            else:
+                m['display_content'] = str(format_nibras_response(m['content']))
+                m['is_html'] = True
         else:
             m['display_content'] = m['content']
             m['is_html'] = False
@@ -1967,11 +2151,23 @@ def delete_my_account():
                 break
         if not auth_user_id:
             return jsonify({"status": "error", "message": "لم يتم العثور على حساب المصادقة؛ لم تُحذف البيانات."}), 404
+        # Remove private storage objects before deleting the account metadata.
+        old_pictures = (sb.table("assistant_chats").select("image_path")
+                        .eq("user_id", uid).not_.is_("image_path", "null").execute().data or [])
+        saved_docs = (sb.table("nibras_saved_files").select("storage_path")
+                      .eq("user_id", uid).execute().data or [])
+        private_paths = [r["image_path"] for r in old_pictures if r.get("image_path")]
+        private_paths += [r["storage_path"] for r in saved_docs if r.get("storage_path")]
+        for start in range(0, len(private_paths), 100):
+            sb.storage.from_("nibras-private-library").remove(private_paths[start:start + 100])
+        sb.table("nibras_saved_files").delete().eq("user_id", uid).execute()
         sb.table("assistant_chats").delete().eq("user_id", uid).execute()
         sb.table("assistant_usage").delete().eq("user_id", uid).execute()
         sb.table("image_library").delete().eq("user_id", uid).execute()
         sb.table("custom_assistants").delete().eq("user_id", uid).execute()
         sb.table("user_files").delete().eq("user_id", uid).execute()
+        if os.getenv("CLOUDCONVERT_API_KEY"):
+            sb.table("nibras_media_jobs").delete().eq("account", email_str.lower()).execute()
         sb.table("profiles").delete().eq("email", email_str.lower()).execute()
         dr = requests.delete(
             f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
@@ -2747,12 +2943,41 @@ def chat():
                             "content": h["content"][:2000]
                         })
         
+        # When a follow-up explicitly refers to a photo, supply the actual
+        # privately saved image again. Text history alone cannot show the model
+        # what was in a previous image.
+        previous_image_data = None
+        if not img_data and is_registered and cid and not incognito and re.search(
+            r"صورة|الصوره|الصور|الصورة|الصورت|الصوره|عليها|فيها|photo|picture|image", um, re.I
+        ):
+            try:
+                saved_image = (sb.table("assistant_chats").select("image_path")
+                               .eq("user_id", uid).eq("conv_id", cid)
+                               .not_.is_("image_path", "null")
+                               .order("created_at", desc=True).limit(1).execute().data or [])
+                if saved_image and saved_image[0].get("image_path"):
+                    path = saved_image[0]["image_path"]
+                    blob = sb.storage.from_("nibras-private-library").download(path)
+                    raw = blob if isinstance(blob, bytes) else blob.content
+                    if raw and len(raw) <= 5 * 1024 * 1024:
+                        ext = path.rsplit(".", 1)[-1].lower()
+                        mime = {"jpg": "image/jpeg", "png": "image/png",
+                                "webp": "image/webp"}.get(ext, "image/jpeg")
+                        previous_image_data = "data:" + mime + ";base64," + base64.b64encode(raw).decode()
+            except Exception as exc:
+                app.logger.warning("chat image follow-up: %s", type(exc).__name__)
+
         if img_data and is_registered and can_image:
             user_content = [
                 {"type": "text", "text": um or "حلل الصورة"},
                 {"type": "image_url", "image_url": {"url": img_data}}
             ]
             server_hist.append({"role": "user", "content": user_content})
+        elif previous_image_data:
+            server_hist.append({"role": "user", "content": [
+                {"type": "text", "text": um},
+                {"type": "image_url", "image_url": {"url": previous_image_data}}
+            ]})
         else:
             server_hist.append({"role": "user", "content": um})
         lang_inst = LANG_INSTRUCTION.get(user_lang, "")
@@ -2888,20 +3113,29 @@ def chat():
             })
 
         news_articles = None
-        if is_registered and um and not has_image:
+        search_route, search_query = "NO", um
+        search_day = usage.get("date") or _date.today().isoformat()
+        admin_search = is_admin or user_role == "admin"
+        search_reserved = False
+        if is_registered and (can_search or admin_search) and um and not has_image:
+            search_route, search_query = contextual_search_decision(um, server_hist[:-1])
+            if search_route != "NO" and not admin_search:
+                search_reserved = change_search_slot(uid, search_day, 1, limits["search"])
+                if not search_reserved:
+                    search_route = "NO"
+                    can_search = False
+        if search_route == "NEWS":
             try:
-                news_query = detect_news_query(um)
-                if news_query:
-                    news_articles = fetch_news(news_query, limit=10)
-                    if news_articles:
-                        inc_usage(uid, "search_count")
-                        print(f"📰 News found for '{news_query}': {len(news_articles)} articles")
+                news_articles = fetch_news(search_query, limit=10)
             except Exception as e:
                 print(f"news error: {e}")
+            if not news_articles:
+                search_route = "SEARCH"
         _chat_timing("news_detection_and_fetch")
 
         if news_articles:
-            news_titles = "\n".join([f"- {a['title']} (المصدر: {a['source']})" for a in news_articles[:3]])
+            if admin_search:
+                inc_usage(uid, "search_count")
             news_intro = (
                 "أبشر، هذي أهم الأخبار اللي جمعتها لك:"
                 if user_lang == "ar"
@@ -2940,15 +3174,16 @@ def chat():
                 headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'}
             )
 
-        if is_registered and can_search and should_web_search(um):
+        if search_route == "SEARCH":
             _search_started_at = time.perf_counter()
             _search_succeeded = False
             try:
                 sr = client.responses.create(
                     model=OPENAI_MODEL,
                     instructions="أنت محرك بحث. ارجع النتائج كما هي مع الروابط والمصادر والتواريخ.",
-                    input=f"ابحث عن أحدث المعلومات: {um}",
-                    tools=[{"type": "web_search"}]
+                    input=f"ابحث عن أحدث المعلومات مع مصادرها وتواريخها: {search_query}",
+                    tools=[{"type": "web_search"}],
+                    tool_choice="required"
                 )
                 res = ""
                 if hasattr(sr, "output_text") and sr.output_text:
@@ -2959,17 +3194,25 @@ def chat():
                 if res:
                     msgs.append({"role": "system", "content": f"نتائج البحث الفعلية من الويب (بيانات داخلية مو رسالة من المستخدم):\n\n{res}"})
                     _search_succeeded = True
-                    inc_usage(uid, "search_count")
+                    if admin_search:
+                        inc_usage(uid, "search_count")
             except Exception as e:
                 print(f"فشل البحث ({type(e).__name__}): {e}")
             finally:
+                if search_reserved and not _search_succeeded:
+                    if not change_search_slot(uid, search_day, -1, limits["search"]):
+                        print("[SEARCH_QUOTA] refund failed")
                 _search_ms = (time.perf_counter() - _search_started_at) * 1000
-                _search_status = "results" if _search_succeeded else "no results; quota unchanged"
+                _search_status = "results" if _search_succeeded else "no results"
                 print(f"[CHAT_TIMING] web_search: {_search_ms:.0f}ms ({_search_status})")
         elif is_registered and can_search:
             print("[CHAT_TIMING] web_search: skipped (no search intent)")
         else:
             print("[CHAT_TIMING] web_search: skipped (not eligible or quota exhausted)")
+        if is_registered and not admin_search and not can_search:
+            msgs.append({"role": "system", "content": "البحث المباشر غير متاح حاليًا لهذا الحساب. إذا احتاج السؤال مصدرًا حديثًا وضّح ذلك ولا تخمّن. أجب عن الأسئلة الأخرى كالمعتاد."})
+        if search_route == "SEARCH" and not _search_succeeded:
+            msgs.append({"role": "system", "content": "تعذر الحصول على نتائج بحث حديثة موثوقة لهذا الطلب. لا تدّعِ أن البحث نجح، ولا تخترع أخبارًا أو روابط أو تواريخ. وضّح أن التحقق المباشر لم ينجح."})
         _chat_timing("pre_stream_ready")
 
         def generate():
@@ -2994,14 +3237,23 @@ def chat():
                         token = chunk.choices[0].delta.content
                         full_reply += token
                         yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
-                cleaned = '\n\n'.join([
-                    ' '.join(l.strip() for l in block.split('\n') if l.strip())
-                    for block in full_reply.split('\n\n') if block.strip()
-                ]) or ("ما قدرت أجيب رد." if user_lang == 'ar' else "I couldn't generate a response.")
+                # Keep the original Word document structure, including tables
+                # and Markdown line breaks, for downloads after reopening a chat.
+                if is_registered and d.get("word_attachment") is True and pdf_data:
+                    cleaned = full_reply.strip()
+                else:
+                    cleaned = '\n\n'.join([
+                        ' '.join(l.strip() for l in block.split('\n') if l.strip())
+                        for block in full_reply.split('\n\n') if block.strip()
+                    ])
+                cleaned = cleaned or ("ما قدرت أجيب رد." if user_lang == 'ar' else "I couldn't generate a response.")
                 nid = cid
                 
                 if is_registered and not incognito:
-                    nid = save_message(uid, um or "[صورة مرفقة]", cleaned, cid)
+                    nid = save_message(uid, um or "[صورة مرفقة]", cleaned, cid,
+                                       image_data=img_data if has_image and can_image else None,
+                                       word_attachment=bool(d.get("word_attachment") is True and pdf_data),
+                                       word_source=(pdf_data or {}).get("filename"))
                 else:
                     if not nid:
                         nid = "incognito_conv_" + secrets.token_hex(5) if incognito else "guest_conv_" + secrets.token_hex(5)
